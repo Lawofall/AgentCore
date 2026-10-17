@@ -17,7 +17,7 @@ export interface SettingFieldProps {
   hintPlacement?: SettingFieldHintPlacement;
   /** Validation / submit failure for this field; announced via `role="alert"`. */
   error?: ReactNode;
-  /** Right-aligned action on the label line (清除 / 恢复跟随 / 生成). */
+  /** Right-aligned action on the label line (status badge, generate). */
   action?: ReactNode;
   /**
    * Stretch the control to the field width (default). This is the guard against

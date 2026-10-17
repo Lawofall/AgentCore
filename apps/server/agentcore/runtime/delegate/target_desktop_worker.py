@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from agentcore.memory import default_memory_store
 from agentcore.memory.rules_injection import load_turn_rule_view
 from agentcore.runtime.context import (
     build_workspace_context,
@@ -24,6 +23,7 @@ async def registry_rewire_consult_tools(
     *,
     folder_id: str,
     user_id: str,
+    workspace_reader: WorkspaceBackend | None = None,
 ) -> ToolRegistry:
     """Fresh registry: drop birth-desk consult, wire target-scoped unified consult."""
     from agentcore.runtime.context.consult_sources import (
@@ -41,10 +41,10 @@ async def registry_rewire_consult_tools(
         user_id=user_id,
         skill_registry=build_system_skill_registry(),
         tool_names=tool_names,
-        memory_store=default_memory_store(),
         folder_id=folder_id,
         skill_audience="worker",
         tool_registry=registry,
+        workspace_reader=workspace_reader,
     )
     if await source.list_directory(user_id):
         registry.register(ConsultTool(source=source))
@@ -67,11 +67,10 @@ async def rebuild_worker_prompt_for_target(
     from agentcore.runtime.skills import build_system_skill_registry
     from agentcore.tools.builtin import build_worker_registry
 
-    memory_store = default_memory_store()
     rule_view = await load_turn_rule_view(
-        memory_store,
         user_id,
         folder_id=folder_id,
+        reader=backend,
     )
     from agentcore.tools.sandbox.exec_languages import resolve_exec_languages
 
@@ -104,10 +103,10 @@ async def rebuild_worker_prompt_for_target(
         user_id=user_id,
         skill_registry=build_system_skill_registry(),
         tool_names={s.name for s in provisional.list_all()},
-        memory_store=memory_store,
         folder_id=folder_id,
         skill_audience="worker",
         tool_registry=provisional,
+        workspace_reader=backend,
     )
     entries = list(await source.list_directory(user_id))
     system = compose_worker_base_prompt(

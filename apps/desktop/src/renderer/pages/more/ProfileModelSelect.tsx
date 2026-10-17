@@ -14,7 +14,14 @@ import {
 import { cn } from "@/lib/utils";
 import type { ModelPriceCard } from "@/services/models";
 import { Check, ChevronDown, PencilLine } from "lucide-react";
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 /**
  * 模型组合槽位选择器 — 渠道芯片 + 当前渠模型列表。
@@ -23,6 +30,8 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
  * `@platform/{id}` / `@byok/{provider_id}/{id}`。多家渠道时芯片互斥；只一家则
  * 不画芯片。筛选默认只打当前渠；当前渠无命中才把其他渠结果补在「当前渠道无匹配」下。
  * BYOK 渠末尾「自定义 model id…」；平台档无自定义入口。触发器副行前置渠道名。
+ * 可选槽（组队 / 后台）传入 `followLabel` 时，目录最上钉这一项，筛选滤不掉，点它写回空槽。
+ * `wideMenu` 把目录固定为 24rem 并右缘对齐触发器，给收窄的槽用；主模型仍跟触发器同宽。
  */
 
 function formatContextLength(n: number | null | undefined): string | null {
@@ -212,13 +221,14 @@ export function ProfileModelSelect({
   labelledBy,
   describedBy,
   compactTrigger = false,
+  wideMenu = false,
   onChange,
 }: {
   id?: string;
   groups: DefaultProviderGroup[];
   value: string;
   disabled?: boolean;
-  /** 可选槽：空值文案（跟随主模型 / 不配置）。 */
+  /** 可选槽：空值文案，并作为目录最上的钉选项（跟随主模型）。 */
   followLabel?: string;
   /** 外部标签元素 id；与触发器自身并列，读屏念「标签 + 当前取值」。 */
   labelledBy?: string;
@@ -229,6 +239,10 @@ export function ProfileModelSelect({
    * select. Window, capabilities and price stay on the open rows.
    */
   compactTrigger?: boolean;
+  /**
+   * 组队 / 后台：目录 24rem，右缘对齐触发器。主模型不传，目录跟触发器同宽。
+   */
+  wideMenu?: boolean;
   onChange: (value: string) => void;
 }) {
   const decoded = value ? decodePointer(value) : null;
@@ -250,6 +264,7 @@ export function ProfileModelSelect({
     defaultBrowseProviderId(groups, value),
   );
   const rootRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const listId = useId();
 
@@ -274,6 +289,20 @@ export function ProfileModelSelect({
       setCustomText(d.model);
     }
   }, [value, groups]);
+
+  // 右缘对齐会在短槽落到行首时伸出左边界。量到真实宽度后再改贴左缘。
+  useLayoutEffect(() => {
+    if (!open || !wideMenu) return;
+    const panel = panelRef.current;
+    const root = rootRef.current;
+    if (!panel || !root) return;
+    const trigger = root.getBoundingClientRect();
+    const width = panel.getBoundingClientRect().width;
+    if (width === 0) return;
+    const overflowsLeft = trigger.right - width < 8;
+    panel.style.right = overflowsLeft ? "auto" : "0px";
+    panel.style.left = overflowsLeft ? "0px" : "auto";
+  }, [open, wideMenu]);
 
   useEffect(() => {
     if (!open) return;
@@ -311,6 +340,14 @@ export function ProfileModelSelect({
     setOpen(false);
     setQuery("");
     emit(pid, opt.model);
+  };
+
+  const pickFollow = () => {
+    setCustomMode(false);
+    setCustomText("");
+    setOpen(false);
+    setQuery("");
+    onChange("");
   };
 
   const enterCustom = (pid: string) => {
@@ -492,7 +529,14 @@ export function ProfileModelSelect({
       )}
 
       {open && !customMode && (
-        <div className="absolute z-50 mt-1 flex max-h-96 w-full flex-col overflow-hidden rounded-lg border border-border bg-popover shadow-md">
+        <div
+          ref={panelRef}
+          data-testid="model-picker-panel"
+          className={cn(
+            "absolute z-50 mt-1 flex max-h-96 flex-col overflow-hidden rounded-lg border border-border bg-popover shadow-md",
+            wideMenu ? "right-0 w-96" : "w-full",
+          )}
+        >
           <div className="border-b border-border p-1.5">
             <SearchField
               ref={searchRef}
@@ -530,7 +574,7 @@ export function ProfileModelSelect({
             // biome-ignore lint/a11y/useSemanticElements: custom searchable catalog; native <select> cannot host grouped options.
             role="listbox"
             tabIndex={-1}
-            className="max-h-56 overflow-y-auto py-1"
+            className="flex min-h-0 flex-col"
             onKeyDown={(e) => {
               if (e.key === "Escape") {
                 e.stopPropagation();
@@ -538,60 +582,82 @@ export function ProfileModelSelect({
               }
             }}
           >
-            {!hasPickerRows ? (
-              <p className="px-2.5 py-2 text-xs text-muted-foreground">
-                无匹配模型
-              </p>
-            ) : (
-              sections.map((s) => {
-                const firstFallback =
-                  s.fallback && s === sections.find((x) => x.fallback);
-                return (
-                  <div
-                    key={`${s.fallback ? "fb:" : ""}${s.group.providerId}`}
-                    data-provider-group={s.group.providerId}
-                  >
-                    {firstFallback ? (
-                      <div className="px-2.5 pt-1.5 pb-0.5 text-xs font-medium text-muted-foreground">
-                        当前渠道无匹配
-                      </div>
-                    ) : null}
-                    {s.fallback ? (
-                      <div className="px-2.5 pt-1.5 pb-0.5 text-xs font-medium text-muted-foreground">
-                        {groupHeading(s.group)}
-                      </div>
-                    ) : null}
-                    {s.models.map((m) => {
-                      const selected =
-                        providerId === s.group.providerId &&
-                        decoded?.model === m.model &&
-                        !customMode;
-                      return (
-                        <ModelOptionRow
-                          key={`${s.group.providerId}:${m.model}`}
-                          option={m}
-                          selected={selected}
-                          onPick={() => pickCatalog(s.group.providerId, m)}
-                        />
-                      );
-                    })}
-                    {s.showCustom ? (
-                      <button
-                        type="button"
-                        // biome-ignore lint/a11y/useSemanticElements: listbox option must stay a button for Enter/click; native <option> is not focusable in this popup.
-                        role="option"
-                        aria-selected={false}
-                        className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-sm text-muted-foreground hover:bg-accent/50"
-                        onClick={() => enterCustom(s.group.providerId)}
-                      >
-                        <PencilLine size={14} className="shrink-0" />
-                        自定义 model id…
-                      </button>
-                    ) : null}
-                  </div>
-                );
-              })
-            )}
+            {followLabel ? (
+              <button
+                type="button"
+                // biome-ignore lint/a11y/useSemanticElements: listbox option must stay a button for Enter/click; native <option> is not focusable in this popup.
+                role="option"
+                aria-selected={!decoded?.model}
+                className={cn(
+                  "flex w-full shrink-0 items-center gap-2 border-b border-border px-2.5 py-1.5 text-left text-sm",
+                  !decoded?.model
+                    ? "bg-primary/10 text-foreground"
+                    : "text-foreground hover:bg-accent/50",
+                )}
+                onClick={pickFollow}
+              >
+                <span className="min-w-0 flex-1 truncate">{followLabel}</span>
+                {!decoded?.model ? (
+                  <Check size={14} className="shrink-0 text-primary" />
+                ) : null}
+              </button>
+            ) : null}
+            <div className="max-h-56 overflow-y-auto py-1">
+              {!hasPickerRows ? (
+                <p className="px-2.5 py-2 text-xs text-muted-foreground">
+                  无匹配模型
+                </p>
+              ) : (
+                sections.map((s) => {
+                  const firstFallback =
+                    s.fallback && s === sections.find((x) => x.fallback);
+                  return (
+                    <div
+                      key={`${s.fallback ? "fb:" : ""}${s.group.providerId}`}
+                      data-provider-group={s.group.providerId}
+                    >
+                      {firstFallback ? (
+                        <div className="px-2.5 pt-1.5 pb-0.5 text-xs font-medium text-muted-foreground">
+                          当前渠道无匹配
+                        </div>
+                      ) : null}
+                      {s.fallback ? (
+                        <div className="px-2.5 pt-1.5 pb-0.5 text-xs font-medium text-muted-foreground">
+                          {groupHeading(s.group)}
+                        </div>
+                      ) : null}
+                      {s.models.map((m) => {
+                        const selected =
+                          providerId === s.group.providerId &&
+                          decoded?.model === m.model &&
+                          !customMode;
+                        return (
+                          <ModelOptionRow
+                            key={`${s.group.providerId}:${m.model}`}
+                            option={m}
+                            selected={selected}
+                            onPick={() => pickCatalog(s.group.providerId, m)}
+                          />
+                        );
+                      })}
+                      {s.showCustom ? (
+                        <button
+                          type="button"
+                          // biome-ignore lint/a11y/useSemanticElements: listbox option must stay a button for Enter/click; native <option> is not focusable in this popup.
+                          role="option"
+                          aria-selected={false}
+                          className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-sm text-muted-foreground hover:bg-accent/50"
+                          onClick={() => enterCustom(s.group.providerId)}
+                        >
+                          <PencilLine size={14} className="shrink-0" />
+                          自定义 model id…
+                        </button>
+                      ) : null}
+                    </div>
+                  );
+                })
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -670,8 +736,11 @@ function ModelOptionRow({
  * 仅孤儿自定义折叠项不算「可继续选」。
  */
 export function canChooseFromGroups(groups: DefaultProviderGroup[]): boolean {
-  const hasCatalog = groups.some((g) =>
-    g.models.some((m) => !m.custom && m.available !== false),
+  const hasCatalog = groups.some(
+    (g) =>
+      !isPlatformGroupId(g.providerId) &&
+      !g.orphan &&
+      g.models.some((m) => !m.custom && m.available !== false),
   );
   const hasByok = groups.some(
     (g) => !isPlatformGroupId(g.providerId) && !g.orphan,

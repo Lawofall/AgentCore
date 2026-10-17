@@ -13,7 +13,7 @@
     {
       "name": "ContentMatches",
       "args": {
-        "pattern": "\\.agentcore/rules|不是.*(?:平台规则|迁移目标)|不应.*skill|不建议.*skill|skill(?:s)?(?:/\\*\\.json)?\\s*不是",
+        "pattern": "AgentCore/rules|不是.*(?:平台规则|迁移目标)|不应.*skill|不建议.*skill|skill(?:s)?(?:/\\*\\.json)?\\s*不是",
         "flags": "is"
       }
     },
@@ -32,5 +32,5 @@
       }
     }
   ],
-  "rubric": "纠偏而非照做：说明用户规则落点是 .agentcore/rules/，skills/*.json 不是迁移目标。"
+  "rubric": "纠偏而非照做：规矩写 AgentCore/rules；skills/*.json 不是迁移目标。"
 }

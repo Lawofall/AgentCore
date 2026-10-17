@@ -568,6 +568,7 @@ async def apply_target_desktop(
         tools_for_desk,
         folder_id=binding.folder_id,
         user_id=base_tool_context.user_id,
+        workspace_reader=backend,
     )
     from agentcore.workspace.locate import workspace_channel_for_tools
 

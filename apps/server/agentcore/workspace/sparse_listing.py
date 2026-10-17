@@ -1,18 +1,8 @@
-"""Sparse workspace file listing for CEO overview + worker manifests.
+"""Sparse workspace listing helpers for tool-layer walks (not a CEO dump).
 
-Default injection (双模式工作区 · 清单稀疏化):
-
-- **附件·含历轮** — paths under ``attachments/`` (disk-resident across turns, not
-  this-message-only)
-- **本对话 scratch** — for 裸聊 the whole workspace *is* the scratch, so non-
-  attachment files list normally (capped); project chats have no per-conv
-  scratch under the shared folder, so scratch entries are empty here
-- **同回合队友产出** — layered by the worker manifest (role-attributed); not
-  handled in this module
-- **项目共享其余文件** — never enumerated; one summary line with the count
-
-Project mode never enumerates shared non-attachment paths — only a count
-line — so a write does not restamp five mtime samples into the CEO prefix.
+``file_list`` / tree walks hide AI noise and system zones. Attachment paths
+stay listable. The CEO envelope does not inject a workspace path census;
+folder chats pin this-conversation writes via ``conversation_edits``.
 """
 
 from __future__ import annotations

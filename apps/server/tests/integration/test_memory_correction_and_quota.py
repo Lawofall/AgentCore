@@ -20,7 +20,7 @@ from agentcore.db.repositories import (
     MemoryUpdateRepository,
     UserRepository,
 )
-from agentcore.memory import DocumentMemoryStore, assemble_injected_rules
+from agentcore.memory import assemble_injected_rules
 from agentcore.memory.always_quota import memory_write_conversation_id
 from agentcore.memory.rules_injection import mutate_user_rule
 from tests.integration.conftest import register_and_login
@@ -42,7 +42,6 @@ async def test_disputed_user_rule_leaves_injection_but_keeps_content(session_fac
     uid = str(uuid.uuid4())
     async with session_factory() as session:
         repo = DocumentRepository(session)
-        store = DocumentMemoryStore(session=session)
         doc = await repo.create(
             uid,
             name="用户规则.md",
@@ -50,18 +49,18 @@ async def test_disputed_user_rule_leaves_injection_but_keeps_content(session_fac
             apply_mode="always",
             content="- 用户偏好 X",
         )
-        assert "用户偏好 X" in await assemble_injected_rules(store, repo, uid, folder_id=None)
+        assert "用户偏好 X" in await assemble_injected_rules(repo, uid, folder_id=None)
 
         marked = await repo.set_disputed(doc.id, user_id=uid, disputed=True)
         assert marked is not None and marked.disputed_at is not None
 
-        assert "用户偏好 X" not in await assemble_injected_rules(store, repo, uid, folder_id=None)
+        assert "用户偏好 X" not in await assemble_injected_rules(repo, uid, folder_id=None)
         # Kept, not deleted: the user can still read (and undo) what was wrong.
         still_there = await repo.get(doc.id, user_id=uid)
         assert still_there is not None and "用户偏好 X" in still_there.content
 
         await repo.set_disputed(doc.id, user_id=uid, disputed=False)
-        assert "用户偏好 X" in await assemble_injected_rules(store, repo, uid, folder_id=None)
+        assert "用户偏好 X" in await assemble_injected_rules(repo, uid, folder_id=None)
 
 
 

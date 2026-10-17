@@ -31,7 +31,6 @@ export function FilesPage() {
       isError={query.isError}
       onRetry={() => void query.refetch()}
       fsAvailable={hasLocalFiles()}
-      showMemory
       focusWsId={focusWsId}
       focusKey={location.key}
     />

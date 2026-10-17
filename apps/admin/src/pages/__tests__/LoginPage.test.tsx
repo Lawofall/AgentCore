@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 
 import { LoginPage } from "@/pages/LoginPage";
-import { loginMfa } from "@/services/auth";
+import { ApiError } from "@/services/api";
+import { login, loginMfa } from "@/services/auth";
 import { useAuthStore } from "@/stores/auth";
 import {
   cleanup,
@@ -10,6 +11,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
+import { toast } from "sonner";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/services/auth", () => ({
@@ -30,6 +32,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  vi.restoreAllMocks();
 });
 
 describe("LoginPage MFA", () => {
@@ -146,5 +149,39 @@ describe("LoginPage credentials", () => {
     expect(field.type).toBe("password");
     fireEvent.click(screen.getByRole("button", { name: "显示密码" }));
     expect(field.type).toBe("text");
+  });
+
+  it("counts down a temporary lock instead of a bare toast", async () => {
+    const now = Date.parse("2026-10-14T09:00:00Z");
+    vi.spyOn(Date, "now").mockReturnValue(now);
+    vi.mocked(login).mockRejectedValue(
+      new ApiError(
+        401,
+        JSON.stringify({
+          error: {
+            code: "AUTH_ERROR",
+            message: "账户已临时锁定，请稍后再试",
+            recovery_at: "2026-10-14T09:14:32Z",
+          },
+        }),
+      ),
+    );
+    render(<LoginPage />);
+    fireEvent.change(screen.getByPlaceholderText("邮箱或用户名"), {
+      target: { value: "root" },
+    });
+    fireEvent.change(screen.getByPlaceholderText("密码"), {
+      target: { value: "secret" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "登录" }));
+
+    expect(
+      await screen.findByText("账户已临时锁定，请 14 分 32 秒后再试"),
+    ).toBeTruthy();
+    expect(
+      (screen.getByRole("button", { name: "14:32 后可登录" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    expect(vi.mocked(toast.error)).not.toHaveBeenCalled();
   });
 });

@@ -103,7 +103,7 @@ describe("encode/decode pointer", () => {
 });
 
 describe("buildDefaultProviderGroups", () => {
-  it("groups byok models under their provider and pins platform first", () => {
+  it("groups byok models under their provider and omits the platform catalog", () => {
     const groups = buildDefaultProviderGroups(
       [
         provider({
@@ -131,8 +131,10 @@ describe("buildDefaultProviderGroups", () => {
         }),
       ]),
     );
-    expect(groups[0].providerLabel).toBe("平台额度");
-    expect(groups[0].models.map((m) => m.model)).toEqual(["platform-flash"]);
+    expect(groups.map((g) => g.providerLabel)).not.toContain("平台额度");
+    expect(groups.flatMap((g) => g.models.map((m) => m.model))).not.toContain(
+      "platform-flash",
+    );
     expect(groups.map((g) => g.providerLabel)).toContain("DeepSeek");
     expect(groups.map((g) => g.providerLabel)).toContain("OpenAI");
   });
@@ -241,20 +243,21 @@ describe("buildDefaultProviderGroups", () => {
         model: "deepseek-v4-flash-free",
       },
     );
-    // If caller wrongly passes other profiles, platform free SKU lands in platform group — not DeepSeek.
     const deepseek = pollutedIfAllProfiles.find((g) => g.providerId === "p1");
     expect(deepseek?.models.map((m) => m.model)).not.toContain(
       "deepseek-v4-flash-free",
     );
   });
 
-  it("creates a platform group when only a live platform slot exists", () => {
+  it("folds a live platform slot as an orphan, not a platform catalog group", () => {
     const groups = buildDefaultProviderGroups([], catalog([]), {
       origin: "platform",
       provider_id: null,
       model: "custom-platform",
     });
     expect(groups[0].providerId).toBe(PLATFORM_POINTER_ID);
+    expect(groups[0].orphan).toBe(true);
+    expect(groups[0].providerLabel).toBe("当前模型");
     expect(groups[0].models.map((m) => m.model)).toEqual(["custom-platform"]);
     expect(groups[0].models[0].custom).toBe(true);
   });

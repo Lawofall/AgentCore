@@ -206,7 +206,7 @@ async def test_run_background_llm_skips_when_auth_dead(monkeypatch):
         api_key="sk-p", base_url="https://platform.example/v1", source="platform"
     )
 
-    async def fake_resolve(session, user_id, *, purpose="title"):
+    async def fake_resolve(session, user_id, *, purpose="title", conversation_id=None):
         return gate_mod.BackgroundGateResolve(credentials=creds)
 
     class _SessionCM:
@@ -241,7 +241,7 @@ async def test_run_background_llm_other_payer_still_runs(monkeypatch):
         api_key="sk-u", base_url="https://user.example/v1", source="user"
     )
 
-    async def fake_resolve(session, user_id, *, purpose="title"):
+    async def fake_resolve(session, user_id, *, purpose="title", conversation_id=None):
         return gate_mod.BackgroundGateResolve(credentials=creds)
 
     class _SessionCM:

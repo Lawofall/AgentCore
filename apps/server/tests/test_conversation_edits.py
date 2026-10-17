@@ -1,13 +1,16 @@
-"""This-conversation mutation list for the CEO file index (writes / exports, not reads)."""
+"""This-conversation mutation list for the CEO workspace pin (writes / exports, not reads)."""
 
 from __future__ import annotations
 
 from agentcore.runtime.context.conversation_edits import (
+    CONVERSATION_EDITS_HEADER,
     ConversationEdit,
+    build_conversation_edits_block,
     edits_from_tool_call,
     extract_conversation_edits,
     load_conversation_edits,
     merge_conversation_edits,
+    render_conversation_edits_block,
 )
 from agentcore.runtime.facts import FactKind
 from agentcore.tools.file_products import file_product, render_file_products_marker
@@ -145,3 +148,27 @@ async def test_load_conversation_edits_db_failure_returns_empty(monkeypatch):
         boom,
     )
     assert await load_conversation_edits(conversation_id="cid") == []
+
+
+def test_render_conversation_edits_block_is_a_pin_not_an_index():
+    out = render_conversation_edits_block(
+        [
+            ConversationEdit(path="src/f0.py", label="写过"),
+            ConversationEdit(path="稿.md", label="已转 Word"),
+        ]
+    )
+    assert out.startswith(CONVERSATION_EDITS_HEADER)
+    assert "- src/f0.py（写过）" in out
+    assert "- 稿.md（已转 Word）" in out
+    assert "文件：" not in out
+    assert "另有" not in out
+    assert "file_list" not in out
+    assert render_conversation_edits_block([]) == ""
+
+
+async def test_build_conversation_edits_block_accepts_explicit_edits():
+    out = await build_conversation_edits_block(
+        conversation_edits=[ConversationEdit(path="稿.md", label="写过")]
+    )
+    assert "- 稿.md（写过）" in out
+    assert await build_conversation_edits_block(conversation_id="") == ""

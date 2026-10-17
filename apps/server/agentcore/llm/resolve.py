@@ -415,20 +415,20 @@ async def resolve_background_user_fallback(
     """BYOK-only background resolve after platform is unavailable or auth-rejected.
 
     Skips the platform key and any combination-profile background slot with
-    ``origin=platform``. Never an authorization path — pair with
+    ``origin=platform``. The model id is the account's already-resolved chat
+    model (after a dormant catalog rewrite, that endpoint's seed) — never
+    ``PLATFORM_BACKGROUND_MODEL``, which is a platform-catalog id and is not
+    valid on the user's endpoint. Never an authorization path — pair with
     ``resolve_and_gate_background_user_fallback`` (source=user, no platform quota).
     """
-    from agentcore.llm.model_selection import _model_for_purpose
-
     explicit = await resolve_explicit_background_byok(session, user_id, purpose)
     if explicit is not None:
         return explicit
     row, chat_model, _origin = await _account_default(session, user_id)
     if row is not None:
         creds = _decrypt_provider(row, user_id)
-        if creds is not None:
-            model = _model_for_purpose(purpose, chat_model=chat_model, user_background_model=None)
-            return _model_config_from_creds(creds, model, purpose)
+        if creds is not None and chat_model.strip():
+            return _model_config_from_creds(creds, chat_model, purpose)
     return None
 
 
@@ -436,11 +436,15 @@ async def resolve_model_config(
     session: AsyncSession,
     user_id: str,
     purpose: ModelPurpose = "chat",
+    *,
+    conversation_id: str | None = None,
 ) -> ModelConfig | None:
     """Thin re-export — strategy lives in :func:`model_selection.select_model_config`."""
     from agentcore.llm.model_selection import select_model_config
 
-    return await select_model_config(session, user_id, purpose)
+    return await select_model_config(
+        session, user_id, purpose, conversation_id=conversation_id
+    )
 
 
 async def resolve_credentials(

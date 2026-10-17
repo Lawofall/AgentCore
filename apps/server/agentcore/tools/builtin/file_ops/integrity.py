@@ -119,15 +119,12 @@ _PROSE_CLOSE_NOTE = (
 
 
 def prose_write_close_note(*, path: str, content: str) -> str:
-    """Model-transcript tail after a prose ``write``. Empty for skeleton and user rules.
+    """Model-transcript tail after a prose ``write``. Empty for a skeleton.
 
     The manifest stays a disk check and is also the tool-row text. This sentence
     is about the user-facing close, so callers append it only to the model message.
     """
-    from agentcore.memory.rule_files import classify_rule_path
-
-    if classify_rule_path(path)[0] is not None:
-        return ""
+    del path
     if classify_write_kind(content) != "prose":
         return ""
     return _PROSE_CLOSE_NOTE

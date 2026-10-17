@@ -87,7 +87,6 @@ describe("FileWorkbench mount", () => {
           isError={false}
           onRetry={() => {}}
           fsAvailable={false}
-          showMemory
         />
       </MemoryRouter>,
     );

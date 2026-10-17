@@ -1,8 +1,9 @@
-"""This-conversation file mutations for the CEO ``<工作区>`` file index.
+"""This-conversation file mutations for the CEO ``<工作区>`` pin.
 
-Folder chats sparse-list the project tree (attachments + 「另有 N 个」). This
-module names the paths *this conversation* wrote / changed / exported / deleted
-so the CEO can see recent deliverables without a full-tree dump or mtime sample.
+Folder chats name the paths *this conversation* wrote / changed / exported /
+deleted so the CEO can see recent deliverables after compaction. No workspace
+path dump, no attachment census, no 「另有 N」. Bare chats omit this pin
+(scratch *is* the tree; glob / ``file_list``).
 
 Reads are out. Compaction's read+write ledger stays in ``working_set`` and is
 still not injected as ``<工作集>``. Workers do not receive this list.
@@ -22,6 +23,7 @@ logger = get_logger(__name__)
 
 MAX_CONVERSATION_EDIT_PATHS = 8
 MAX_CONVERSATION_EDIT_HITS = 64
+CONVERSATION_EDITS_HEADER = "本对话："
 
 _WRITE = "write"
 _REPLACE = "edit"
@@ -319,3 +321,36 @@ async def load_conversation_edits(
     if live_entries:
         hits.extend(extract_conversation_edits(live_entries))
     return merge_conversation_edits(hits, max_paths=max_paths)
+
+
+def render_conversation_edits_block(
+    edits: Sequence[ConversationEdit],
+) -> str:
+    """Untagged CEO pin spliced into ``<工作区>``. Empty → ``""`` (omit the 节)."""
+    merged = merge_conversation_edits(edits)
+    if not merged:
+        return ""
+    lines = [CONVERSATION_EDITS_HEADER]
+    for edit in merged:
+        lines.append(f"- {edit.path}（{edit.label}）")
+    return "\n".join(lines)
+
+
+async def build_conversation_edits_block(
+    *,
+    conversation_id: str = "",
+    exclude_turn_id: str | None = None,
+    conversation_edits: Sequence[ConversationEdit] | None = None,
+) -> str:
+    """Load (or accept) this-conversation mutations and render the CEO pin."""
+    if conversation_edits is not None:
+        merged = merge_conversation_edits(conversation_edits)
+    else:
+        cid = (conversation_id or "").strip()
+        if not cid:
+            return ""
+        merged = await load_conversation_edits(
+            conversation_id=cid,
+            exclude_turn_id=exclude_turn_id,
+        )
+    return render_conversation_edits_block(merged)

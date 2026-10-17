@@ -114,6 +114,85 @@ export function PromptReadDialog({
     listing?.status === "published";
   const showPublish = Boolean(mineItem) && showItem;
 
+  const surface = (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <DialogHeader className="shrink-0 pt-3 pb-2">
+        <div className="min-w-0">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <DialogTitle className="min-w-0 truncate">
+              {header.title}
+            </DialogTitle>
+            {header.chips.map((chip) => (
+              <Badge key={chip.label} tone={chip.tone ?? "muted"} pill>
+                {chip.label}
+              </Badge>
+            ))}
+            {canPublish || canUnpublish ? (
+              <div className="ml-auto flex shrink-0 items-center gap-2">
+                {canPublish ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={busy}
+                    onClick={() => setPublishOpen(true)}
+                  >
+                    上架
+                  </Button>
+                ) : null}
+                {canUnpublish ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={busy}
+                    onClick={() => mineItem && onUnpublishMine(mineItem)}
+                  >
+                    下架
+                  </Button>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        </div>
+        <DialogDescription className="sr-only">
+          {header.description}
+        </DialogDescription>
+      </DialogHeader>
+      <DialogBody
+        className={cn(
+          "flex min-h-0 flex-1 flex-col",
+          mineItem ? "overflow-hidden px-0 pb-0" : "pb-5",
+        )}
+      >
+        {showItem && item ? (
+          <ReadBody
+            item={item}
+            overlay={overlay}
+            showToolsHint={showToolsHint}
+            toolsHint={toolsHint}
+            toolCallingNames={toolCallingNames}
+            onSaveMine={onSaveMine}
+          />
+        ) : null}
+      </DialogBody>
+      {showPublish && mineItem ? (
+        <PublishSkillDialog
+          open={publishOpen}
+          busy={busy}
+          initialGroup={listing?.group ?? null}
+          blockReason={publishBlockReason(
+            mineItem.description,
+            mineItem.content,
+          )}
+          onOpenChange={setPublishOpen}
+          onConfirm={(group) => {
+            setPublishOpen(false);
+            onPublishMine(mineItem, group);
+          }}
+        />
+      ) : null}
+    </div>
+  );
+
   return (
     <Dialog
       open={open}
@@ -124,13 +203,13 @@ export function PromptReadDialog({
     >
       <DialogContent
         size={mineItem ? "2xl" : "lg"}
+        data-testid="prompt-read-dialog"
         className={cn(
           "flex flex-col",
           mineItem
-            ? "h-[min(85vh,52rem)] max-h-[min(85vh,52rem)]"
+            ? "h-[min(80vh,40rem)] max-h-[min(80vh,40rem)]"
             : "max-h-[min(80vh,36rem)]",
         )}
-        data-testid="prompt-read-dialog"
         onPointerDownOutside={(event) => {
           if (publishOpen) event.preventDefault();
         }}
@@ -141,80 +220,7 @@ export function PromptReadDialog({
           if (publishOpen) event.preventDefault();
         }}
       >
-        <DialogHeader className="shrink-0">
-          <div className="flex min-w-0 items-start gap-2">
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <DialogTitle>{header.title}</DialogTitle>
-                {header.chips.map((chip) => (
-                  <Badge key={chip.label} tone={chip.tone ?? "muted"} pill>
-                    {chip.label}
-                  </Badge>
-                ))}
-              </div>
-              {canPublish || canUnpublish ? (
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  {canPublish ? (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      disabled={busy}
-                      onClick={() => setPublishOpen(true)}
-                    >
-                      上架
-                    </Button>
-                  ) : null}
-                  {canUnpublish ? (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      disabled={busy}
-                      onClick={() => mineItem && onUnpublishMine(mineItem)}
-                    >
-                      下架
-                    </Button>
-                  ) : null}
-                </div>
-              ) : null}
-            </div>
-          </div>
-          <DialogDescription className="sr-only">
-            {header.description}
-          </DialogDescription>
-        </DialogHeader>
-        <DialogBody
-          className={cn(
-            "flex min-h-0 flex-1 flex-col",
-            mineItem ? "overflow-hidden px-0 pb-0" : "pb-5",
-          )}
-        >
-          {showItem && item ? (
-            <ReadBody
-              item={item}
-              overlay={overlay}
-              showToolsHint={showToolsHint}
-              toolsHint={toolsHint}
-              toolCallingNames={toolCallingNames}
-              onSaveMine={onSaveMine}
-            />
-          ) : null}
-        </DialogBody>
-        {showPublish && mineItem ? (
-          <PublishSkillDialog
-            open={publishOpen}
-            busy={busy}
-            initialGroup={listing?.group ?? null}
-            blockReason={publishBlockReason(
-              mineItem.description,
-              mineItem.content,
-            )}
-            onOpenChange={setPublishOpen}
-            onConfirm={(group) => {
-              setPublishOpen(false);
-              onPublishMine(mineItem, group);
-            }}
-          />
-        ) : null}
+        {surface}
       </DialogContent>
     </Dialog>
   );

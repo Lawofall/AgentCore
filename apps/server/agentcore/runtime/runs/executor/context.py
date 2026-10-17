@@ -10,13 +10,12 @@ from agentcore.llm.provider.protocol import LLMMessage
 from agentcore.runtime.runs.constants import (
     CONTEXT_INJECT_CHARS,
     DEP_CONTEXT_BUDGET,
-    DEP_SUMMARY_CHARS,
 )
 from agentcore.runtime.runs.contract import describe_deliverable
 from agentcore.runtime.runs.executor.identities import (
     _WORKER_IDENTITY,
 )
-from agentcore.runtime.runs.fidelity import allocate, pointer_body, truncate_head_tail
+from agentcore.runtime.runs.fidelity import pointer_body, truncate_head_tail
 from agentcore.runtime.runs.plan import RunPlan
 from agentcore.runtime.runs.types import (
     ContextBlock,
@@ -695,28 +694,21 @@ def _dep_context_blocks(
     a ``truncated`` flag, and the artifact ``files`` it points at — so the UI shows HOW a
     teammate's product was handed down, not just that it was (上下文传递可视化, 通道③).
 
-    Three fidelity policies, in priority order:
+    Two fidelity policies. Prose is not forwarded along the edge.
 
-    - A dep that WROTE FILES to the workspace (``files_touched`` non-empty) becomes a
-      POINTER (``fidelity.pointer_body``): a tight prose digest + the artifact paths to
-      ``read``. The product is already on disk and reachable, so re-shipping it
-      whole through the prompt wastes tokens and risks tail-trimming (递指针不递全文,
-      Agent协作模式.md). A pointer does NOT draw on the pass_through budget.
-    - ``summarize`` deps (no files) get a tight head+tail digest (``DEP_SUMMARY_CHARS``),
-      the large-fan-in token-saving case; no budget draw either.
-    - ``pass_through`` PROSE deps (no file to point at — the default, for 分析/检索→写作
-      链路 where 金额 / 法条编号 must survive) SHARE one per-worker total budget
-      (``DEP_CONTEXT_BUDGET``), water-filled across them (``fidelity.allocate``) so a
-      single rich upstream passes through whole while a wide fan-in stays bounded
-      instead of multiplying. A dep that still overflows its share is HEAD+TAIL trimmed
-      (``fidelity.truncate_head_tail``) so its tail isn't silently dropped.
+    - A dep that WROTE FILES becomes a POINTER: a tight digest + the paths to
+      ``read``. The product is already on disk (递指针不递全文).
+    - A dep with a handoff brief and no files injects that brief only
+      (``fidelity=summarize``). The essay stays out of the downstream window.
+      Numbers that must survive belong in the brief, or in a file.
+    - COMPLETED with neither a brief nor a file is an absence: the body is not
+      sliced in to fill the gap.
 
-    Order follows ``depends_on``. COMPLETED deps inject a product. FAILED /
-    SKIPPED / CANCELLED / missing deps inject an **absence** annotation (reason
-    + role) so lenient fan-in summarizers know which upstreams are missing —
-    never consume a non-completed body as an upstream deliverable.
-    COMPLETED + 空 content 但 debrief.summary 在 → 升格简报为 body，不当前置缺席。"""
-    # mode ∈ {"pointer", "summarize", "pass_through"}
+    Order follows ``depends_on``. FAILED / SKIPPED / CANCELLED / missing deps
+    inject an absence annotation and never ship a non-completed body.
+    COMPLETED + empty content but debrief.summary present promotes the brief,
+    and is not an absence."""
+    # mode ∈ {"pointer", "summarize"}
     # (dep_id, label, clean_content, files, mode, author_summary, promoted_from_brief)
     from agentcore.runtime.runs.research_quality import promote_brief_to_deliverable
 
@@ -726,9 +718,12 @@ def _dep_context_blocks(
         state = completed.get(dep_id)
         dep_spec = plan.by_id(dep_id)
         label = dep_spec.role if dep_spec and dep_spec.role else dep_id
+        raw_debrief = state.debrief if state and isinstance(state.debrief, dict) else None
+        # Engine-sliced fallback is not a brief. Forwarding it would put the
+        # essay's head on the edge. CEO still sees the degraded note elsewhere.
         author_summary = ""
-        if state and state.debrief:
-            author_summary = str((state.debrief or {}).get("summary") or "").strip()
+        if raw_debrief and not raw_debrief.get("degraded"):
+            author_summary = str(raw_debrief.get("summary") or "").strip()
         has_brief = bool(author_summary)
         if (
             not state
@@ -758,12 +753,25 @@ def _dep_context_blocks(
                 (state.debrief or {}).get("key_points"),
             )
             promoted_from_brief = True
-        if state.files_touched:
-            mode = "pointer"
-        elif dep_spec and dep_spec.policy.result_handling == "summarize":
-            mode = "summarize"
-        else:
-            mode = "pass_through"
+        if not state.files_touched and not author_summary:
+            absence_blocks.append(
+                ContextBlock(
+                    channel="dependency",
+                    heading=f"前置缺席（来自 {label}）",
+                    body=(
+                        f"上游「{label}」（`{dep_id}`）已完成，但没有简报，也没有落盘。"
+                        "正文不沿链转发。需要原文时应把文件写入工作区。"
+                        "勿编造该路结论。"
+                    ),
+                    source_role=label,
+                    source_run_id=dep_id,
+                    fidelity="absent",
+                    truncated=False,
+                    files=[],
+                )
+            )
+            continue
+        mode = "pointer" if state.files_touched else "summarize"
         deps.append(
             (
                 dep_id,
@@ -776,59 +784,23 @@ def _dep_context_blocks(
             )
         )
 
-    # Only PROSE pass_through deps draw on the shared budget; pointer / summarize deps
-    # are already compact and sized independently.
-    allowances = iter(
-        allocate(
-            [len(c) for (_, _, c, _, m, _, _) in deps if m == "pass_through"],
-            DEP_CONTEXT_BUDGET,
-        )
-    )
     blocks: list[ContextBlock] = list(absence_blocks)
     for dep_id, label, content, files, mode, author_summary, promoted_from_brief in deps:
         if mode == "pointer":
             body = pointer_body(content, files)
-            # full product is on disk (递指针); body is a digest, not a budget trim.
+            # full product is on disk (递指针); body is a digest, not the essay.
             truncated = False
-        elif mode == "summarize":
-            # The author's own 结论 beats a mechanical head-chop (作者最知道该留什么): use it as the
-            # digest when present, else fall back to the blind summarize.
-            if author_summary:
+            if author_summary and not promoted_from_brief:
+                body = f"【上游交接结论】{author_summary}\n\n{body}"
+        else:
+            # Brief only. Promoted empty-content keeps summary + key points.
+            # A real essay is not appended and is not head/tail sliced.
+            if promoted_from_brief:
+                body = content
+                truncated = False
+            else:
                 body = author_summary
                 truncated = len(content) > len(author_summary)
-            else:
-                # No authored 结论 → HEAD+TAIL digest (not head-only): keep the deliverable's
-                # opening AND its tail (结论/取舍 often land last) instead of dropping the tail.
-                body = truncate_head_tail(content, DEP_SUMMARY_CHARS)
-                truncated = len(content) > DEP_SUMMARY_CHARS
-                if truncated:
-                    from agentcore.runtime.context_cap import log_context_capped
-
-                    log_context_capped(
-                        site="dep_context",
-                        original_chars=len(content),
-                        final_chars=len(body),
-                        fidelity=mode,
-                    )
-        else:
-            allowance = next(allowances)
-            body = truncate_head_tail(content, allowance)
-            truncated = len(content) > allowance
-            if truncated:
-                from agentcore.runtime.context_cap import log_context_capped
-
-                log_context_capped(
-                    site="dep_context",
-                    original_chars=len(content),
-                    final_chars=len(body),
-                    fidelity=mode,
-                )
-        # Let the downstream see the upstream author's own 结论 FIRST — cheapest to read and the
-        # one line that should survive even when the body below is budget-trimmed. Skip when
-        # summarize already IS that line, or when the body was promoted from the same brief
-        # (empty content → promote_brief_to_deliverable already starts with summary).
-        if author_summary and mode != "summarize" and not promoted_from_brief:
-            body = f"【上游交接结论】{author_summary}\n\n{body}"
         blocks.append(
             ContextBlock(
                 channel="dependency",

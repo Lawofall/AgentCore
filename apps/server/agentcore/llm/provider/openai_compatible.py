@@ -1564,6 +1564,12 @@ class OpenAICompatibleProvider:
             )
             if typed is not None:
                 raise typed
+            # Go answers "subscription ended / payment method" as a plain 400.
+            # That payer is spent; title chrome must see a balance error so it
+            # can try the other key once.
+            if is_balance_exhausted(body):
+                self._record_platform_pool_exhausted(reason="creditserror")
+                raise self._insufficient_balance_error(status=status_code, body=body)
             raise upstream_client_error(
                 client_error_message(self._display_name, status_code, body),
                 status=status_code,

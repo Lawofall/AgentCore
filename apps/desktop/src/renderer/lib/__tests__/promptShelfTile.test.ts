@@ -181,14 +181,14 @@ describe("promptItemShelfCopy", () => {
     ).toBe("");
   });
 
-  it("夹里未上架不打我的；常驻打必带", () => {
+  it("夹里未上架不打我的；常驻打常驻，读卡不重复", () => {
     expect(
       promptItemShelfCopy(mineItem({ label: "合同审查" })).accessory,
     ).toEqual([]);
-    expect(
-      promptItemShelfCopy(mineItem({ label: "短约束", applyMode: "always" }))
-        .accessory,
-    ).toEqual([{ label: "必带" }]);
+    const always = mineItem({ label: "短约束", applyMode: "always" });
+    const alwaysCopy = promptItemShelfCopy(always);
+    expect(alwaysCopy.accessory).toEqual([{ label: "常驻" }]);
+    expect(promptReadHeaderChips(alwaysCopy, always)).toEqual([]);
     expect(
       promptItemShelfCopy(mineItem({ label: "偏好", aiMaintained: true }))
         .accessory,
@@ -235,7 +235,7 @@ describe("promptItemShelfCopy", () => {
           applyMode: "always",
         }),
       ).accessory,
-    ).toEqual([{ label: "必带" }]);
+    ).toEqual([{ label: "常驻" }]);
   });
 
   it("出厂工具标题用中文简介，底栏打工具，例外才叠加", () => {

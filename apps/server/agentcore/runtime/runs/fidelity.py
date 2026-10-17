@@ -11,11 +11,11 @@ wherever it is re-shown:
   a multi-worker aggregate would drop whole workers — better to size + shape it here than
   lean on that last-resort net.
 
-The POLICY (file-producer → pointer; ``summarize`` deps → digest; else pass_through
-prose water-filled across a shared budget, head+tail trimmed on overflow) lives at
-each call site; this module is just the MECHANISM. All char budgets live in
-``constants.py``. Every over-budget cut here is HEAD+TAIL (``core.text.truncate_head_tail``)
-so trailing details (金额 / 法条编号 / 收尾) survive — never a head-only chop.
+The POLICY lives at each call site; this module is the MECHANISM.
+Dependency injection does not water-fill prose: a file is a pointer, a brief
+is the brief, and an essay with neither is not forwarded. CEO overview sizes
+products on its own. Every over-budget cut here is HEAD+TAIL
+(``core.text.truncate_head_tail``) so a pointer digest can keep both ends.
 """
 
 from __future__ import annotations

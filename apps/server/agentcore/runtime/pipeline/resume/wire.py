@@ -79,7 +79,7 @@ def restamp_workspace_facts(prompt: str, facts: str) -> str:
     ``prompt`` is any haystack that may still hold the last ``<工作区>`` (legacy
     worker system, opening user envelope, journal dump). Empty string = no
     restamp (no prior block, or it already matches). Never rewrites ``prompt``.
-    Facts-only — CEO file index is not attached (workers must not receive it).
+    Facts-only — CEO conversation-edits pin is not attached (workers must not receive it).
     """
     from agentcore.runtime.resolve.prompt.envelope import TURN_ENVELOPE_FENCE
 
@@ -218,6 +218,7 @@ async def _wire_continuation_toolset(
         skill_registry=skill_registry,
         folder_id=folder_id,
         user_id=user_id,
+        workspace_reader=backend,
     )
     _wire_conversation_log_tools(
         worker_tools,
@@ -262,15 +263,15 @@ async def _wire_continuation_toolset(
     # path exemption on the list helpers still applies.
     backend.ai_list_materials = frozenset()
     from agentcore.llm.image_accept import model_accepts_images
-    from agentcore.memory import default_memory_store, load_turn_rule_view
+    from agentcore.memory import load_turn_rule_view
     from agentcore.runtime.coordination.session import (
         invalidate_verify_cache_for_execution,
     )
 
     rule_view = await load_turn_rule_view(
-        default_memory_store(),
         user_id,
         folder_id=folder_id,
+        reader=backend,
     )
     base_tool_context = ToolContext.create(
         execution_id=resume_execution_id,
@@ -417,6 +418,7 @@ async def _wire_continuation_toolset(
         skill_registry=skill_registry,
         folder_id=folder_id,
         user_id=user_id,
+        workspace_reader=backend,
     )
 
     return ResumedWiring(

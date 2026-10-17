@@ -14,10 +14,7 @@ from agentcore.db.repositories import (
     MemoryUpdateRepository,
     UserRepository,
 )
-from agentcore.memory.always_quota import (
-    AlwaysQuotaExceededError,
-    memory_write_conversation_id,
-)
+from agentcore.memory.always_quota import memory_write_conversation_id
 from agentcore.memory.document_store import DocumentMemoryStore
 from agentcore.memory.rules_injection import mutate_user_rule
 from tests.integration.conftest import register_and_login
@@ -114,6 +111,8 @@ async def test_ai_over_limit_write_rejected(client, session_factory, tiny_always
         # AI cores do not occupy the user-rule pool.
         await store.save(user.user_id, "画像.md", "---\napply: always\n---\n" + ("a" * 50))
         repo = DocumentRepository(session)
+        from agentcore.memory.always_quota import AlwaysQuotaExceededError
+
         with pytest.raises(AlwaysQuotaExceededError):
             await mutate_user_rule(
                 repo,
@@ -124,6 +123,8 @@ async def test_ai_over_limit_write_rejected(client, session_factory, tiny_always
                 content="x" * 20,
                 apply="always",
             )
+        saved = await repo.get_user_rule_doc(user.user_id, None, "新规则.md")
+        assert saved is None
 
 
 async def test_quota_card_same_pending_state_only_once(
@@ -162,6 +163,8 @@ async def test_quota_card_same_pending_state_only_once(
         assert user is not None
         uid = user.user_id
         repo = DocumentRepository(session)
+        from agentcore.memory.always_quota import AlwaysQuotaExceededError
+
         token = memory_write_conversation_id.set(conv)
         try:
             with pytest.raises(AlwaysQuotaExceededError):

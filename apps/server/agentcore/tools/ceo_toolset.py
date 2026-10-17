@@ -44,6 +44,7 @@ async def _wire_consult_if_entries(
     folder_id: str | None,
     user_id: str,
     skill_audience: str,
+    workspace_reader: object | None = None,
 ) -> bool:
     """Register ``consult`` only when this turn's directory has at least one row.
 
@@ -51,18 +52,16 @@ async def _wire_consult_if_entries(
     already absent when this assembly omits the factory catalog; user on-demand
     rows still count. ``skill_audience`` is the reader role (``ceo`` / ``worker``).
     """
-    from agentcore.runtime.resolve.prepare import default_memory_store
-
     # Tool names already on the registry gate skill visibility (ask_user / debate / …).
     tool_names = {schema.name for schema in registry.list_all()}
     source = await build_merged_consult_source_for_user(
         user_id=user_id,
         skill_registry=skill_registry,
         tool_names=tool_names,
-        memory_store=default_memory_store(),
         folder_id=folder_id,
         skill_audience=skill_audience,
         tool_registry=registry,
+        workspace_reader=workspace_reader,
     )
     entries = await source.list_directory(user_id)
     if not entries:
@@ -207,6 +206,7 @@ async def wire_ceo_consult(
     skill_registry: SkillRegistry,
     folder_id: str | None,
     user_id: str,
+    workspace_reader: object | None = None,
 ) -> bool:
     """Async companion to :func:`_assemble_ceo_toolset` — wires ``consult`` on the opening table."""
     return await _wire_consult_if_entries(
@@ -215,6 +215,7 @@ async def wire_ceo_consult(
         folder_id=folder_id,
         user_id=user_id,
         skill_audience=AUDIENCE_CEO,
+        workspace_reader=workspace_reader,
     )
 
 
@@ -224,6 +225,7 @@ async def wire_worker_consult(
     skill_registry: SkillRegistry,
     folder_id: str | None = None,
     user_id: str,
+    workspace_reader: object | None = None,
 ) -> bool:
     """Register ``consult`` on the worker toolset when the directory has a row."""
     return await _wire_consult_if_entries(
@@ -232,4 +234,5 @@ async def wire_worker_consult(
         folder_id=folder_id,
         user_id=user_id,
         skill_audience=AUDIENCE_WORKER,
+        workspace_reader=workspace_reader,
     )

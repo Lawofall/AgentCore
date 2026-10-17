@@ -24,10 +24,6 @@ from agentcore.runtime.context.workspace_context import (
     format_workspace_git_line,
     resolve_channel_profile,
 )
-from agentcore.runtime.context.workspace_overview import (
-    attach_workspace_file_index,
-    build_workspace_overview,
-)
 
 __all__ = [
     "ChannelProfile",
@@ -41,8 +37,6 @@ __all__ = [
     "build_artifact_format_line",
     "build_workspace_context",
     "format_artifact_capability_line",
-    "attach_workspace_file_index",
-    "build_workspace_overview",
     "detect_workspace_git",
     "detect_workspace_git_sync",
     "desktop_client_can_bind",

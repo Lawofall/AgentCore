@@ -74,16 +74,14 @@ async def test_apply_user_rules_always_and_ondemand(session_factory):
         await purge_user_documents(_EVAL_USER_ID, session=session)
         await apply_documents_fixture(always_root, _EVAL_USER_ID, session=session)
         repo = DocumentRepository(session)
-        store = DocumentMemoryStore(session=session)
-        rules_md = await assemble_injected_rules(store, repo, _EVAL_USER_ID, folder_id=None)
+        rules_md = await assemble_injected_rules(repo, _EVAL_USER_ID, folder_id=None)
         assert "RULE_TOKEN_Z9" in rules_md
 
     async with session_factory() as session:
         await purge_user_documents(_EVAL_USER_ID, session=session)
         await apply_documents_fixture(ondemand_root, _EVAL_USER_ID, session=session)
         repo = DocumentRepository(session)
-        store = DocumentMemoryStore(session=session)
-        rules_md = await assemble_injected_rules(store, repo, _EVAL_USER_ID, folder_id=None)
+        rules_md = await assemble_injected_rules(repo, _EVAL_USER_ID, folder_id=None)
         assert "MARKER_RULE_Q4K" not in rules_md  # on_demand 不进 always <设定>
         listed = await repo.list_on_demand_user_rules(_EVAL_USER_ID, None)
         assert {d.name for d in listed} == {"演练暗号.md"}
@@ -118,8 +116,7 @@ async def test_harness_seeds_then_clears_between_cases(patch_eval_docs_session):
     async def _probe_a(*args, **kwargs):
         async with session_factory() as session:
             repo = DocumentRepository(session)
-            store = DocumentMemoryStore(session=session)
-            rules_md = await assemble_injected_rules(store, repo, _EVAL_USER_ID, folder_id=None)
+            rules_md = await assemble_injected_rules(repo, _EVAL_USER_ID, folder_id=None)
             seen_marker.append(rules_md)
         return await orig_single(*args, **kwargs)
 
@@ -134,7 +131,7 @@ async def test_harness_seeds_then_clears_between_cases(patch_eval_docs_session):
             store = DocumentMemoryStore(session=session)
             assert await store.load(_EVAL_USER_ID, "主题/发射口令.md") == ""
             repo = DocumentRepository(session)
-            rules_md = await assemble_injected_rules(store, repo, _EVAL_USER_ID, folder_id=None)
+            rules_md = await assemble_injected_rules(repo, _EVAL_USER_ID, folder_id=None)
             assert "RULE_TOKEN_Z9" in rules_md
         return await orig_single(*args, **kwargs)
 

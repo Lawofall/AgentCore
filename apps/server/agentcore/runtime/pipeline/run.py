@@ -12,7 +12,6 @@ from agentcore.core.types import WorkspaceBoundary, new_id
 from agentcore.llm.credentials import LLMCredentials
 from agentcore.llm.profiles import TurnProfiles as ProfileSet
 from agentcore.llm.profiles import turn_profiles_for_turn
-from agentcore.memory import default_memory_store  # noqa: F401 — test seam
 from agentcore.runtime.audit.hooks import bind_recorder
 from agentcore.runtime.events import EventSink, message_start
 from agentcore.runtime.events.chat import reused_user_row_from_events
@@ -46,10 +45,10 @@ from agentcore.runtime.turn.latency import get_turn_latency
 from agentcore.tools.ceo_toolset import _assemble_ceo_toolset  # noqa: F401 — test seam
 from agentcore.workspace.protocol import WorkspaceBackend
 
-# Re-exported so tests can monkeypatch lookup sites on this module (see
-# ``test_pipeline_governance._patch_pipeline``). prepare/assemble resolve these
-# via this module so patches keep working after the structural split.
-__all_seams__ = ("default_memory_store", "_assemble_ceo_toolset")
+# Re-exported so tests can monkeypatch the lookup site on this module (see
+# ``test_pipeline_governance._patch_pipeline``). prepare/assemble resolve the
+# toolset via this module so the patch keeps working after the structural split.
+__all_seams__ = ("_assemble_ceo_toolset",)
 
 logger = get_logger(__name__)
 

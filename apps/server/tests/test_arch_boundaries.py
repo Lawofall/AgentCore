@@ -227,6 +227,40 @@ def test_runtime_does_not_import_turn_persistence() -> None:
     assert (_PKG_ROOT / "runtime" / "turn" / "closer.py").is_file()
 
 
+# Named runtime → conversation edges. Ports (TurnDriver, store bind, user-stop
+# closer) are injections and do not appear here. A new import fails this test.
+_RUNTIME_CONVERSATION_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
+    {
+        ("context/working_set.py", "agentcore.conversation.compact_prompt"),
+        ("engine/window_compact.py", "agentcore.conversation.compact_prompt"),
+        ("journal/persist.py", "agentcore.conversation.history"),
+        ("resolve/attachment_conversation.py", "agentcore.conversation.log_export"),
+        ("turn/complete_log.py", "agentcore.conversation.turn_stats"),
+        ("turn/delivery.py", "agentcore.conversation.midflight_persist"),
+        ("turn/interrupt.py", "agentcore.conversation.store"),
+    }
+)
+
+
+def test_runtime_conversation_imports_are_allowlisted() -> None:
+    """Runtime imports conversation only at the seams named above.
+
+    Suspend, mid-turn edit, and close still write the conversation. Those calls
+    stay direct. Anything else — including a new submodule under an allowed
+    parent — is a new reverse edge and must be added here and in 项目结构 §二
+    together.
+    """
+    found: set[tuple[str, str]] = set()
+    for path in _py_files("runtime"):
+        rel = path.relative_to(_PKG_ROOT / "runtime").as_posix()
+        for imp in _module_imports(path):
+            if imp == "agentcore.conversation" or imp.startswith(
+                "agentcore.conversation."
+            ):
+                found.add((rel, imp))
+    assert found == _RUNTIME_CONVERSATION_ALLOWLIST
+
+
 def test_runtime_drive_and_coordination_do_not_import_tools_delegate() -> None:
     """Delegate drive / coordination sit in runtime — no tools.builtin.delegate edge.
 

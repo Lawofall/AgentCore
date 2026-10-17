@@ -139,7 +139,9 @@ async def test_prepare_independent_io_overlaps(monkeypatch, tmp_path):
     assert wall < 0.18
 
 
-async def test_assemble_cancels_file_index_when_toolset_raises(monkeypatch, tmp_path):
+async def test_assemble_cancels_conversation_edits_when_toolset_raises(
+    monkeypatch, tmp_path
+):
     cancelled = asyncio.Event()
 
     async def _hang(*_a, **_k):
@@ -151,7 +153,7 @@ async def test_assemble_cancels_file_index_when_toolset_raises(monkeypatch, tmp_
         return ""
 
     monkeypatch.setattr(
-        "agentcore.runtime.pipeline.assemble.build_workspace_overview", _hang
+        "agentcore.runtime.pipeline.assemble.build_conversation_edits_block", _hang
     )
 
     def _fake_assemble(**kwargs):
@@ -197,7 +199,7 @@ async def test_assemble_cancels_file_index_when_toolset_raises(monkeypatch, tmp_
             history=[],
             sink=EventSink(),
             backend=backend,
-            folder_id=None,
+            folder_id="folder-1",
             approvals_enabled=True,
             permission_axes=None,
             profiles=make_turn_profiles(),

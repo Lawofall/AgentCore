@@ -150,6 +150,9 @@ function mineShelfCopy(
   };
 }
 
+/** Shelf corner and the assembly count. The read dialog uses the mode switch. */
+export const PROMPT_ALWAYS_LABEL = "常驻";
+
 function mineAccessory(
   item: Extract<PromptCatalogItem, { kind: "mine" }>,
   opts: PromptMineShelfOpts,
@@ -157,7 +160,7 @@ function mineAccessory(
   const inAlways = item.applyMode === "always";
   if (opts.fromMarket) {
     const chips: PromptShelfChip[] = [];
-    if (inAlways) chips.push(chip("必带"));
+    if (inAlways) chips.push(chip(PROMPT_ALWAYS_LABEL));
     chips.push(chip("市场"));
     if (opts.hasUpdate) chips.push(chip("有更新", "primary"));
     return chips;
@@ -165,7 +168,7 @@ function mineAccessory(
   const published = opts.listingStatus === "published";
   const takenDown = opts.listingStatus === "taken_down";
   const chips: PromptShelfChip[] = [];
-  if (inAlways) chips.push(chip("必带"));
+  if (inAlways) chips.push(chip(PROMPT_ALWAYS_LABEL));
   if (published || takenDown) chips.push(chip("我的"));
   if (published) chips.push(chip("已上架"));
   if (takenDown) chips.push(chip("平台已下架"));
@@ -195,7 +198,12 @@ export function promptReadHeaderChips(
   copy: PromptShelfCopy,
   item: PromptCatalogItem,
 ): PromptShelfChip[] {
-  if (item.kind !== "tool") return promptShelfHeaderChips(copy);
+  if (item.kind !== "tool") {
+    return [
+      ...copy.accessory.filter((row) => row.label !== PROMPT_ALWAYS_LABEL),
+      ...copy.tags.map((label) => chip(label)),
+    ];
+  }
   return [
     ...copy.accessory,
     chip(RESIDENT_LABEL.resident),

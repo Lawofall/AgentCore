@@ -12,6 +12,12 @@ import {
   useResendCountdown,
 } from "@/lib/emailAuth";
 import {
+  LOGIN_LOCK_RESET_HINT,
+  lockButtonLabel,
+  lockUntilFromApiError,
+  useUnlockCountdown,
+} from "@/lib/loginLockout";
+import {
   loadRememberedUsername,
   saveRememberedUsername,
 } from "@/lib/rememberedUsername";
@@ -24,6 +30,7 @@ import {
   checkClass,
   inputClass,
 } from "@/pages/login/AuthBits";
+import { LoginLockNotice } from "@/pages/login/LoginLockNotice";
 import { ApiError } from "@/services/api";
 import {
   forgotPassword,
@@ -101,6 +108,10 @@ export function LoginPage() {
   const [agreed, setAgreed] = useState(false);
   const [isAdult, setIsAdult] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [lock, setLock] = useState<{
+    until: number;
+    identifier: string;
+  } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [noticeKind, setNoticeKind] = useState<"success" | "hint">("hint");
   const [busy, setBusy] = useState(false);
@@ -138,6 +149,10 @@ export function LoginPage() {
           ? "两次输入的新密码不一致"
           : null;
 
+  const lockUntil =
+    lock != null && lock.identifier === identifier.trim() ? lock.until : null;
+  const lockLeft = useUnlockCountdown(lockUntil);
+  const loginHeld = lockLeft > 0;
   const loginReady = !identifierErr && !loginPasswordErr;
   const registerSendReady = !registerEmailErr && !registerPasswordErr;
   const registerReady =
@@ -214,14 +229,20 @@ export function LoginPage() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setAttempted(true);
-    if (!loginReady || busy) return;
+    if (!loginReady || busy || loginHeld) return;
+    const trimmed = identifier.trim();
     setBusy(true);
     setError(null);
     setNotice(null);
+    setLock(null);
     try {
-      const trimmed = identifier.trim();
       await afterLogin(await login(trimmed, password), trimmed);
     } catch (err) {
+      const until = lockUntilFromApiError(err);
+      if (until != null) {
+        setLock({ until, identifier: trimmed });
+        return;
+      }
       const message = errorMessage(err, "登录失败，请重试");
       setError(message);
       if (err instanceof ApiError && err.code === "EMAIL_NOT_VERIFIED") {
@@ -312,6 +333,7 @@ export function LoginPage() {
       setConfirmPassword("");
       setNoticeKind("success");
       setNotice("密码已重置，请使用新密码登录");
+      setLock(null);
     } catch (err) {
       setError(errorMessage(err, "重置失败，请重试"));
     } finally {
@@ -397,10 +419,26 @@ export function LoginPage() {
                 {revealError(loginPasswordErr, loginPasswordDirty)}
               </FieldError>
             </div>
-            {error && <AuthOutcome kind="error">{error}</AuthOutcome>}
+            {lockUntil != null ? (
+              <LoginLockNotice
+                key={lockUntil}
+                left={lockLeft}
+                hint={LOGIN_LOCK_RESET_HINT}
+              />
+            ) : (
+              error && <AuthOutcome kind="error">{error}</AuthOutcome>
+            )}
             {notice && <AuthOutcome kind={noticeKind}>{notice}</AuthOutcome>}
-            <Button type="submit" className="h-10 w-full" disabled={busy}>
-              {busy ? "请稍候…" : "登录"}
+            <Button
+              type="submit"
+              className="h-10 w-full"
+              disabled={busy || loginHeld}
+            >
+              {busy
+                ? "请稍候…"
+                : loginHeld
+                  ? lockButtonLabel(lockLeft)
+                  : "登录"}
             </Button>
             <p className="pt-1 text-center text-xs text-muted-foreground">
               <button

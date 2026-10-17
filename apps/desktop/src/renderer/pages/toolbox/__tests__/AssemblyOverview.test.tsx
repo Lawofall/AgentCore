@@ -127,18 +127,18 @@ describe("装配摘要文案", () => {
     expect(envelopeOffLine(1)).toBe("关了 1 行");
     expect(plugEnableLine(0)).toBe("启用 0");
     expect(promptRosterLine(countPromptModes([{ applyMode: "always" }]))).toBe(
-      "必带 1 · 按需 0",
+      "常驻 1 · 按需 0",
     );
     expect(
       promptRosterLine(
         countPromptModes([{ applyMode: "always" }, { applyMode: "paths" }]),
       ),
-    ).toBe("必带 1 · 按需 0 · 碰到文件 1");
-    expect(assemblyPromptSummary("必带 1 · 按需 0", false)).toBe(
-      "必带 1 · 按需 0 · 出厂 开",
+    ).toBe("常驻 1 · 按需 0 · 碰到文件 1");
+    expect(assemblyPromptSummary("常驻 1 · 按需 0", false)).toBe(
+      "常驻 1 · 按需 0 · 出厂 开",
     );
-    expect(assemblyPromptSummary("必带 1 · 按需 0", true)).toBe(
-      "必带 1 · 按需 0 · 出厂 关",
+    expect(assemblyPromptSummary("常驻 1 · 按需 0", true)).toBe(
+      "常驻 1 · 按需 0 · 出厂 关",
     );
     expect(assemblyPromptSummary("加载中…", true)).toBe("加载中…");
   });
@@ -223,7 +223,10 @@ describe("装配胶囊", () => {
     expect(
       within(model).queryByRole("button", { name: "以后新建也用这份" }),
     ).toBeNull();
-    const nameChip = screen.getByRole("button", { name: "写稿", pressed: true });
+    const nameChip = screen.getByRole("button", {
+      name: "写稿",
+      pressed: true,
+    });
     const adopt = screen.getByRole("button", { name: "以后新建也用这份" });
     expect(adopt.parentElement).toBe(nameChip.parentElement);
     expect(screen.getByText("主模型")).toBeTruthy();
@@ -379,10 +382,9 @@ describe("装配胶囊", () => {
       within(row).queryByRole("textbox", { name: "搜提示词、工具" }),
     ).toBeNull();
     expect(
-      within(screen.getByTestId("assembly-model-block")).queryByRole(
-        "button",
-        { name: "以后新建也用这份" },
-      ),
+      within(screen.getByTestId("assembly-model-block")).queryByRole("button", {
+        name: "以后新建也用这份",
+      }),
     ).toBeNull();
   });
 

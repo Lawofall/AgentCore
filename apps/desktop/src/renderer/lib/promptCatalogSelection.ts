@@ -75,7 +75,7 @@ function pushMine(out: MineSelectedItem[], item: PromptCatalogItem): void {
 
 /**
  * 与 PromptOverview 看得见的卡一致。
- * 根上：必带，再没归夹的按需。点进夹只算这只夹。
+ * 根上：常驻，再没归夹的按需。点进夹只算这只夹。
  * 夹名本身不把里面的卡算进可见名单。
  * Shift 连选和「可见」都以这份名单为准。
  */

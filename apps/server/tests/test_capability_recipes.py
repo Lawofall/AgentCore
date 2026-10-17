@@ -21,7 +21,7 @@ from agentcore.assembly.recipes import (
     surface_from_recipe,
     surface_from_row,
 )
-from agentcore.runtime.context.envelope_switches import FILE_INDEX, RUNTIME_DATE, all_projection_ids
+from agentcore.runtime.context.envelope_switches import RUNTIME_DATE, all_projection_ids
 from agentcore.tools.switchboard import all_switch_ids, current_disabled_tools
 
 
@@ -39,7 +39,7 @@ def test_web_keeps_search_and_the_date():
     assert "ask_user" in surface.disabled_tools
     assert "files" in surface.disabled_tools
     assert RUNTIME_DATE not in surface.omitted_projections
-    assert FILE_INDEX in surface.omitted_projections
+    assert "file_index" not in all_projection_ids()
     assert surface.omit_factory_catalog is True
     assert surface.omit_desk_rules is False
 

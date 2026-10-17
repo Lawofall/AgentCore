@@ -1,6 +1,6 @@
 /**
  * 工具箱提示词工作台（预览 Markdown / 编辑 CodeMirror；可写停敲自动存）。
- * 顶栏放阅读切换与保存。封面只在编辑态、且有可编字段时出现。
+ * 阅读切换和加载方式同一行；名称和一句话介绍各一行。有改动才出保存。
  */
 
 import {
@@ -9,7 +9,7 @@ import {
 } from "@/components/markdown/MarkdownSourceEditor";
 import { SourceToolbar } from "@/components/markdown/sourceToolbar";
 import { PromptDocument } from "@/components/prompt/PromptDocument";
-import { Button, Input, SegmentedControl, Textarea } from "@/components/ui";
+import { Button, Input, SegmentedControl } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { Loader2, Save } from "lucide-react";
 import {
@@ -38,10 +38,9 @@ const PATHS_LABEL = "路径";
 const PATHS_PLACEHOLDER = "**/*.tsx、src/*.py";
 const AUTOSAVE_DEBOUNCE_MS = 1500;
 
-const TITLE_FIELD_CLASS =
-  "h-auto min-h-8 w-full border-0 bg-transparent px-0 text-foreground focus:border-transparent focus-visible:ring-0";
-const CATALOG_FIELD_CLASS =
-  "h-auto min-h-8 w-full border-0 bg-transparent px-0 text-muted-foreground focus:border-transparent focus-visible:ring-0";
+const FIELD_LABEL_CLASS =
+  "w-20 shrink-0 whitespace-nowrap text-xs text-muted-foreground";
+const BODY_PLACEHOLDER = "从这里写正文";
 
 export interface PromptWorkbenchDraft {
   title: string;
@@ -196,98 +195,88 @@ export function PromptWorkbench({
   const showCatalogLine = applyMode !== "always" && triggerEnabled;
   const catalogPlaceholder =
     applyMode === "paths" ? PATH_LINE_PLACEHOLDER : CATALOG_LINE_PLACEHOLDER;
-  const showTitleRow = titleEditable || applyMode !== undefined;
-  const showCover = !previewing && (showTitleRow || showCatalogLine);
+  const showFields =
+    !previewing && (titleEditable || showCatalogLine || applyMode === "paths");
   const triggerText = trigger.trim();
-  const showSave = Boolean(!readOnly && onSave && (!previewing || dirty));
+  const showSave = Boolean(
+    !readOnly &&
+      onSave &&
+      (dirty || saveState === "saving" || saveState === "error"),
+  );
+  const showBodyHint = !readOnly && !previewing && !body.trim();
 
-  const cover = showCover ? (
-    <div className="mx-auto w-full max-w-3xl px-6 pt-5 pb-4">
-      {showTitleRow ? (
-        <div className="flex flex-wrap items-start gap-3">
-          {titleEditable ? (
-            <label
-              htmlFor={titleId}
-              className="flex min-w-0 flex-1 items-baseline gap-2"
-            >
-              <span className="shrink-0 text-muted-foreground text-xs">
-                {TITLE_LABEL}
-              </span>
-              <Input
-                id={titleId}
-                aria-label={TITLE_LABEL}
-                value={titleValue}
-                onChange={(event) => {
-                  const next = event.target.value;
-                  setTitleValue(next);
-                  markDirty({ title: next });
-                }}
-                disabled={readOnly}
-                className={cn(TITLE_FIELD_CLASS, "min-w-0 flex-1")}
-              />
-            </label>
-          ) : null}
-          {applyMode !== undefined ? (
-            <SegmentedControl
-              aria-label="加载方式"
-              value={applyMode}
-              onChange={(next) => {
-                onApplyModeChange?.(next);
-                markDirty({ applyMode: next });
-              }}
-              items={APPLY_MODE_ITEMS}
-              className="w-auto shrink-0"
-            />
-          ) : null}
-        </div>
+  const modeSwitch =
+    applyMode !== undefined ? (
+      <SegmentedControl
+        aria-label="加载方式"
+        value={applyMode}
+        onChange={(next) => {
+          if (readOnly) return;
+          onApplyModeChange?.(next);
+          markDirty({ applyMode: next });
+        }}
+        items={APPLY_MODE_ITEMS}
+        className="w-fit"
+      />
+    ) : null;
+
+  const cover = showFields ? (
+    <div className="mt-2 flex flex-col gap-2">
+      {titleEditable ? (
+        <label htmlFor={titleId} className="flex min-w-0 items-center gap-2">
+          <span className={FIELD_LABEL_CLASS}>{TITLE_LABEL}</span>
+          <Input
+            id={titleId}
+            aria-label={TITLE_LABEL}
+            value={titleValue}
+            onChange={(event) => {
+              const next = event.target.value;
+              setTitleValue(next);
+              markDirty({ title: next });
+            }}
+            disabled={readOnly}
+            className="min-w-0 flex-1"
+          />
+        </label>
       ) : null}
       {showCatalogLine ? (
-        <div className={cn(showTitleRow && "mt-2")}>
-          {readOnly ? (
-            <div className="flex min-w-0 items-start gap-2">
-              <span className="shrink-0 pt-1.5 text-muted-foreground text-xs">
-                {CATALOG_LINE_LABEL}
-              </span>
-              <span className="min-w-0 whitespace-pre-wrap text-muted-foreground text-sm">
-                {triggerText || catalogPlaceholder}
-              </span>
-            </div>
-          ) : (
-            <label
-              htmlFor={catalogLineId}
-              className="flex min-w-0 items-start gap-2"
+        readOnly ? (
+          <div className="flex min-w-0 items-center gap-2">
+            <span className={FIELD_LABEL_CLASS}>{CATALOG_LINE_LABEL}</span>
+            <span
+              className="min-w-0 truncate text-sm text-foreground"
+              title={triggerText || undefined}
             >
-              <span className="shrink-0 pt-1.5 text-muted-foreground text-xs">
-                {CATALOG_LINE_LABEL}
-              </span>
-              <Textarea
-                id={catalogLineId}
-                aria-label={CATALOG_LINE_LABEL}
-                placeholder={catalogPlaceholder}
-                rows={2}
-                value={trigger}
-                onChange={(event) => {
-                  const next = event.target.value;
-                  setTrigger(next);
-                  markDirty({ trigger: next });
-                }}
-                className={cn(
-                  CATALOG_FIELD_CLASS,
-                  "min-h-8 min-w-0 flex-1 text-sm",
-                )}
-              />
-            </label>
-          )}
-        </div>
+              {triggerText || catalogPlaceholder}
+            </span>
+          </div>
+        ) : (
+          <label
+            htmlFor={catalogLineId}
+            className="flex min-w-0 items-center gap-2"
+          >
+            <span className={FIELD_LABEL_CLASS}>{CATALOG_LINE_LABEL}</span>
+            <Input
+              id={catalogLineId}
+              aria-label={CATALOG_LINE_LABEL}
+              placeholder={catalogPlaceholder}
+              value={trigger}
+              onChange={(event) => {
+                const next = event.target.value;
+                setTrigger(next);
+                markDirty({ trigger: next });
+              }}
+              className="min-w-0 flex-1"
+            />
+          </label>
+        )
       ) : null}
       {applyMode === "paths" ? (
         <label
           htmlFor={`${catalogLineId}-paths`}
-          className="mt-2 flex min-w-0 items-baseline gap-2"
+          className="flex min-w-0 items-center gap-2"
         >
-          <span className="shrink-0 text-muted-foreground text-xs">
-            {PATHS_LABEL}
-          </span>
+          <span className={FIELD_LABEL_CLASS}>{PATHS_LABEL}</span>
           <Input
             id={`${catalogLineId}-paths`}
             aria-label={PATHS_LABEL}
@@ -299,7 +288,7 @@ export function PromptWorkbench({
               setPaths(next);
               markDirty({ paths: next });
             }}
-            className={cn(CATALOG_FIELD_CLASS, "min-w-0 flex-1")}
+            className="min-w-0 flex-1"
           />
         </label>
       ) : null}
@@ -311,37 +300,46 @@ export function PromptWorkbench({
       className="flex min-h-0 flex-1 flex-col overflow-hidden"
       data-testid={testId}
     >
-      <div className="flex h-9 shrink-0 items-center gap-1.5 border-b border-border px-3">
-        {leading}
-        {badges}
-        <div className="ml-auto flex shrink-0 items-center gap-1.5">
-          {dirty ? (
-            <span className="shrink-0 text-primary text-xs">●</span>
-          ) : null}
-          {saveState === "saving" ? (
-            <span className="text-muted-foreground text-xs">保存中…</span>
-          ) : null}
-          {saveState === "saved" && !dirty ? (
-            <span className="text-muted-foreground text-xs">已保存</span>
-          ) : null}
-          {extraActions}
-          {showSave ? (
-            <Button
-              className="shrink-0 disabled:opacity-50"
-              disabled={!dirty || saveState === "saving"}
-              onClick={() => void doSave()}
-              icon={
-                saveState === "saving" ? (
-                  <Loader2 size={13} className="animate-spin" />
-                ) : (
-                  <Save size={13} />
-                )
-              }
-            >
-              保存
-            </Button>
-          ) : null}
+      <div
+        className={cn(
+          "shrink-0 border-b border-border px-5 py-2",
+          showFields && "bg-muted/40",
+        )}
+      >
+        <div className="flex items-center gap-2">
+          {leading}
+          {badges}
+          <div className="ml-auto flex shrink-0 items-center gap-2">
+            {modeSwitch}
+            {saveState === "saving" ? (
+              <span className="text-muted-foreground text-xs">保存中…</span>
+            ) : null}
+            {saveState === "saved" && !dirty ? (
+              <span className="text-muted-foreground text-xs">已保存</span>
+            ) : null}
+            {saveState === "error" ? (
+              <span className="text-muted-foreground text-xs">没保存上</span>
+            ) : null}
+            {extraActions}
+            {showSave ? (
+              <Button
+                className="shrink-0"
+                disabled={!dirty || saveState === "saving"}
+                onClick={() => void doSave()}
+                icon={
+                  saveState === "saving" ? (
+                    <Loader2 size={13} className="animate-spin" />
+                  ) : (
+                    <Save size={13} />
+                  )
+                }
+              >
+                保存
+              </Button>
+            ) : null}
+          </div>
         </div>
+        {cover}
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -359,37 +357,38 @@ export function PromptWorkbench({
                 maxHeightClass="max-h-none"
               />
             ) : (
-              <p className="text-muted-foreground text-sm">还没有正文</p>
+              <p className="flex h-full min-h-[12rem] items-center justify-center text-muted-foreground text-sm">
+                还没有正文
+              </p>
             )}
           </div>
         ) : (
-          <>
-            {cover ? (
-              <div className="max-h-[12rem] shrink-0 overflow-y-auto border-b border-border">
-                {cover}
-              </div>
+          <div className="flex min-h-[16rem] min-w-0 flex-1 flex-col overflow-hidden">
+            {!readOnly ? (
+              <SourceToolbar
+                className="px-4"
+                getView={() => editorRef.current?.getView() ?? null}
+              />
             ) : null}
-            <div className="flex min-h-[16rem] min-w-0 flex-1 flex-col overflow-hidden">
-              {!readOnly ? (
-                <SourceToolbar
-                  getView={() => editorRef.current?.getView() ?? null}
-                />
+            <div className="relative min-h-0 flex-1 overflow-hidden">
+              {showBodyHint ? (
+                <p className="pointer-events-none absolute top-6 left-6 font-mono text-sm leading-relaxed text-muted-foreground">
+                  {BODY_PLACEHOLDER}
+                </p>
               ) : null}
-              <div className="min-h-0 flex-1 overflow-hidden">
-                <MarkdownSourceEditor
-                  ref={editorRef}
-                  initialDoc={body}
-                  editable={!readOnly}
-                  onChange={(value) => {
-                    setBody(value);
-                    markDirty({ body: value });
-                  }}
-                  onSave={() => void doSave()}
-                  className="h-full w-full"
-                />
-              </div>
+              <MarkdownSourceEditor
+                ref={editorRef}
+                initialDoc={body}
+                editable={!readOnly}
+                onChange={(value) => {
+                  setBody(value);
+                  markDirty({ body: value });
+                }}
+                onSave={() => void doSave()}
+                className="relative h-full w-full"
+              />
             </div>
-          </>
+          </div>
         )}
       </div>
     </div>

@@ -62,8 +62,11 @@ async def test_capabilities_lists_system_skills_with_body(client):
     body = (await client.get("/v1/capabilities")).json()
     skills = {s["name"]: s for s in body["skills"]}
     assert "page_ui" in skills
+    assert "prompts" in skills
     assert skills["page_ui"]["group"] == "交付"
+    assert skills["prompts"]["group"] == "工作区"
     assert set(skills["page_ui"]["audience"]) == {"ceo", "worker"}
+    assert set(skills["prompts"]["audience"]) == {"ceo", "worker"}
     for skill in skills.values():
         assert skill["summary"]
         assert skill["body"]  # the full guidance, not just the catalog one-liner

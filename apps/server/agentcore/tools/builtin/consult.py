@@ -126,7 +126,16 @@ class ConsultTool:
             logger.info("consult.miss", name=raw)
             return ToolResult(tool_call_id="", success=True, output=msg)
 
-        body, origin = await self._fetch_body_and_origin(context.user_id, raw)
+        from agentcore.memory.workspace_files import (
+            bind_workspace_markdown_reader,
+            reset_workspace_markdown_reader,
+        )
+
+        reader_token = bind_workspace_markdown_reader(context.backend)
+        try:
+            body, origin = await self._fetch_body_and_origin(context.user_id, raw)
+        finally:
+            reset_workspace_markdown_reader(reader_token)
         if body is None:
             available = "、".join(await self._available_names(context.user_id))
             head = f"没有名为 '{raw}' 的条目。"

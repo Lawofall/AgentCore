@@ -9,7 +9,7 @@ import re
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agentcore.billing.gate import BackgroundLlmResult, run_background_llm
-from agentcore.core.errors import LLMAuthError
+from agentcore.core.errors import LLMAuthError, LLMInsufficientBalanceError
 from agentcore.core.log_context import get_log_value, log_context
 from agentcore.core.logging import get_logger
 from agentcore.core.text import clip_preview
@@ -203,7 +203,8 @@ async def generate_title(
     error — returns ``fallback_title`` plus ``degraded_reason``. Persist callers
     must not write a degraded result to ``conversations.title``.
 
-    ``LLMAuthError`` is **re-raised** so ``run_background_llm`` can try user BYOK.
+    ``LLMAuthError`` and ``LLMInsufficientBalanceError`` are **re-raised** so
+    ``run_background_llm`` can try the other payer once.
     """
     fallback = fallback_title(user_message)
     if not user_message.strip():
@@ -220,8 +221,8 @@ async def generate_title(
         if result.title:
             return result
         return TitleResult(title=fallback, degraded_reason="empty_model_title")
-    except LLMAuthError:
-        # Must surface so ``run_background_llm`` can try user BYOK once.
+    except (LLMAuthError, LLMInsufficientBalanceError):
+        # Must surface so ``run_background_llm`` can try the other payer once.
         raise
     except Exception as e:
         from agentcore.llm.background_failure import classify_background_llm_failure
@@ -303,7 +304,12 @@ async def _mint_title_core(
             finally:
                 await provider.close()
 
-        result = await run_background_llm(user_id, purpose="title", runner=_runner)
+        result = await run_background_llm(
+            user_id,
+            purpose="title",
+            runner=_runner,
+            conversation_id=conversation_id,
+        )
         # Gate refusal (no platform/BYOK key, platform allowance spent, auth
         # failed both sides) is the same as a model miss: log and leave ``title``
         # empty so a later turn can retry. Do not consult the refusal's cooldown

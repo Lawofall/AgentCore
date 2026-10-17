@@ -36,11 +36,11 @@ skip_if:
 
 - **主对话**：用户 key 优先；无 key 才 platform。
 - **长对话压缩**（连续性，不是 chrome）：跟 **这条对话** 的聊天付款方走（会话钉住的组合）。用户**显式**把组合的 background 槽指向自带 Key 时该槽仍优先。平台对话 → 平台 key + `enforce_quota`；自带 Key 对话 → 用户 key，**不**吃平台 ¥ 帽。入口 `billing/gate.py::run_compaction_llm`。回合后压缩仍 skip（不 429 刚结束的回合）；近顶折不进去 → 拒发。
-- **后台档**（title/memory）：用户**显式**把组合的 background 槽指向自带 Key 时 **该槽优先**（自己的钱，无「白嫖」可防；不过 `enforce_quota`，model id 原样透传不降档）；槽空（跟随主模型）/ 指向平台模型时才 **平台优先** + 必过 `enforce_quota`（防白嫖），平台不可用（配置缺失 **或** 上游 auth 拒绝 / 余额不足）才回落用户 BYOK。统一入口 `billing/gate.py::run_background_llm`（`resolve_and_gate_background` 解析 + 一次 auth 或余额→BYOK；耗尽 / 两边都失败 → skip，不 429 主回合、不对用户弹出「请改用自己的 API Key」）。禁止调用点各自 try/except 拼回落、禁止进程内 auth 熔断缓存。原 followups（「下一步」chips）已下线，不再走后台档。
+- **后台档**（title）：读这场对话钉住的装配（没有对话 id 时读账号星标）。用户**显式**把 background 槽指向自带 Key 时 **该槽优先**（自己的钱，无「白嫖」可防；不过 `enforce_quota`，model id 原样透传）。槽空（跟随主模型）跟这份装配的主模型走：同一把 Key、同一个模型；主模型是平台时走平台 Key + `enforce_quota`。槽**显式**指向平台模型时仍 **平台优先**（`PLATFORM_BACKGROUND_MODEL` 或平台主模型）+ 必过 `enforce_quota`。平台不可用（配置缺失，或上游 auth 拒绝 / 余额不足 / 订阅因付款方式停了）才回落用户 BYOK。回落的模型 id 是该账号已解析的聊天模型（代付休眠时，平台装配会先改写成该端点的预设种子），不套 `PLATFORM_BACKGROUND_MODEL`。统一入口 `billing/gate.py::run_background_llm`（可带 `conversation_id`；`resolve_and_gate_background` 解析 + 一次 auth 或余额→BYOK；耗尽 / 两边都失败 → skip，不 429 主回合、不对用户弹出「请改用自己的 API Key」）。标题生成必须把鉴权失败和余额不足重新抛出，这一次回落才看得到。禁止调用点各自 try/except 拼回落、禁止进程内 auth 熔断缓存。原 followups（「下一步」chips）已下线，不再走后台档。
 - **回合内鉴权死短路（甲+乙）**：同一用户回合、同一付款方（`credential_source`）首次确认真 API Key `LLMAuthError`（不含 `INFERENCE_TOKEN_EXPIRED`）或余额不足后，`llm/turn_auth_dead.py` 按来源闩死后续未启动的同源 LLM（主聊后续轮 / 未开跑 worker / 本回合 chrome）；另一付款方不受影响（平台 chrome 死亡不得短路同回合 BYOK chat，反之亦然）。已在飞可自然失败。**不做**跨回合 TTL 负缓存（丙暂缓）。用户文案 / CTA 按 `credential_source` 分流（BYOK→去设置；平台→改用自己的 Key / 联系管理员）。
 - **`platform_billing_selectable`**：仅 `billing_mode=platform` 时可选；BYOK 部署不开放平台代付。
 - **Worker 槽**：空 = 跟随主模型；跨 origin 时 `build_turn_router` 注入 extras。Sidecar `cost_role=member`：请求 body `model` 为目录路由键（`platform/{id}` / `{provider_id}/{id}`）且合法 → **按该身份重解析凭据/model**；裸 mint/chat id 或未带显式 → 仍跟本槽。非法路由键 **硬失败**（`VALIDATION_ERROR`），禁 silent 回退野模型。→ [编排器 · Per-worker](/docs/03-AI核心/编排器与CEO主Agent.md#per-worker-模型覆盖abc-同一功能)。
-- **统一目录** `GET /v1/users/me/models`：产品身份 = `ref`（`@platform/{id}` / `@byok/{provider_id}/{id}`）；行属性仍带 `(id, origin, provider_id)` 供分组。BYOK 行 = 按 `base_url` 匹配的厂商预设 seeds ∪ 上游 `GET /models` 发现（发现失败/空仍保留预设）；匹配到预设后按 `hideFromPicker` **精确 id** 对新选隐藏（退役官方别名，或该端点不得使用的官方 id；已钉组合仍能跑）。无预设（自定义端点）只并发现结果；发现失败则目录为空，**手填** model id。**不是**用前端硬编码清单取代发现。组合槽对 BYOK = **始终可手填 combobox**（服务商 + model id，目录进 datalist 建议；火山 `ep-…`、私有中转等）；platform 仍只 allowlist。platform 行有补贴才列。
+- **统一目录** `GET /v1/users/me/models`：产品身份 = `ref`（`@platform/{id}` / `@byok/{provider_id}/{id}`）；行属性仍带 `(id, origin, provider_id)` 供分组。BYOK 行 = 按 `base_url` 匹配的厂商预设 seeds ∪ 上游 `GET /models` 发现（发现失败/空仍保留预设）；匹配到预设后按 `hideFromPicker` **精确 id** 对新选隐藏（退役官方别名，或该端点不得使用的官方 id；已钉组合仍能跑）。无预设（自定义端点）只并发现结果；发现失败则目录为空，**手填** model id。**不是**用前端硬编码清单取代发现。组合槽对 BYOK = **始终可手填 combobox**（服务商 + model id，目录进 datalist 建议；火山 `ep-…`、私有中转等）。装配拣选器**不列出**平台目录行（遗留平台槽标需改选）。目录 API 仍可返回 `origin=platform` 行（有补贴才列）。
 
 ## 三、sidecar 推理代理
 
@@ -157,7 +157,7 @@ OpenCode 两条 OpenAI 兼容上游，**计费与目录不同，必须按精确 
 | `BILLING_MODE` | `platform` |
 | `PLATFORM_BASE_URL` | `https://opencode.ai/zen/go/v1` |
 | `PLATFORM_MODEL` / `PLATFORM_MODELS` | `deepseek-v4.1-flash`（仅此；须有 CNY curated 价卡，否则启动后不上架 / allowlist 与默认冲突则 fail-fast） |
-| 后台档 | 同钉现网 id（可显式 `PLATFORM_BACKGROUND_MODEL`，须 ∈ allowlist） |
+| 后台档 | 空槽跟随这场主模型。显式平台槽才钉现网 id（可显式 `PLATFORM_BACKGROUND_MODEL`，须 ∈ allowlist） |
 | `PLATFORM_API_KEY` | 与 Zen 控制台同一把（不换） |
 | 额度 | 月 ¥10 · 日 ¥10（`quota_*`） |
 | 价卡 | Flash = DeepSeek 中文官价（空闲 ¥0.02 / ¥1 / ¥4 每百万；高峰 2×）。平台与用户 BYOK 同一把尺；额度只扣平台列。现金 COGS 仍是 Go 订阅月费，不是这把尺 |

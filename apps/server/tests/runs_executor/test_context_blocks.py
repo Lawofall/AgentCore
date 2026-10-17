@@ -190,9 +190,8 @@ async def test_context_blocks_omit_deliverable_without_instance_facts():
 
 
 async def test_context_blocks_dependency_carries_provenance():
-    # 通道③: each upstream dep becomes a `dependency` block carrying its provenance
-    # (source_role / source_run_id / fidelity / files) so the UI shows HOW a teammate's
-    # product was handed down — a prose dep → pass_through, a file-writing dep → pointer.
+    # 通道③: each upstream dep becomes a `dependency` block carrying its provenance.
+    # Prose without a brief is an absence; a file-writing dep is a pointer.
     plan, _ = build_run_plan(
         [
             {"id": "a", "role": "研究员", "task": "调研"},
@@ -211,7 +210,8 @@ async def test_context_blocks_dependency_carries_provenance():
     deps = {b.source_role: b for b in blocks if b.channel == "dependency"}
     assert set(deps) == {"研究员", "工程师"}
     assert deps["研究员"].source_run_id == "t_a"
-    assert deps["研究员"].fidelity == "pass_through"
+    assert deps["研究员"].fidelity == "absent"
+    assert "关键事实 X" not in deps["研究员"].body
     assert deps["研究员"].files == []
     assert deps["工程师"].source_run_id == "t_b"
     assert deps["工程师"].fidelity == "pointer"

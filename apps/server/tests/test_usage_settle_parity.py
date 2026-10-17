@@ -14,6 +14,13 @@ from agentcore.conversation.store.usage_settle import (
     USAGE_SETTLE_PASSTHROUGH_KEYS,
     USAGE_SETTLE_POSITIVE_INT_KEYS,
     USAGE_SETTLE_WIRE_INT_KEYS,
+    project_message_status,
+)
+from agentcore.core.message_merge import (
+    MESSAGE_STATUS_COMPLETE,
+    MESSAGE_STATUS_FAILED,
+    MESSAGE_STATUS_INCOMPLETE,
+    MESSAGE_STATUS_RUNNING,
 )
 
 _DESKTOP_STRATEGY = (
@@ -111,3 +118,46 @@ def test_usage_metadata_copies_ttft_when_positive():
     assert meta["ttft_ms"] == 1_800
     missing = _usage_metadata({"finish_reason": "end_turn"}, status="complete")
     assert "ttft_ms" not in missing
+
+
+def test_project_message_status_keeps_the_three_lanes():
+    assert (
+        project_message_status(
+            "error", lane="cloud", outcome="partial", has_reply=True
+        )
+        == MESSAGE_STATUS_COMPLETE
+    )
+    assert (
+        project_message_status("error", lane="cloud", has_error=True)
+        == MESSAGE_STATUS_FAILED
+    )
+    assert project_message_status("end_turn", lane="cloud") == MESSAGE_STATUS_COMPLETE
+
+    assert (
+        project_message_status("paused", lane="local_writeback")
+        == MESSAGE_STATUS_RUNNING
+    )
+    assert (
+        project_message_status("cancelled", lane="local_writeback")
+        == MESSAGE_STATUS_INCOMPLETE
+    )
+    assert (
+        project_message_status(
+            "error", lane="local_writeback", outcome="partial", has_reply=True
+        )
+        == MESSAGE_STATUS_COMPLETE
+    )
+    assert (
+        project_message_status("error", lane="local_writeback")
+        == MESSAGE_STATUS_FAILED
+    )
+
+    assert project_message_status("cancelled", lane="outbox") == MESSAGE_STATUS_INCOMPLETE
+    assert project_message_status("error", lane="outbox") == MESSAGE_STATUS_FAILED
+    assert project_message_status("paused", lane="outbox") == MESSAGE_STATUS_RUNNING
+    assert (
+        project_message_status(
+            "error", lane="outbox", outcome="partial", has_reply=True
+        )
+        == MESSAGE_STATUS_FAILED
+    )

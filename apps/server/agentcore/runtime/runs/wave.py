@@ -160,11 +160,12 @@ class WaveScheduler:
           individually → ``RunPhase.CANCELLED``. Not-yet-dispatched matches are
           withdrawn as ``RunPhase.SKIPPED`` (``on_skipped(abort)``) so
           ``cancel_worker`` on a queued node never launches. Siblings keep running;
-          dependents follow the fan-in rule: default ≥1 upstream COMPLETED → still
-          run (absent upstreams annotated in task input); ``require_upstream=True``
-          keeps cascade-skip on any cancel/failure. ``force_continue=True`` allows a
-          node even with zero successful upstreams. A dependent revived via
-          ``replaces_run_id`` still runs.
+          dependents follow the fan-in rule: every named upstream must succeed
+          before the dependent auto-starts. A hard absence (fail / cancel / skip)
+          cascade-skips the dependent even when another upstream completed.
+          ``FAILED``+``degrade`` stays soft. ``force_continue=True`` still runs
+          with holes. ``require_upstream`` is a leftover key and is not stricter
+          than this default. A dependent revived via ``replaces_run_id`` still runs.
           Used by delegate drive for user-initiated worker redirect / run-stop,
           ``cancel_worker`` pending withdraw, and hard-timeout force-cancel.
         - ``stop_run_ids`` (optional) marks which cancel targets are user「只停这项
@@ -528,9 +529,8 @@ class WaveScheduler:
                             # keeps the old best-effort path.
                             self._propagate_skip(plan, run_id, skipped, dispatched)
                     elif state.phase is RunPhase.CANCELLED:
-                        # Cancel fan-in: strict ``require_upstream`` dependents
-                        # cascade-skip immediately; lenient dependents wait for
-                        # remaining upstreams (≥1 COMPLETED → still run).
+                        # Cancel fan-in: dependents cascade-skip immediately
+                        # unless force_continue. They do not start on a hole.
                         self._propagate_cancel_skip(plan, run_id, skipped, dispatched)
 
                 # 反应臂边界 (受监督的波循环 SCOPE arm / 自底向上反应臂): a COMPLETED node
@@ -730,8 +730,7 @@ class WaveScheduler:
 
     @staticmethod
     def _failure_cascades(dep: RunSpec | None, dep_state: RunState | None) -> bool:
-        """Whether a FAILED dep with ``on_failure`` in ``{skip, retry}`` blocks a
-        *strict* (``require_upstream``) dependent.
+        """Whether a FAILED dep with ``on_failure`` in ``{skip, retry}`` blocks a dependent.
 
         ``degrade`` does not. ``CANCELLED`` is handled via :meth:`_cancel_cascades`.
         """
@@ -743,27 +742,14 @@ class WaveScheduler:
 
     @staticmethod
     def _cancel_cascades(spec: RunSpec, dep_state: RunState | None) -> bool:
-        """Whether a CANCELLED dep blocks a *strict* dependent.
+        """Whether a CANCELLED dep blocks a dependent.
 
-        Lenient fan-in (default) ignores cancel here — :meth:`_deps_satisfied`
-        only requires ≥1 COMPLETED upstream. ``force_continue`` always wins.
+        Default fan-in cascade-skips on cancel. ``force_continue`` always wins.
+        ``require_upstream`` is not a separate cancel rule.
         """
         if dep_state is None or dep_state.phase is not RunPhase.CANCELLED:
             return False
-        if bool(getattr(spec, "force_continue", False)):
-            return False
-        return bool(getattr(spec, "require_upstream", False))
-
-    @staticmethod
-    def _upstream_success_count(
-        spec: RunSpec,
-        completed: Mapping[str, RunState],
-    ) -> int:
-        return sum(
-            1
-            for dep_id in spec.depends_on
-            if (st := completed.get(dep_id)) is not None and st.phase is RunPhase.COMPLETED
-        )
+        return not bool(getattr(spec, "force_continue", False))
 
     @staticmethod
     def _is_hard_absence(
@@ -772,7 +758,7 @@ class WaveScheduler:
         *,
         in_skipped: bool,
     ) -> bool:
-        """True when a resolved dep counts as a hard absence for lenient fan-in.
+        """True when a resolved dep counts as a hard absence for default fan-in.
 
         ``FAILED`` + ``degrade`` is soft (old best-effort path): dependent may
         still run with zero COMPLETED upstreams. Cancel / skip / retry-fail /
@@ -802,13 +788,12 @@ class WaveScheduler:
         """Whether ``spec`` may run: every dep resolved (completed/failed/skipped)
         and the node itself not (transitively) skipped.
 
-        Fan-in rules (取消≠失败; 汇聚默认宽松):
-        - Default (``require_upstream=False``): ≥1 upstream COMPLETED → run.
-          Zero successes → skip unless ``force_continue`` or only soft
-          (``degrade``) absences remain.
-        - Strict (``require_upstream=True``): any FAILED dep with
-          ``on_failure`` in ``{skip, retry}``, any CANCELLED dep (unless
-          ``force_continue``), or any still-skipped dep → cascade-skip.
+        Fan-in rules (取消≠失败; 点名上游须全部成功):
+        - Default: any hard absence (fail / cancel / skip) → cascade-skip,
+          even when another upstream completed. Only-soft ``degrade`` absences
+          still run. ``force_continue`` runs with holes.
+        - ``require_upstream=True``: same hard-absence cascade (leftover key;
+          not a model-facing switch).
         """
         for dep_id in spec.depends_on:
             if dep_id not in completed and dep_id not in skipped:
@@ -831,10 +816,8 @@ class WaveScheduler:
                     return False
             return spec.run_id not in skipped
 
-        # Lenient: ≥1 successful delivery; else force_continue or only soft absences.
+        # Default: a hard hole blocks auto-start. Soft degrade and force_continue still run.
         if not spec.depends_on:
-            return spec.run_id not in skipped
-        if WaveScheduler._upstream_success_count(spec, completed) >= 1:
             return spec.run_id not in skipped
         if bool(getattr(spec, "force_continue", False)):
             return spec.run_id not in skipped
@@ -858,17 +841,17 @@ class WaveScheduler:
         skipped: set[str],
         dispatched: set[str],
     ) -> None:
-        """Cascade-skip *strict* (``require_upstream``) dependents of ``failed_id``.
+        """Cascade-skip dependents of ``failed_id`` unless they ``force_continue``.
 
-        Lenient dependents are left for :meth:`_deps_satisfied` so a summarizer
-        with other successful upstreams still runs.
+        A summarizer does not auto-start on a hole left by one failed upstream.
+        ``on_failure=degrade`` never reaches here.
         """
         for spec in plan.nodes:
             if (
                 failed_id in spec.depends_on
                 and spec.run_id not in skipped
                 and spec.run_id not in dispatched
-                and bool(getattr(spec, "require_upstream", False))
+                and not bool(getattr(spec, "force_continue", False))
             ):
                 skipped.add(spec.run_id)
                 self._propagate_skip(plan, spec.run_id, skipped, dispatched)
@@ -880,17 +863,16 @@ class WaveScheduler:
         skipped: set[str],
         dispatched: set[str],
     ) -> None:
-        """Cascade-skip *strict* dependents of a CANCELLED node.
+        """Cascade-skip dependents of a CANCELLED node unless ``force_continue``.
 
-        Lenient fan-in waits for remaining upstreams; only ``require_upstream``
-        (and not ``force_continue``) keeps the old cancel-cascade-skip.
+        One cancelled upstream is enough; the dependent does not wait out the
+        other upstreams and then start on the hole.
         """
         for spec in plan.nodes:
             if (
                 cancelled_id in spec.depends_on
                 and spec.run_id not in skipped
                 and spec.run_id not in dispatched
-                and bool(getattr(spec, "require_upstream", False))
                 and not bool(getattr(spec, "force_continue", False))
             ):
                 skipped.add(spec.run_id)
@@ -949,15 +931,13 @@ class WaveScheduler:
                 if WaveScheduler._failure_cascades(plan.by_id(dep_id), dep_state):
                     return True
             return False
-        # Lenient: blocked while zero successes, not force_continue, and at least
-        # one hard absence — and every dep is already resolved (otherwise wait).
+        # Default: stay skipped while any hard absence remains. An unresolved
+        # dep means the edge was rewritten (replaces) — revive so ready-scan waits.
         if bool(getattr(node, "force_continue", False)):
             return False
         for dep_id in node.depends_on:
             if dep_id not in completed and dep_id not in skipped:
-                return False  # still waiting — revive so ready-scan can wait
-        if WaveScheduler._upstream_success_count(node, completed) >= 1:
-            return False
+                return False
         return any(
             WaveScheduler._is_hard_absence(
                 plan.by_id(dep_id),

@@ -51,10 +51,8 @@ def test_truncate_head_tail_short_content_unchanged():
     assert truncate_head_tail("short", 1_000) == "short"
 
 
-async def test_long_upstream_injected_with_head_and_tail_preserved():
-    # The fix end-to-end: a long upstream product (over budget) reaches the
-    # downstream writer with BOTH ends — the old 4000 head-only cap silently dropped
-    # the tail (where 金额 / 法条编号 often live).
+async def test_long_upstream_essay_is_not_forwarded():
+    # No brief and no file: the essay, including its tail, does not ride the edge.
     long_upstream = "起始结论" + ("数" * (DEP_CONTEXT_BUDGET + 5_000)) + "关键尾注:法条第42条"
     tasks = [
         {"id": "s1", "role": "研究员", "task": "调研"},
@@ -64,15 +62,13 @@ async def test_long_upstream_injected_with_head_and_tail_preserved():
     provider = _ContentProvider([long_upstream, "FINAL"])
     await WaveScheduler().run(plan, _executor(plan, provider, EventSink()))
     downstream_user = provider.user_messages[1]
-    assert "起始结论" in downstream_user  # head preserved
-    assert "关键尾注:法条第42条" in downstream_user  # tail preserved (the fix)
-    assert "系统视图截断" in downstream_user  # trimmed via transport marker, not shipped whole
-    assert "中间省略" not in downstream_user
+    assert "起始结论" not in downstream_user
+    assert "关键尾注:法条第42条" not in downstream_user
+    assert "没有简报" in downstream_user
+    assert "勿编造" in downstream_user
 
 
-async def test_summarize_dep_is_compressed_not_passed_through():
-    # A dep that declared result_handling="summarize" is digested, not budget-passed:
-    # the full content must NOT reach the downstream prompt.
+async def test_summarize_without_brief_does_not_forward_the_essay():
     long_upstream = "S摘要起点" + ("数" * 3_000)
     tasks = [
         {"id": "s1", "role": "研究员", "task": "调研", "result_handling": "summarize"},
@@ -82,14 +78,12 @@ async def test_summarize_dep_is_compressed_not_passed_through():
     provider = _ContentProvider([long_upstream, "FINAL"])
     await WaveScheduler().run(plan, _executor(plan, provider, EventSink()))
     downstream_user = provider.user_messages[1]
-    assert "摘要起点" in downstream_user  # the head digest is present
-    assert long_upstream not in downstream_user  # but not the full 3000-char product
+    assert long_upstream not in downstream_user
+    assert "摘要起点" not in downstream_user
+    assert "没有简报" in downstream_user
 
 
-async def test_wide_fanin_shares_budget_bounded_total():
-    # Three long upstreams fanning into one writer share the budget (≈ budget/3 each,
-    # water-filled), so the total injected upstream context stays bounded instead of
-    # multiplying to 3× a per-dep cap.
+async def test_wide_fanin_without_briefs_does_not_multiply_prose():
     big = "甲" * 40_000
     tasks = [
         {"id": "r1", "role": "调研A", "task": "查A"},
@@ -101,9 +95,6 @@ async def test_wide_fanin_shares_budget_bounded_total():
     provider = _ContentProvider([big, big, big, "FINAL"])
     await WaveScheduler().run(plan, _executor(plan, provider, EventSink()))
     writer_user = provider.user_messages[3]
-    # The three "## 前置结果" blocks together stay within the shared budget (+ markers /
-    # labels slack), nowhere near 3 × 40_000. Count the block HEADER ("## 前置结果"), not
-    # the bare phrase — the team-position block (D) also names 「前置结果」 when telling a
-    # terminal node where its upstream products are.
-    assert writer_user.count("## 前置结果") == 3
+    assert writer_user.count("前置缺席") == 3
+    assert "甲甲甲" not in writer_user
     assert len(writer_user) < DEP_CONTEXT_BUDGET + 2_000

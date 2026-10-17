@@ -210,7 +210,7 @@ export interface paths {
         put?: never;
         /**
          * Delete Account User Rule
-         * @description Delete one named user-rule markdown under .agentcore/rules/.
+         * @description Delete one account-library rule by catalog name.
          */
         post: operations["delete_account_user_rule_v1_account_rules_delete_post"];
         delete?: never;
@@ -230,7 +230,7 @@ export interface paths {
         put?: never;
         /**
          * List Account User Rules
-         * @description User rules for turn assembly: always → ``<设定>``; paths → index; on_demand → catalog.
+         * @description Account markdown, plus this folder when ``folder_id`` is set.
          */
         post: operations["list_account_user_rules_v1_account_rules_list_post"];
         delete?: never;
@@ -250,7 +250,7 @@ export interface paths {
         put?: never;
         /**
          * Read Account User Rule
-         * @description Read one named user-rule markdown under .agentcore/rules/.
+         * @description Read one account-library rule by catalog name.
          */
         post: operations["read_account_user_rule_v1_account_rules_read_post"];
         delete?: never;
@@ -270,7 +270,7 @@ export interface paths {
         put?: never;
         /**
          * Write Account User Rule
-         * @description Write a named user-rule markdown under .agentcore/rules/.
+         * @description Write one account-library rule by catalog name.
          */
         post: operations["write_account_user_rule_v1_account_rules_write_post"];
         delete?: never;
@@ -4257,6 +4257,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/inference/search_connection/failure": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Inference Search Connection Failure
+         * @description Sidecar report: the keyless SearXNG it called just failed.
+         */
+        post: operations["inference_search_connection_failure_v1_inference_search_connection_failure_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/inference/search_route": {
         parameters: {
             query?: never;
@@ -5523,34 +5543,16 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/users/me/search-providers": {
+    "/v1/users/me/search-connection": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** List Search Providers */
-        get: operations["list_search_providers_v1_users_me_search_providers_get"];
+        /** Get Search Connection */
+        get: operations["get_search_connection_v1_users_me_search_connection_get"];
         put?: never;
-        /** Create Search Provider */
-        post: operations["create_search_provider_v1_users_me_search_providers_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/users/me/search-providers/selection": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /** Select Search Provider */
-        put: operations["select_search_provider_v1_users_me_search_providers_selection_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -5558,7 +5560,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/users/me/search-providers/{provider_id}": {
+    "/v1/users/me/search-connection/cleversee": {
         parameters: {
             query?: never;
             header?: never;
@@ -5567,16 +5569,16 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post?: never;
-        /** Delete Search Provider */
-        delete: operations["delete_search_provider_v1_users_me_search_providers__provider_id__delete"];
+        /** Connect Cleversee */
+        post: operations["connect_cleversee_v1_users_me_search_connection_cleversee_post"];
+        /** Disconnect Cleversee */
+        delete: operations["disconnect_cleversee_v1_users_me_search_connection_cleversee_delete"];
         options?: never;
         head?: never;
-        /** Update Search Provider */
-        patch: operations["update_search_provider_v1_users_me_search_providers__provider_id__patch"];
+        patch?: never;
         trace?: never;
     };
-    "/v1/users/me/search-providers/{provider_id}/test": {
+    "/v1/users/me/search-connection/searxng": {
         parameters: {
             query?: never;
             header?: never;
@@ -5585,8 +5587,26 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Test Search Provider */
-        post: operations["test_search_provider_v1_users_me_search_providers__provider_id__test_post"];
+        /** Connect Searxng */
+        post: operations["connect_searxng_v1_users_me_search_connection_searxng_post"];
+        /** Disconnect Searxng */
+        delete: operations["disconnect_searxng_v1_users_me_search_connection_searxng_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/users/me/search-connection/selection": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Select Search Connection */
+        put: operations["select_search_connection_v1_users_me_search_connection_selection_put"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -6258,7 +6278,7 @@ export interface components {
         };
         /**
          * AccountRulesListRequest
-         * @description Optional project layer; global rules always included.
+         * @description ``folder_id`` selects this desk's markdown. Empty means the account only.
          */
         AccountRulesListRequest: {
             /** Folder Id */
@@ -6266,22 +6286,9 @@ export interface components {
         };
         /**
          * AccountRulesListResponse
-         * @description Always rules for ``<设定>``, path rules for ``<路径约定>``, on_demand for consult.
-         *
-         *     ``ancestor_*`` carry the enclosing folders' layers, outermost-first, and
-         *     ``folder_chain`` is that same chain by id with the current folder last: the engine may
-         *     be a desktop sidecar with no folders table, so the cloud is the only place that can
-         *     resolve「谁在谁里面」(双模式工作区 §5.4 沿树继承).
+         * @description Account markdown, plus the requested folder. No ancestor scope.
          */
         AccountRulesListResponse: {
-            /** Ancestor On Demand Rules */
-            ancestor_on_demand_rules?: components["schemas"]["AccountRuleDoc"][];
-            /** Ancestor Path Rules */
-            ancestor_path_rules?: components["schemas"]["AccountRuleDoc"][];
-            /** Ancestor Rules */
-            ancestor_rules?: components["schemas"]["AccountRuleDoc"][];
-            /** Folder Chain */
-            folder_chain?: string[];
             /** Global On Demand Rules */
             global_on_demand_rules?: components["schemas"]["AccountRuleDoc"][];
             /** Global Path Rules */
@@ -7929,6 +7936,27 @@ export interface components {
             /** Path */
             path: string;
         };
+        /** ConnectCleverSeeRequest */
+        ConnectCleverSeeRequest: {
+            /**
+             * Api Key
+             * @default
+             */
+            api_key: string;
+        };
+        /** ConnectSearxngRequest */
+        ConnectSearxngRequest: {
+            /**
+             * Api Key
+             * @default
+             */
+            api_key: string;
+            /**
+             * Base Url
+             * @default
+             */
+            base_url: string;
+        };
         /**
          * ContextCutCommitRequest
          * @description Write the prose the user confirmed. Does not summarize again.
@@ -8501,29 +8529,6 @@ export interface components {
             /** Subscription Day */
             subscription_day: number;
             tool_surface_limits?: components["schemas"]["ToolSurfaceLimits"] | null;
-        };
-        /** CreateSearchProviderRequest */
-        CreateSearchProviderRequest: {
-            /**
-             * Api Key
-             * @default
-             */
-            api_key: string;
-            /**
-             * Base Url
-             * @default
-             */
-            base_url: string;
-            /**
-             * Label
-             * @default
-             */
-            label: string;
-            /**
-             * Protocol
-             * @enum {string}
-             */
-            protocol: "searxng" | "cleversee";
         };
         /**
          * CreateShareRequest
@@ -11724,6 +11729,25 @@ export interface components {
             /** Turn Warning */
             turn_warning?: string | null;
         };
+        /** SearchConnectionFailureRequest */
+        SearchConnectionFailureRequest: {
+            /**
+             * Message
+             * @default
+             */
+            message: string;
+        };
+        /** SearchConnectionResponse */
+        SearchConnectionResponse: {
+            cleversee?: components["schemas"]["SearchSlotResponse"] | null;
+            quota: components["schemas"]["SearchQuotaView"];
+            searxng?: components["schemas"]["SearchSlotResponse"] | null;
+            /**
+             * Selected
+             * @enum {string}
+             */
+            selected: "platform" | "cleversee" | "searxng";
+        };
         /**
          * SearchItem
          * @description One hit in a section. Field meaning depends on the section ``type``:
@@ -11752,46 +11776,6 @@ export interface components {
             title?: string | null;
             /** Updated At */
             updated_at?: string | null;
-        };
-        /** SearchProviderResponse */
-        SearchProviderResponse: {
-            /** Base Url */
-            base_url: string;
-            /** Created At */
-            created_at?: string | null;
-            /** Id */
-            id: string;
-            /** Label */
-            label: string;
-            /** Masked Key */
-            masked_key?: string | null;
-            /** Message */
-            message?: string | null;
-            /**
-             * Protocol
-             * @enum {string}
-             */
-            protocol: "searxng" | "cleversee";
-            /**
-             * Status
-             * @enum {string}
-             */
-            status: "unchecked" | "active" | "error";
-            /** Updated At */
-            updated_at?: string | null;
-        };
-        /** SearchProviderSelectionRequest */
-        SearchProviderSelectionRequest: {
-            /** Provider Id */
-            provider_id?: string | null;
-        };
-        /** SearchProvidersResponse */
-        SearchProvidersResponse: {
-            /** Providers */
-            providers: components["schemas"]["SearchProviderResponse"][];
-            quota: components["schemas"]["SearchQuotaView"];
-            /** Selected Provider Id */
-            selected_provider_id: string | null;
         };
         /** SearchQuotaView */
         SearchQuotaView: {
@@ -11845,6 +11829,28 @@ export interface components {
              * @enum {string}
              */
             type: "conversation" | "message" | "folder";
+        };
+        /** SearchSelectionRequest */
+        SearchSelectionRequest: {
+            /**
+             * Engine
+             * @enum {string}
+             */
+            engine: "platform" | "cleversee" | "searxng";
+        };
+        /** SearchSlotResponse */
+        SearchSlotResponse: {
+            /** Base Url */
+            base_url: string;
+            /** Masked Key */
+            masked_key?: string | null;
+            /** Message */
+            message?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "connected" | "needs_reconnect";
         };
         /**
          * SendChatMessageRequest
@@ -13138,15 +13144,6 @@ export interface components {
              * @description Self-selected handle; stored lowercase after claim.
              */
             username?: string | null;
-        };
-        /** UpdateSearchProviderRequest */
-        UpdateSearchProviderRequest: {
-            /** Api Key */
-            api_key?: string | null;
-            /** Base Url */
-            base_url?: string | null;
-            /** Label */
-            label?: string | null;
         };
         /** UpdateTableRequest */
         UpdateTableRequest: {
@@ -21503,6 +21500,41 @@ export interface operations {
             };
         };
     };
+    inference_search_connection_failure_v1_inference_search_connection_failure_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SearchConnectionFailureRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StatusResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     inference_search_route_v1_inference_search_route_get: {
         parameters: {
             query?: never;
@@ -24319,7 +24351,7 @@ export interface operations {
             };
         };
     };
-    list_search_providers_v1_users_me_search_providers_get: {
+    get_search_connection_v1_users_me_search_connection_get: {
         parameters: {
             query?: never;
             header?: {
@@ -24338,7 +24370,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SearchProvidersResponse"];
+                    "application/json": components["schemas"]["SearchConnectionResponse"];
                 };
             };
             /** @description Validation Error */
@@ -24352,7 +24384,7 @@ export interface operations {
             };
         };
     };
-    create_search_provider_v1_users_me_search_providers_post: {
+    connect_cleversee_v1_users_me_search_connection_cleversee_post: {
         parameters: {
             query?: never;
             header?: {
@@ -24365,17 +24397,17 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["CreateSearchProviderRequest"];
+                "application/json": components["schemas"]["ConnectCleverSeeRequest"];
             };
         };
         responses: {
             /** @description Successful Response */
-            201: {
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SearchProviderResponse"];
+                    "application/json": components["schemas"]["SearchConnectionResponse"];
                 };
             };
             /** @description Validation Error */
@@ -24389,7 +24421,40 @@ export interface operations {
             };
         };
     };
-    select_search_provider_v1_users_me_search_providers_selection_put: {
+    disconnect_cleversee_v1_users_me_search_connection_cleversee_delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchConnectionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    connect_searxng_v1_users_me_search_connection_searxng_post: {
         parameters: {
             query?: never;
             header?: {
@@ -24402,7 +24467,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["SearchProviderSelectionRequest"];
+                "application/json": components["schemas"]["ConnectSearxngRequest"];
             };
         };
         responses: {
@@ -24412,7 +24477,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SearchProvidersResponse"];
+                    "application/json": components["schemas"]["SearchConnectionResponse"];
                 };
             };
             /** @description Validation Error */
@@ -24426,15 +24491,13 @@ export interface operations {
             };
         };
     };
-    delete_search_provider_v1_users_me_search_providers__provider_id__delete: {
+    disconnect_searxng_v1_users_me_search_connection_searxng_delete: {
         parameters: {
             query?: never;
             header?: {
                 authorization?: string | null;
             };
-            path: {
-                provider_id: string;
-            };
+            path?: never;
             cookie?: {
                 access_token?: string | null;
             };
@@ -24447,7 +24510,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["StatusResponse"];
+                    "application/json": components["schemas"]["SearchConnectionResponse"];
                 };
             };
             /** @description Validation Error */
@@ -24461,22 +24524,20 @@ export interface operations {
             };
         };
     };
-    update_search_provider_v1_users_me_search_providers__provider_id__patch: {
+    select_search_connection_v1_users_me_search_connection_selection_put: {
         parameters: {
             query?: never;
             header?: {
                 authorization?: string | null;
             };
-            path: {
-                provider_id: string;
-            };
+            path?: never;
             cookie?: {
                 access_token?: string | null;
             };
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["UpdateSearchProviderRequest"];
+                "application/json": components["schemas"]["SearchSelectionRequest"];
             };
         };
         responses: {
@@ -24486,42 +24547,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SearchProviderResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    test_search_provider_v1_users_me_search_providers__provider_id__test_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-            };
-            path: {
-                provider_id: string;
-            };
-            cookie?: {
-                access_token?: string | null;
-            };
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SearchProviderResponse"];
+                    "application/json": components["schemas"]["SearchConnectionResponse"];
                 };
             };
             /** @description Validation Error */

@@ -89,7 +89,10 @@ async def test_dag_injects_upstream_product_downstream():
     assert res["t_s1"].content == upstream
     assert res["t_s2"].content == final
     downstream_user = provider.user_messages[1]
-    assert "UPSTREAM-FACT" in downstream_user
+    # Prose is not forwarded. A completed upstream with no brief and no files
+    # is an absence, not a body slice.
+    assert "UPSTREAM-FACT" not in downstream_user
+    assert "没有简报" in downstream_user
     assert "研究员" in downstream_user
     assert "原始请求" in downstream_user
 

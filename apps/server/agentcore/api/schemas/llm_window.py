@@ -44,13 +44,21 @@ class RunLlmWindowResponse(BaseModel):
     messages: list[LlmWindowMessageLine] = Field(default_factory=list)
     new_from: int | None = Field(
         default=None,
-        description="Index of the first message added since the previous call of this run. Set only for a per-call projection.",
+        description=(
+            "Index of the first message added since the previous call of this run. "
+            "Set only for a per-call projection."
+        ),
     )
     compacted: bool = Field(
         default=False,
-        description="True when this call's request replaced earlier rounds with the stored summary.",
+        description=(
+            "True when this call's request replaced earlier rounds with the stored summary."
+        ),
     )
     history_omitted: bool = Field(
         default=False,
-        description="True when the captain opening declared history_len and fewer prior messages were loaded.",
+        description=(
+            "True when the captain opening declared history_len "
+            "and fewer prior messages were loaded."
+        ),
     )

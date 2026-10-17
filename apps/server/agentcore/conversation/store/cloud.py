@@ -30,6 +30,7 @@ from agentcore.conversation.store.merge import (
     pick_merged_content,
     visible_failed_assistant_content,
 )
+from agentcore.conversation.store.usage_settle import project_message_status
 from agentcore.conversation.turn_stats import turn_worker_stats
 from agentcore.core.error_codes import ErrorCode
 from agentcore.core.logging import get_logger
@@ -836,12 +837,13 @@ class CloudStore:
         # Partial with a visible reply is COMPLETE so the body is the face;
         # structured error still rides usage + journal (ERROR SSE is not journaled).
         has_reply = bool((assistant_reply or "").strip())
-        if outcome == "partial" and has_reply:
-            terminal_status = MESSAGE_STATUS_COMPLETE
-        elif turn_error or finish_value == FinishReason.ERROR.value:
-            terminal_status = MESSAGE_STATUS_FAILED
-        else:
-            terminal_status = MESSAGE_STATUS_COMPLETE
+        terminal_status = project_message_status(
+            finish_value if isinstance(finish_value, str) else None,
+            lane="cloud",
+            outcome=outcome,
+            has_reply=has_reply,
+            has_error=bool(turn_error),
+        )
         stamp_error = bool(turn_error) or finish_value == FinishReason.ERROR.value
         # FAILED/ERROR settle: structured error is the authority for failure copy.
         # Synthesize {code, message} when missing so journal/usage never lack an
@@ -1400,22 +1402,17 @@ class CloudStore:
                         user_msg_id = user_message_id
 
         assistant_message_id: str | None = None
-        if is_paused:
-            terminal_status = MESSAGE_STATUS_RUNNING
-        elif is_incomplete:
-            terminal_status = MESSAGE_STATUS_INCOMPLETE
-        elif finish_value == FinishReason.ERROR.value:
-            raw_local_outcome = (
-                coerce_produced_outcome(runs.get("outcome"))
-                if isinstance(runs, dict)
-                else None
-            )
-            if raw_local_outcome == "partial" and (assistant_content or "").strip():
-                terminal_status = MESSAGE_STATUS_COMPLETE
-            else:
-                terminal_status = MESSAGE_STATUS_FAILED
-        else:
-            terminal_status = MESSAGE_STATUS_COMPLETE
+        raw_local_outcome = (
+            coerce_produced_outcome(runs.get("outcome"))
+            if finish_value == FinishReason.ERROR.value and isinstance(runs, dict)
+            else None
+        )
+        terminal_status = project_message_status(
+            finish_value,
+            lane="local_writeback",
+            outcome=raw_local_outcome,
+            has_reply=bool((assistant_content or "").strip()),
+        )
 
         content_to_write = (
             _incomplete_body(assistant_content) if is_incomplete else assistant_content
@@ -1722,7 +1719,10 @@ class CloudStore:
 
             try:
                 bg = await run_background_llm(
-                    user_id, purpose="title", runner=_title_runner
+                    user_id,
+                    purpose="title",
+                    runner=_title_runner,
+                    conversation_id=conversation_id,
                 )
                 if isinstance(bg, BackgroundLlmResult) and bg.value is not None:
                     minted = bg.value

@@ -72,14 +72,14 @@ def test_worker_envelope_carries_date_and_workspace_without_file_index():
 def test_envelope_carries_date_workspace_and_fence():
     env = render_ceo_turn_envelope(
         workspace_context="<工作区>\n执行：云端\n</工作区>",
-        workspace_file_index="文件：空",
+        conversation_edits="本对话：\n- notes.md（写过）",
     )
     assert env.startswith(TURN_ENVELOPE_FENCE)
     assert re.search(r"当前日期：\d{4}-\d{2}-\d{2}", env)
     assert not re.search(r"\d{2}:\d{2}:\d{2}", env)
     assert "<工作区>" in env
-    assert "文件：空" in env
-    assert env.index("执行：云端") < env.index("文件：空") < env.index("</工作区>")
+    assert "本对话：" in env
+    assert env.index("执行：云端") < env.index("notes.md（写过）") < env.index("</工作区>")
 
 
 def test_envelope_date_stable_within_a_day():

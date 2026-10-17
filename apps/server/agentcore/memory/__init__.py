@@ -1,8 +1,8 @@
 """Turn helpers that still live under the ``memory`` package name.
 
-User-rule injection / mutate, write-side always quota, conversation titles, and
-the unused ``MemoryStore`` seam for ``assemble_turn_rules(store, …)``. AI-maintained
-preference / profile / topic notes are not injected or scheduled.
+User-rule injection / mutate, write-side always quota, and conversation titles.
+Turns read the account library plus the current folder. Ancestors are not a
+scope. AI-maintained preference / profile / topic notes are not injected.
 """
 
 from agentcore.memory.account_prepare_cache import (

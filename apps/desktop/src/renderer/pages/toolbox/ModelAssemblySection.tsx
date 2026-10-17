@@ -38,7 +38,6 @@ export function ModelAssemblySection() {
   }
 
   const providers = providersQuery.data?.providers ?? [];
-  const platformAvailable = providersQuery.data?.platform_available ?? false;
   const catalogModels = catalog?.models ?? [];
   const editable = profile.kind === "user" || profile.kind === "system";
 
@@ -83,7 +82,6 @@ export function ModelAssemblySection() {
           providers={providers}
           catalog={catalog}
           catalogModels={catalogModels}
-          platformAvailable={platformAvailable}
           initial={{
             name: profile.name,
             main: profile.main ?? null,
@@ -105,7 +103,7 @@ export function ModelAssemblySection() {
             : profile.name}
         </p>
       )}
-      {providers.length === 0 && !platformAvailable ? (
+      {providers.length === 0 ? (
         <p className="mt-3 text-xs text-muted-foreground">
           还没有可用模型。请{" "}
           <Link

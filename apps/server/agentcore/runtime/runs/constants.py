@@ -58,18 +58,9 @@ DEFAULT_ROSTER_TTL_SECONDS = 30 * 60.0  # 30 min
 # 进程内最多同时留多少个 conversation 的 roster（超出按 LRU 淘汰最久未访问的会话）。
 DEFAULT_ROSTER_MAX_CONVERSATIONS = 256
 
-# Per-worker TOTAL budget (chars) for upstream dependency products injected into a
-# downstream node's prompt, SHARED across all its pass_through deps (water-filled in
-# runs/executor/: a dep needing less takes only what it needs, the remainder goes
-# to larger deps). A shared total — not a per-dep cap — so a wide fan-in can't
-# multiply into a huge prompt (the old flat 4000-per-dep cap let N deps reach
-# N×4000 unbounded). Sized to align with the CEO's own delegate-output budget
-# (tools/builtin/delegate.py ``_DELEGATE_OUTPUT_LIMIT`` = 16000): a downstream writer
-# synthesizing upstream research deserves as much context as the CEO synthesizing the
-# batch. Replaces the old 4000 cap, which starved a research→writer chain — a long
-# upstream was head-truncated, silently dropping its tail (金额 / 法条编号). When a dep
-# must still be trimmed it is HEAD+TAIL truncated (`runs/fidelity.py truncate_head_tail`),
-# not head-only, so trailing details survive.
+# Per-worker cap (chars) for a context block body. Dependency prose is not
+# water-filled through this budget: a file is a pointer, a handoff brief is
+# the brief, and an essay without either is not forwarded.
 DEP_CONTEXT_BUDGET = 16000
 
 # The CEO's synthesis reads the aggregated worker products as the delegate tool's
@@ -83,20 +74,13 @@ DELEGATE_OUTPUT_LIMIT = 16000
 # chapter lines after a one-line conclusion.
 HANDOFF_SUMMARY_CHARS = 480
 
-# Chars a summarize-policy dep (result_handling="summarize") is compressed to — a
-# tight digest for the large-fan-in token-saving case, independent of (and far
-# smaller than) the pass_through budget above.
-DEP_SUMMARY_CHARS = 600
-
 # 递指针不递全文 (Agent协作模式.md 远期 → 现状): when an upstream dependency already
 # WROTE its product to the shared workspace (its ``files_touched`` is non-empty), a
 # downstream worker gets a POINTER — a tight prose digest + the artifact paths to
 # ``read`` — instead of the whole product re-shipped through the prompt. The
-# artifact is on disk and reachable; re-injecting it whole wastes tokens and risks
-# tail-trimming (the budgeted full-text path). These bound the pointer: how far the
-# prose digest is cut, and how many paths to list before eliding. A pointer dep does
-# NOT draw on DEP_CONTEXT_BUDGET (only PROSE pass_through deps, which have no file to
-# point at, still share it).
+# artifact is on disk and reachable; re-injecting it whole wastes tokens. These
+# bound the pointer: how far the prose digest is cut, and how many paths to list
+# before eliding. A pointer does not pull the upstream essay into the prompt.
 DEP_POINTER_SUMMARY_CHARS = 600
 DEP_POINTER_MAX_FILES = 20
 

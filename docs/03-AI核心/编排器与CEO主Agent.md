@@ -57,7 +57,7 @@ CEO 是**管理者**，也是判断者：要不要拉人由他判（模型自判
 | 1 | 结论拆开后能各自成立吗（不靠别的件把这件结论补齐）？ | 墙钟不计，改看注意力 |
 | 2 | 要连着取证，或把还不在这扇窗里的工作区正文读进来、写出去吗？ | 自己做（答复就是结果 / 正文已在窗里 / 点名少量路径读完即答） |
 
-墙钟上的各自成立，指不靠别的件把这件结论补齐。已各自独立、且下游验收要吃上游产出时，填进下游对上游的依赖（取值在 `depends_on`：上游的本批 id 或无歧义角色名）。墙钟仍只来自弱依赖并行；这条链不另计墙钟，仍看注意力。
+墙钟上的各自成立，指不靠别的件把这件结论补齐。依赖只在下游任务现在就能写死、且只吃上游落盘或简报时才填（取值在 `depends_on`：上游的本批 id 或无歧义角色名）。要看上游正文才知道下一步的，不要连，等这一批回来再派。能同时做的不要串成队列。墙钟仍只来自弱依赖并行；这条链不另计墙钟，仍看注意力。
 
 「这一回合装得下」不是路由键。注意力是：要连着取证，或把还不在这扇窗里的工作区正文读进来、写出去，做完会留下、之后每轮都还在。装得下 ≠ 顾得住。档位取舍仍在：大文件进 CEO 会话窗此后每回合都付；工人窗跟这张任务卡走，卡上已是一件则留下。仓库里一行配置还不在窗里 → 根侧仍派；同一刀已在工人窗里 → 嵌套不拆。正文已在窗里的一行新建 → 自己写。
 
@@ -153,8 +153,8 @@ CEO 契约没有顶层 `force`，闸没有模型可填的跳过键，解析层�
 | 字段 / 概念 | 语义要点 |
 |---|---|
 | `depends_on` | 并行 / 串行的唯一开关；空 = 可立即并行；调度器据依赖定并行度。同回合二次委派解析范围 = 本批 ∪ 宿主图（活跃 `live_plan` 或本回合上一张图）；失败回执列可用节点 + 可执行下一步（角色名 / id） |
-| ~~`require_upstream`~~ | ✅ **CEO 不填**。默认 ≥1 上游成功即跑；缺席标前置缺席；零成功才跳过。严格级联仅内部/多余键。 |
-| ~~`result_handling`~~ | ✅ **CEO 不填**。有落盘递路径；散文默认全文、过长引擎裁。不作用于 CEO 综述。→ [Agent 协作模式 · handoff](/docs/03-AI核心/Agent协作模式.md) |
+| ~~`require_upstream`~~ | ✅ **CEO 不填**。默认点名上游全部成功才放行；有失败或取消则跳过下游，不带缺口开工。该键不再比默认更严。 |
+| ~~`result_handling`~~ | ✅ **CEO 不填**。有落盘递路径；无落盘只递简报，无简报不把正文沿链转发，也不切头尾塞进下游。不作用于 CEO 综述。→ [Agent 协作模式 · handoff](/docs/03-AI核心/Agent协作模式.md) |
 | ~~`complexity_hint`~~ | ✅ **CEO 不填**。单人只交文字时引擎可自判轻；不映射 worker token/超时 |
 | ~~`coordination`~~ | ✅ **CEO 不填**。权威 → [Agent 协作模式](/docs/03-AI核心/Agent协作模式.md) |
 | `deliverable` | **✅ 节点内部对象；填参键是 `tasks[].artifacts`**：用户点名或画布写死才填路径；省略/空数组 = 不催写盘、不建写桌、可 auto-light、`files_not_landed` 不 blocking。写不写盘由 task 验收 + 模型决定；引擎只认非空 `artifacts` 或非空 `artifact_dir`。节点上永远有 Deliverable。旧 JSON 的嵌套 `deliverable` / `form` / `workspace_native` 走 leftover 解析或 `_filtered` 丢弃，不翻译、不进按钮。CEO/`replan` schema 把 `artifacts` 钉在 task 顶层；`strict` / `artifact_dir` 仍可解析、不进填参面。零写不把队员打 FAILED（仍 COMPLETED，缺口进提醒）；`strict` 仍可解析、不翻成败。收工用户面认实际落盘，不以声明路径当白名单（声明命中时备份仍不进清单）；路径验收 HOW → [执行引擎](/docs/03-AI核心/执行引擎架构设计.md)。✅ 任何成功写盘都算产品落盘（含 `research/` 等中间笔记；`artifacts` 不再门控是否计入）→ 见代码: `runtime/runs/landing_product.py`。**数据文件整理且无执行**：完整交付 = 原件结构报告 + 待跑变换脚本（两份写进 `task`，不必钉 `artifacts`）+ 一句「运算环境暂时不可用，稍后再试」——这是完成态，不是「表的缺口」；禁止手抄 csv 顶替、禁止让用户绑本机文件夹。硬缺口 `no_exec_table` 的前提是本回合存在 worker 无法可靠解析的源数据文件（附件 / 工作区源文件的类型信号，不扫正文、不靠文件名）；数据内联在消息里、无此类源文件时落 csv/xlsx 不是缺口。否决加闸扫收口话术。→ skill `data_file_landing`。不再有按验收 kind 的队形闸。已删 `form` 三档 / `workspace_native` / `requires_files` / `name` / `must_contain` / `min_length` / `must_contain_soft`（见下节） |
@@ -212,7 +212,7 @@ CEO 派活不声明「看 / 存文档 / 改工程」三档。写不写盘由 tas
 
 ### 派单填参面
 
-开局全队共识只走顶层 `team_brief`。≥2 篇完整成稿且共享口径未进 brief、无短规格 → 先 brief 或短规格岗，不靠边信道代替 `depends_on`（不复活 `consumer_deps` 猜两段）；审查线索进 brief；零上游成功补人走 `replaces_run_id`；根 CEO **默认非阻塞**（阻塞仅嵌套 lead）；用户明文看提纲 → 先派再 `ask_user`；下游未定 → 先跑再 `replan(add)` / 再 `delegate`；轻/标准由引擎自判（未钉路径的单人可 auto-light）；上游保真有文件递路径、散文默认全文；扇入默认宽松（≥1 上游成功即跑，不让经理勾 AND/OR）。
+开局全队共识只走顶层 `team_brief`。≥2 篇完整成稿且共享口径未进 brief、无短规格 → 先 brief 或短规格岗，不靠边信道代替 `depends_on`（不复活 `consumer_deps` 猜两段）；审查线索进 brief；零上游成功补人走 `replaces_run_id`；根 CEO **默认非阻塞**（阻塞仅嵌套 lead）；用户明文看提纲 → 先派再 `ask_user`；下游未定 → 先跑再 `replan(add)` / 再 `delegate`；轻/标准由引擎自判（未钉路径的单人可 auto-light）；上游有文件递路径，无文件只递简报；扇入默认全部成功才放行（不让经理勾 AND/OR）。
 
 **边界**：`checkpoint_after` 已从 RunSpec 卸下（多余键忽略）。旧 JSON 的 `bind_after_deps` / `replan.binds` 丢弃、不翻译。CEO 可见 schema → 见代码: `tools/builtin/delegate/schema.py`
 
@@ -243,7 +243,7 @@ CEO 派活不声明「看 / 存文档 / 改工程」三档。写不写盘由 tas
 | 场景 / 方案 | 处理或否决理由 |
 |---|---|
 | `delegate` 参数非法 | 非终态回 CEO，改参重试 |
-| 单 worker 失败 | 按 `on_failure`；宽松扇入默认放行，不必拖垮整 DAG |
+| 单 worker 失败 | 按 `on_failure`；失败或取消不自动放行下游 |
 | 无需团队 | 不调 `delegate` = 单 Agent 直答 |
 | 纯路由器替换 CEO / 前置分类器 / Worker 直连 / 取消 CEO 综述 | 规划壁垒、编排税、不可观测、丧失「一个声音」 |
 | 累计 N 次只读软提醒护栏 | A/B 净负已移除；靠提示词边界 + 失控硬兜底 |

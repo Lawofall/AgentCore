@@ -42,10 +42,10 @@ function board(omitted: string[]) {
         off: off.has("runtime_date"),
       },
       {
-        id: "file_index",
-        label: "文件索引",
-        summary: "主管信封附上文件名单。队员不读这份名单。",
-        off: off.has("file_index"),
+        id: "execution",
+        label: "执行",
+        summary: "信封报云端还是本机、出站、原件能不能改。",
+        off: off.has("execution"),
       },
     ],
   };
@@ -77,7 +77,6 @@ describe("EnvelopeSwitchList", () => {
       "gaps",
       "sandbox",
       "interpreters",
-      "file_index",
     ]);
   });
 
@@ -127,15 +126,15 @@ describe("EnvelopeSwitchList", () => {
   it("都开时全部关闭把当前行写入拒绝表", async () => {
     render(<EnvelopeSwitchList scope="draft" showBulk />);
     await waitFor(() => {
-      expect(screen.getByRole("switch", { name: "文件索引" })).toBeTruthy();
-      expect(screen.queryByRole("switch", { name: "执行" })).toBeNull();
+      expect(screen.getByRole("switch", { name: "日期" })).toBeTruthy();
+      expect(screen.getByRole("switch", { name: "执行" })).toBeTruthy();
     });
     expect(screen.getByRole("button", { name: "全部关闭" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "全部打开" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "全部关闭" }));
     await waitFor(() => {
       expect(put).toHaveBeenCalledWith("/v1/users/me/envelope-switches", {
-        omitted: ["runtime_date", "file_index"],
+        omitted: ["runtime_date", "execution"],
       });
     });
   });
@@ -159,7 +158,7 @@ describe("EnvelopeSwitchList", () => {
   });
 
   it("都关时只出全部打开", async () => {
-    get.mockResolvedValue(board(["runtime_date", "file_index"]));
+    get.mockResolvedValue(board(["runtime_date", "execution"]));
     render(<EnvelopeSwitchList scope="draft" showBulk />);
     expect(
       await screen.findByRole("button", { name: "全部打开" }),

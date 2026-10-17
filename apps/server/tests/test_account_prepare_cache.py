@@ -41,14 +41,6 @@ def account_creds() -> AccountCredentials:
     )
 
 
-class _EmptyMemoryStore:
-    async def list(self, *_a, **_k):
-        return []
-
-    async def load(self, *_a, **_k):
-        return ""
-
-
 class _Clock:
     """Stand-in for the cache module's ``time`` (only ``monotonic`` is read there)."""
 
@@ -92,7 +84,6 @@ def _injectable_snapshot(*, degraded: bool = False) -> AccountPrepareSnapshot:
 async def _prepare_injection(user_id: str, folder_id: str | None):
     """What prepare would inject right now: (rules markdown, on-demand rules)."""
     rules_md = await assemble_turn_rules(
-        _EmptyMemoryStore(),  # type: ignore[arg-type]
         user_id,
         folder_id=folder_id,
     )
@@ -124,7 +115,6 @@ async def test_ticketed_miss_skips_cloud(monkeypatch: pytest.MonkeyPatch, accoun
 
     with account_credentials_scope(account_creds):
         rules_md = await assemble_turn_rules(
-            _EmptyMemoryStore(),  # type: ignore[arg-type]
             "u1",
             folder_id="F1",
         )
@@ -166,7 +156,6 @@ async def test_seed_then_hit(account_creds):
 
     with account_credentials_scope(account_creds):
         rules_md = await assemble_turn_rules(
-            _EmptyMemoryStore(),  # type: ignore[arg-type]
             "u1",
             folder_id="F1",
         )
@@ -403,7 +392,6 @@ async def test_warm_rules_list_once_and_seeds(
 
     with account_credentials_scope(account_creds):
         rules_md = await assemble_turn_rules(
-            _EmptyMemoryStore(),  # type: ignore[arg-type]
             "u1",
             folder_id="F1",
         )
@@ -631,7 +619,7 @@ def test_warm_account_rules_memory_reply_carries_renewal_ttl(
 async def test_warm_pulls_the_ancestor_folders_the_cloud_resolved(
     monkeypatch: pytest.MonkeyPatch, account_creds
 ):
-    """A sidecar has no folders table: the chain (and its layers) can only come from云."""
+    """A sidecar stores the chain the cloud resolved. Ancestor bodies are not injected."""
     clear_account_rules_memory_cache()
 
     async def _rules(creds, *, folder_id):
@@ -651,16 +639,14 @@ async def test_warm_pulls_the_ancestor_folders_the_cloud_resolved(
     snap = await warm_account_rules_memory(
         account_creds, user_id="u1", folder_id="F1"
     )
-    assert snap.folder_chain == ("F_outer", "F1")
     assert not snap.degraded
 
     with account_credentials_scope(account_creds):
         rules_md = await assemble_turn_rules(
-            _EmptyMemoryStore(),  # type: ignore[arg-type]
             "u1",
             folder_id="F1",
         )
-    assert "外层规则" in rules_md
+    assert "外层规则" not in rules_md
     assert "F_outer 画像" not in rules_md
     assert "F1 画像" not in rules_md
 
@@ -668,7 +654,7 @@ async def test_warm_pulls_the_ancestor_folders_the_cloud_resolved(
 async def test_warm_empty_folder_chain_drops_the_dead_desk(
     monkeypatch: pytest.MonkeyPatch, account_creds
 ):
-    """First-phase folder fetch races /rules/list; empty chain must not keep that desk."""
+    """Empty ``folder_chain`` is not an injection scope. This folder's 常驻 still enters."""
     clear_account_rules_memory_cache()
 
     async def _rules(creds, *, folder_id):
@@ -686,17 +672,15 @@ async def test_warm_empty_folder_chain_drops_the_dead_desk(
     snap = await warm_account_rules_memory(
         account_creds, user_id="u1", folder_id="F1"
     )
-    assert snap.folder_chain == ()
     assert snap.memory_bodies == {}
 
     with account_credentials_scope(account_creds):
         rules_md = await assemble_turn_rules(
-            _EmptyMemoryStore(),  # type: ignore[arg-type]
             "u1",
             folder_id="F1",
         )
     assert "全局规则" in rules_md
-    assert "当前规则" not in rules_md
+    assert "当前规则" in rules_md
     assert "F1 画像" not in rules_md
 
 

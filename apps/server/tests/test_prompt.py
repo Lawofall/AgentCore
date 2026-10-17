@@ -285,7 +285,7 @@ def test_worker_opening_drops_ceo_orchestration_context():
     reg = build_system_skill_registry()
     leaf_names = {s.name for s in reg.available(set(), audience=AUDIENCE_WORKER)}
     lead_names = {s.name for s in reg.available({"delegate"}, audience=AUDIENCE_WORKER)}
-    assert leaf_names == {"data_file_landing", "page_ui"}
+    assert leaf_names == {"prompts", "data_file_landing", "page_ui"}
     assert lead_names == leaf_names
     worker_dir = compose_worker_base_prompt(
         base,

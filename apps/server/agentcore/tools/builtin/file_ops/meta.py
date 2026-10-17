@@ -50,10 +50,7 @@ class FileDeleteTool:
     def schema(self) -> ToolSchema:
         return ToolSchema(
             name="file_delete",
-            description=(
-                "删除工作区文件或目录。"
-                "用户规则删 `.agentcore/rules/*.md`。"
-            ),
+            description="删除工作区文件或目录。",
             parameters={
                 "type": "object",
                 "properties": {
@@ -76,16 +73,6 @@ class FileDeleteTool:
 
         if not rel_path:
             return _error("path 不能为空：请提供工作区内的相对文件路径", start)
-
-        from .user_rules import maybe_user_rule_delete
-
-        rule_hit = await maybe_user_rule_delete(
-            requested_path=str(rel_path),
-            context=context,
-            start=start,
-        )
-        if rule_hit is not None:
-            return rule_hit
 
         prepared = await prepare_tool_path(
             rel_path, context, start=start, grant_mode="organize"

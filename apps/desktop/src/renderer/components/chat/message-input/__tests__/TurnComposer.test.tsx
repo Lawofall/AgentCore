@@ -565,9 +565,9 @@ describe("TurnComposer variants", () => {
     expect(container.querySelector("[data-composer-name-row]")).toBeNull();
     const actions = container.querySelector("[data-composer-actions]");
     expect(actions?.contains(screen.getByLabelText("在哪工作"))).toBe(true);
-    expect(actions?.contains(screen.getByRole("button", { name: "发送" }))).toBe(
-      true,
-    );
+    expect(
+      actions?.contains(screen.getByRole("button", { name: "发送" })),
+    ).toBe(true);
   });
 
   it("bar: 「更多选项」收纳左簇；未打开时不占常显", () => {
@@ -1117,13 +1117,13 @@ describe("TurnComposer variants", () => {
 
   it("wide layout shows the default placeholder copy", () => {
     renderComposer();
-    expect(screen.getByText(DEFAULT_PLACEHOLDER, { hidden: true })).toBeTruthy();
+    expect(screen.getByText(DEFAULT_PLACEHOLDER)).toBeTruthy();
   });
 
   it("narrow layout hides the default placeholder copy", () => {
     const view = renderNarrowComposer();
     try {
-      expect(screen.queryByText(DEFAULT_PLACEHOLDER, { hidden: true })).toBeNull();
+      expect(screen.queryByText(DEFAULT_PLACEHOLDER)).toBeNull();
       expect(
         screen.getByRole("textbox", { name: DEFAULT_PLACEHOLDER }),
       ).toBeTruthy();
@@ -1146,16 +1146,18 @@ describe("TurnComposer variants", () => {
       expect(halves[1]?.contains(assembly)).toBe(true);
       expect(halves[0]?.querySelector(".composer-fill-git")).toBeTruthy();
       expect(nameRow?.contains(screen.getByLabelText(/权限：/))).toBe(false);
-      expect(nameRow?.contains(screen.getByRole("button", { name: "发送" }))).toBe(
-        false,
-      );
+      expect(
+        nameRow?.contains(screen.getByRole("button", { name: "发送" })),
+      ).toBe(false);
       expect(actions?.contains(screen.getByLabelText(/权限：/))).toBe(true);
       expect(actions?.contains(screen.getByLabelText("@ 引用"))).toBe(true);
-      expect(actions?.contains(screen.getByRole("button", { name: "发送" }))).toBe(
-        true,
-      );
+      expect(
+        actions?.contains(screen.getByRole("button", { name: "发送" })),
+      ).toBe(true);
       expect(screen.queryByRole("button", { name: "更多选项" })).toBeNull();
-      expect(actions?.contains(screen.getByTestId("composer-body"))).toBe(false);
+      expect(actions?.contains(screen.getByTestId("composer-body"))).toBe(
+        false,
+      );
     } finally {
       view.restore();
     }
@@ -1189,9 +1191,7 @@ describe("TurnComposer variants", () => {
     seedLastAssistant({ finishReason: "interrupted", content: "半成品" });
     const view = renderNarrowComposer();
     try {
-      expect(
-        screen.getByText(COMPOSER_CONTINUE_PLACEHOLDER, { hidden: true }),
-      ).toBeTruthy();
+      expect(screen.getByText(COMPOSER_CONTINUE_PLACEHOLDER)).toBeTruthy();
     } finally {
       view.restore();
     }

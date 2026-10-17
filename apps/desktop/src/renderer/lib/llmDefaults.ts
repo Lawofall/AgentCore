@@ -11,10 +11,10 @@ import { findCatalogItem } from "@/services/models";
  * 模型组合槽位选择器的纯逻辑（设置·模型配置 · 编辑组合）。
  *
  * 槽位解析后仍是 `(model, origin, provider_id)`；选择器的值是目录身份
- * `@platform/{id}` / `@byok/{provider_id}/{id}`。按服务商分组呈现 BYOK 候选，
- * 并在平台可用时追加「平台额度」分组；每个服务商的候选 = 模型目录里该服务商
- * 带出的模型；再把**当前编辑组合**的槽位并入（查目录补显示名），保证现值始终
- * 可选。已删服务商的孤儿槽会单独成组，避免 select 静默错位。
+ * `@platform/{id}` / `@byok/{provider_id}/{id}`。拣选器只按服务商分组呈现
+ * BYOK 候选（不列出平台目录）。每个服务商的候选 = 模型目录里该服务商带出的
+ * 模型；再把**当前编辑组合**的槽位并入（查目录补显示名），保证现值始终可见。
+ * 遗留 `origin=platform` 槽折成孤儿组，标需改选。已删服务商的孤儿槽同样单独成组。
  */
 
 /** 目录项可选 curated 徽章（后端并行加字段；本地窄扩展读取）。 */
@@ -193,8 +193,8 @@ function resolveSlotOption(
 
 /**
  * Build the per-provider option groups for slot selectors.
- * Includes a 「平台额度」 group when the catalog exposes `origin=platform` rows
- * (unavailable rows stay listed so the picker can grey them and show why).
+ * Catalog `origin=platform` rows are not selectable. A live platform slot
+ * still folds in as an orphan so the trigger keeps its label.
  * `slots` are **current-edit** pointers only — folded in with catalog labels when possible.
  */
 export function buildDefaultProviderGroups(
@@ -223,52 +223,40 @@ export function buildDefaultProviderGroups(
     };
   });
 
-  const platformModels: DefaultModelOption[] = [];
-  const platformSeen = new Set<string>();
-  for (const item of catalog?.models ?? []) {
-    if (item.origin !== "platform") continue;
-    const m = item.id.trim();
-    if (!m || platformSeen.has(m)) continue;
-    platformSeen.add(m);
-    platformModels.push(optionFromCatalogItem(item));
-  }
-  if (platformModels.length > 0) {
-    groups.unshift({
-      providerId: PLATFORM_POINTER_ID,
-      providerLabel: "平台额度",
-      models: platformModels,
-    });
-  }
-
   const knownProviderIds = new Set(providers.map((p) => p.id));
 
   for (const slot of slots) {
     if (!slot?.model) continue;
-    const groupId =
-      slot.origin === "platform" || !slot.provider_id
-        ? PLATFORM_POINTER_ID
-        : slot.provider_id;
+    if (slot.origin === "platform" || !slot.provider_id) {
+      let leftover = groups.find((g) => g.providerId === PLATFORM_POINTER_ID);
+      if (!leftover) {
+        leftover = {
+          providerId: PLATFORM_POINTER_ID,
+          providerLabel: "当前模型",
+          models: [],
+          orphan: true,
+        };
+        groups.unshift(leftover);
+      }
+      if (!leftover.models.some((m) => m.model === slot.model)) {
+        leftover.models.unshift(resolveSlotOption(slot, catalog));
+      }
+      continue;
+    }
+    const groupId = slot.provider_id;
     let group = groups.find((g) => g.providerId === groupId);
     if (!group) {
-      if (groupId === PLATFORM_POINTER_ID) {
-        group = {
-          providerId: PLATFORM_POINTER_ID,
-          providerLabel: "平台额度",
-          models: [],
-        };
-        groups.unshift(group);
-      } else if (!knownProviderIds.has(groupId)) {
+      if (!knownProviderIds.has(groupId)) {
         group = {
           providerId: groupId,
           providerLabel: "已移除的服务商",
           models: [],
           orphan: true,
         };
-        // 孤儿组紧跟平台组之后，便于用户看见并改选。
-        const platformIdx = groups.findIndex(
-          (g) => g.providerId === PLATFORM_POINTER_ID,
+        const leftoverIdx = groups.findIndex((g) =>
+          isPlatformGroupId(g.providerId),
         );
-        groups.splice(platformIdx + 1, 0, group);
+        groups.splice(leftoverIdx + 1, 0, group);
       }
     }
     if (group && !group.models.some((m) => m.model === slot.model)) {

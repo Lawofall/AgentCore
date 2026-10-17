@@ -95,7 +95,11 @@ export function InlineInput({
       onClick={(e) => e.stopPropagation()}
       onKeyDown={(e) => {
         if (e.key === "Enter") finish(() => onSubmit(value));
-        else if (e.key === "Escape") finish(onCancel);
+        else if (e.key === "Escape") {
+          e.preventDefault();
+          e.stopPropagation();
+          finish(onCancel);
+        }
       }}
       onBlur={() =>
         finish(() => {

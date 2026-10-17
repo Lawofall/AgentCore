@@ -1,19 +1,11 @@
-import { EntriesSection } from "@/components/files/fileWorkbench/EntriesSection";
-import { createAndOpenScopeEntry } from "@/components/files/fileWorkbench/createScopeEntry";
 import { EmptyHint, IconButton } from "@/components/files/parts";
 import { Button } from "@/components/ui";
 import { useConversationFileSource } from "@/hooks/useConversationFileSource";
-import { getConversations, useConversations } from "@/hooks/useConversations";
+import { getConversations } from "@/hooks/useConversations";
 import { useConversationWorkspace } from "@/hooks/useWorkspaces";
 import { hasLocalFiles } from "@/lib/capabilities";
 import { useConversationStore } from "@/stores/conversation";
 import { useFoldersStore } from "@/stores/folders";
-import {
-  entryFileTab,
-  fileTabId,
-  sidePanelFocusTabId,
-  useSidePanelStore,
-} from "@/stores/sidePanel";
 import { FolderOpen, Trash2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { ExternalMountsSection } from "./ExternalMountsSection";
@@ -38,18 +30,11 @@ import { WorkspaceModeBar } from "./WorkspaceModeBar";
  * 协作桌就是当前对话绑定的那棵 `folder:` 树（右坞不再叠第二根）。
  *
  * A draft conversation (no id yet) has no server workspace, so it shows an empty
- * hint until the first turn persists it.
- *
- * 绑定 `folderId` 时把条目挂进文件树 ``.agentcore`` 行（与文件页同款）；裸聊 /
- * 仅 auto-desk / 无绑定不挂条目，亦不挂账号级提示词轨。点条目开顶栏 File tab。
+ * hint until the first turn persists it. 规矩在工具箱的账号库，不挂在这棵文件树上。
  */
 export function WorkspaceMode() {
   const conversationId = useConversationStore((s) => s.currentConversationId);
   const draftKind = useFoldersStore((s) => s.draftWorkspaceIntent.kind);
-  const conversations = useConversations();
-  const folderId =
-    conversations.find((c) => c.id === conversationId)?.folderId?.trim() ||
-    null;
   const [trashOpen, setTrashOpen] = useState(false);
 
   // 与文件中枢同一份数据 + 同一个解析器：对话→其工作区(WorkspaceInfo)→FileSource。本地走桌面
@@ -111,28 +96,6 @@ export function WorkspaceMode() {
             source={source}
             emptyTreeHint={emptyTreeHint}
             onCloneGit={onCloneGit}
-            renderWorkroomLead={
-              folderId
-                ? (indent) => (
-                    <WorkspaceFolderEntries
-                      folderId={folderId}
-                      indent={indent}
-                    />
-                  )
-                : undefined
-            }
-            onCreateWorkroomEntry={
-              folderId
-                ? () =>
-                    createAndOpenScopeEntry(
-                      { kind: "folder", folderId },
-                      (target) =>
-                        useSidePanelStore
-                          .getState()
-                          .openTab(entryFileTab(target)),
-                    )
-                : undefined
-            }
             leading={<WorkspaceModeBar conversationId={conversationId} />}
             trailing={
               <>
@@ -183,52 +146,5 @@ export function WorkspaceMode() {
         </div>
       )}
     </div>
-  );
-}
-
-/** Folder-scope entries inside the ``.agentcore`` tree row. */
-function WorkspaceFolderEntries({
-  folderId,
-  indent,
-}: {
-  folderId: string;
-  indent: number;
-}) {
-  const openTab = useSidePanelStore((s) => s.openTab);
-  const closeTab = useSidePanelStore((s) => s.closeTab);
-  const tabs = useSidePanelStore((s) => s.tabs);
-  const focusId = useSidePanelStore((s) =>
-    sidePanelFocusTabId({
-      focusSurface: s.focusSurface,
-      activeTabId: s.activeTabId,
-    }),
-  );
-  const active = tabs.find((t) => t.id === focusId);
-  const documentActivePath =
-    active?.kind === "file" && active.channel === "document"
-      ? active.path
-      : null;
-
-  return (
-    <EntriesSection
-      scope={{ kind: "folder", folderId }}
-      documentActivePath={documentActivePath}
-      indent={indent}
-      onOpen={(target) => openTab(entryFileTab(target))}
-      onDeleted={(target) =>
-        closeTab(fileTabId(target.path, null, target.channel))
-      }
-      onRenamed={(target, name) => {
-        const id = fileTabId(target.path, null, target.channel);
-        const existing = useSidePanelStore
-          .getState()
-          .tabs.find((t) => t.id === id);
-        if (!existing || existing.kind !== "file") return;
-        openTab(
-          { ...existing, title: name, name },
-          { activate: false, reveal: false },
-        );
-      }}
-    />
   );
 }

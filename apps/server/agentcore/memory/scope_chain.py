@@ -47,13 +47,10 @@ def ancestor_scopes(chain: Sequence[str]) -> tuple[str, ...]:
 def snapshot_scope_chain(
     snapshot: AccountPrepareSnapshot | None, folder_id: str | None
 ) -> tuple[str, ...]:
-    """warm 快照里的链；缺失 / 不含当前层 → 只当前层。
+    """``rules_payload.folder_chain`` on a warm snapshot.
 
-    「不含当前层」意味着这份快照不是给这个文件夹 warm 的（或云端太旧还不会算链），
-    此时按它的祖先注入会把别的文件夹的约定塞进来，比不继承更糟。
-
-    ``rules_payload.folder_chain: []`` 与 :func:`cloud_scope_chain` 同义：桌不在活树，
-    不要退回只当前层。载荷没有该键时仍看 ``snapshot.folder_chain``（旧快照 / 单测）。
+    Explicit ``[]`` means the desk is not on the live tree. A missing key is
+    the current folder only. The snapshot does not store a separate chain.
     """
     if not folder_id:
         return ()
@@ -62,11 +59,8 @@ def snapshot_scope_chain(
     payload = snapshot.rules_payload
     raw = payload.get("folder_chain") if payload else None
     if isinstance(raw, list):
-        # Explicit [] = desk gone (soft-delete). Missing key still falls back
-        # through snapshot.folder_chain / current-only below.
         return cloud_scope_chain(payload, folder_id)
-    chain = tuple(snapshot.folder_chain)
-    return chain if folder_id in chain else own_scope_chain(folder_id)
+    return own_scope_chain(folder_id)
 
 
 def cloud_scope_chain(

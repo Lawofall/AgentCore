@@ -158,7 +158,7 @@ describe("PromptWorkbench", () => {
     expect(line.getAttribute("placeholder")).toBe("干什么、什么时候该翻开");
     expect(screen.queryByText(/CEO 不会主动翻开/)).toBeNull();
     expect(line.parentElement?.className).toContain("flex");
-    expect(line.parentElement?.className).toContain("items-start");
+    expect(line.parentElement?.className).toContain("items-center");
     expect(screen.getByTestId("cm-stub")).toBeTruthy();
   });
 

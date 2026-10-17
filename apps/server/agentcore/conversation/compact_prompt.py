@@ -44,7 +44,7 @@ _CHAT_PREAMBLE = """\
 # Completed play-by-play stays out of facts. Paths are owned by the program ledger,
 # not by a second copy of the worker "must merge paths" sentence.
 _CHAT_LIFETIME = """\
-过程与已完成步骤不进「已确立的事实」。下一步靠路径账、磁盘索引和近端原文恢复。"""
+过程与已完成步骤不进「已确立的事实」。下一步靠路径账、本对话写/改/导出和近端原文恢复。"""
 
 _WORKER_PREAMBLE = """\
 你在压缩一个工人 Agent 同一任务里已经做过的较早步骤，为后续工具轮保留可靠记忆。\

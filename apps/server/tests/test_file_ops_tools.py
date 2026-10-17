@@ -1094,7 +1094,7 @@ async def test_write_receipt_reports_chars_not_bytes(tmp_path: Path):
     assert "字节" not in result.output
 
 
-def test_prose_write_close_note_skips_skeleton_and_user_rules():
+def test_prose_write_close_note_skips_skeleton():
     from agentcore.tools.builtin.file_ops.integrity import (
         format_artifact_manifest,
         prose_write_close_note,
@@ -1104,7 +1104,7 @@ def test_prose_write_close_note_skips_skeleton_and_user_rules():
     note = prose_write_close_note(path="note.md", content=prose)
     assert note
     assert prose_write_close_note(path="note.md", content="# 提纲\n") == ""
-    assert prose_write_close_note(path=".agentcore/rules/tone.md", content=prose) == ""
+    assert prose_write_close_note(path=".agentcore/rules/tone.md", content=prose) == note
     manifest = format_artifact_manifest(
         path="note.md",
         content=prose,
@@ -1277,11 +1277,13 @@ def test_write_schema_does_not_teach_completeness_gates():
     write_schema = FileWriteTool().schema
     write_desc = write_schema.description
     assert "写入文件" in write_desc
-    assert ".agentcore/rules" in write_desc
+    assert ".agentcore/rules" not in write_desc
+    assert "consult" not in write_desc
     assert "整体覆盖" not in write_desc
     assert "创建" not in write_desc
     assert "上级目录" not in write_desc
     assert set(write_schema.parameters["properties"]) == {"file_path", "content"}
+    assert write_schema.parameters["required"] == ["file_path", "content"]
     content_desc = write_schema.parameters["properties"]["content"]["description"]
     assert "完整正文" in content_desc
     replace_desc = StrReplaceTool().schema.description
@@ -1317,11 +1319,13 @@ def test_delete_schema_is_short_trigger():
     schema = FileDeleteTool().schema
     props = schema.parameters["properties"]
     assert set(props) == {"path"}
+    assert schema.parameters["required"] == ["path"]
     blob = schema.description
     assert "permanent" not in blob
     assert "递归" not in schema.description
     assert "不可删" not in schema.description
-    assert ".agentcore/rules" in schema.description
+    assert ".agentcore/rules" not in schema.description
+    assert "consult" not in schema.description
     assert "系统回收站" not in blob
     assert "AgentCore/trash" not in blob
     assert "一键还原" not in blob
@@ -1687,7 +1691,7 @@ def test_file_list_schema_is_one_layer_ls():
     assert "已知" not in schema.description
     assert "已证实" not in props["directory"]["description"]
     assert "external/<别名>/" in schema.description
-    assert ".agentcore/rules" in schema.description
+    assert ".agentcore/rules" not in schema.description
 
 
 def test_glob_schema_requires_pattern():

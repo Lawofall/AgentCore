@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from agentcore.memory import default_memory_store, load_turn_rule_view
+from agentcore.memory import load_turn_rule_view
 from agentcore.runtime.context.consult_sources import build_merged_consult_source_for_user
 from agentcore.runtime.resolve.prompt.compose import (
     assemble_system_prompt,
@@ -30,11 +30,10 @@ async def rebuild_fresh_worker_base_prompt(
     desktop_online: bool = False,
 ) -> str:
     """Fresh worker base (no suspension frame): same path as crash-delegate redrive."""
-    memory_store = default_memory_store()
     rule_view = await load_turn_rule_view(
-        memory_store,
         user_id,
         folder_id=folder_id,
+        reader=backend,
     )
     exec_languages = await resolve_exec_languages(backend)
     system_prompt = assemble_system_prompt(
@@ -52,10 +51,10 @@ async def rebuild_fresh_worker_base_prompt(
         user_id=user_id,
         skill_registry=skill_registry,
         tool_names={s.name for s in provisional_tools.list_all()},
-        memory_store=memory_store,
         folder_id=folder_id,
         skill_audience="worker",
         tool_registry=provisional_tools,
+        workspace_reader=backend,
     )
     on_demand_entries = list(await source.list_directory(user_id))
     return compose_worker_base_prompt(

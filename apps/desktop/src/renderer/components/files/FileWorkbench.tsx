@@ -2,10 +2,6 @@ import { FileDetail, type FileDirtyState } from "@/components/files/FileDetail";
 import { UNTITLED_FOLDER_NAME } from "@/components/files/dedupeName";
 import type { FileSortBy } from "@/components/files/fileTreeTypes";
 import { DetailTabs } from "@/components/files/fileWorkbench/DetailTabs";
-import {
-  EntriesSection,
-  type EntryOpenTarget,
-} from "@/components/files/fileWorkbench/EntriesSection";
 import { FileSortMenu } from "@/components/files/fileWorkbench/FileSortMenu";
 import {
   type FolderRailHost,
@@ -20,7 +16,6 @@ import {
 } from "@/components/files/fileWorkbench/RailHeaders";
 import { WorkspaceSection } from "@/components/files/fileWorkbench/WorkspaceSection";
 import { WorkspaceVersionsPanel } from "@/components/files/fileWorkbench/WorkspaceVersionsPanel";
-import { createAndOpenScopeEntry } from "@/components/files/fileWorkbench/createScopeEntry";
 import {
   localConvDeskLabel,
   mixLocalRailItems,
@@ -121,7 +116,6 @@ export function FileWorkbench({
   isError,
   onRetry,
   fsAvailable,
-  showMemory,
   focusWsId,
   focusKey,
   probeLocalScratchHasFiles,
@@ -131,9 +125,6 @@ export function FileWorkbench({
   isError: boolean;
   onRetry: () => void;
   fsAvailable: boolean;
-  /** Show folder ``.agentcore`` entries in the tree.
-   * 侧栏把文件夹条目挂进 ``.agentcore`` 树行；本 flag 只管 FileWorkbench 宿主。 */
-  showMemory?: boolean;
   /** When navigated here with a target workspace (`/conversations`「浏览文件」),
    * auto-expand + highlight + scroll to that section（段默认折叠，故主动展开那一个；
    * 嵌套文件夹连同祖先一起展开）。`focusKey` (= navigation key) makes re-focusing the
@@ -542,22 +533,6 @@ export function FileWorkbench({
     }
   };
 
-  const openEntry = (target: EntryOpenTarget) => {
-    openFile(RULES_WS, target.path, target.name);
-  };
-
-  const closeEntry = (target: EntryOpenTarget) => {
-    closeTab(tabKey(RULES_WS, target.path));
-  };
-
-  const renameEntryTab = (target: EntryOpenTarget, name: string) => {
-    setTabs((prev) =>
-      prev.map((t) =>
-        t.wsId === RULES_WS && t.path === target.path ? { ...t, name } : t,
-      ),
-    );
-  };
-
   // 只留这一页（其余全关），并将其设为激活。
   const closeOthers = (key: string) => {
     const keep = tabs.find((t) => tabKey(t.wsId, t.path) === key);
@@ -596,27 +571,6 @@ export function FileWorkbench({
     filterQuery: treeFilterQuery,
     sortBy,
     offline,
-    renderWorkroomLead: showMemory
-      ? (folder, indent) => (
-          <EntriesSection
-            scope={{ kind: "folder", folderId: folder.id }}
-            documentActivePath={
-              activeTab?.wsId === RULES_WS ? activeTab.path : null
-            }
-            onOpen={openEntry}
-            onDeleted={closeEntry}
-            onRenamed={renameEntryTab}
-            indent={indent}
-          />
-        )
-      : undefined,
-    onCreateWorkroomEntry: showMemory
-      ? (folder) =>
-          createAndOpenScopeEntry(
-            { kind: "folder", folderId: folder.id },
-            openEntry,
-          )
-      : undefined,
     revealWorkroomFolderId: null,
     onWorkroomRevealApplied: undefined,
   };

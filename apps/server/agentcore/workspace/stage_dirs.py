@@ -50,6 +50,10 @@ INDEX_REL = f"{AGENTCORE_ROOT}/{INDEX_ZONE_NAME}"
 TRASH_REL = f"{AGENTCORE_ROOT}/{TRASH_ZONE_NAME}"
 BASELINES_REL = f"{AGENTCORE_ROOT}/{BASELINES_ZONE_NAME}"
 VERSIONS_REL = f"{AGENTCORE_ROOT}/{VERSIONS_ZONE_NAME}"
+# Visible convention dirs. Do not use the ``*_REL`` suffix: the hide-rule gate
+# treats every ``*_REL`` as an internal zone and would hide these from the file tree.
+RULES_DIR_PATH = f"{AGENTCORE_ROOT}/{RULES_DIR_NAME}"
+LEGACY_RULES_DIR_PATH = f"{AGENTCORE_ROOT}/{LEGACY_RULES_DIR_NAME}"
 
 # Retired 四格活柜 names — ``_paths`` still flattens nested writes under these prefixes.
 DRAFTS_PREFIX = "工作稿/"

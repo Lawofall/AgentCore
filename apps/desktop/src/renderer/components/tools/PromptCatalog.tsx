@@ -164,7 +164,7 @@ function toScopeEntry(
   };
 }
 
-/** Portrait overview + centered read dialog for the toolbox 交代 section. */
+/** Toolbox 交代: the shelf stays on the page; opening one item edits it in a dialog. */
 export function PromptCatalog({ data }: { data: Capabilities }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const [overlay, setOverlay] = useState<SkillCatalog>(EMPTY_SKILL_CATALOG);
@@ -1131,7 +1131,7 @@ export function PromptCatalog({ data }: { data: Capabilities }) {
     <div className="w-full" data-testid="prompt-catalog">
       <div className="mb-3 flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
-          <h2 className="text-sm font-medium text-foreground">交代</h2>
+          <h2 className="shrink-0 text-sm font-medium text-foreground">交代</h2>
           {showFactorySwitch ? (
             <div className="flex shrink-0 items-center gap-1.5">
               <span className="text-xs text-muted-foreground">出厂</span>

@@ -70,7 +70,7 @@ logger = get_logger(__name__)
 
 
 def _append_prose_close_note(msg_content: str, *, name: str, args: dict[str, Any]) -> str:
-    """Prose ``write`` close line, model transcript only. Skeleton and user rules stay quiet."""
+    """Prose ``write`` close line, model transcript only. A skeleton stays quiet."""
     if name != "write":
         return msg_content
     raw_path = args.get("file_path")

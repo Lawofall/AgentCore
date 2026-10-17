@@ -1008,3 +1008,21 @@ class LlmModelProfileService:
     ) -> ExpandedProfile:
         assembly_id = getattr(conv, "assembly_id", None) or None
         return await self.expand(user_id, assembly_id)
+
+    async def expand_for_conversation_id(
+        self, user_id: str, conversation_id: str | None
+    ) -> ExpandedProfile:
+        """Assembly pinned on that conversation, else the account star.
+
+        The conversation row stays in this module: ``model_selection`` must not
+        import ``agentcore.db``.
+        """
+        if conversation_id:
+            from agentcore.db.repositories import ConversationRepository
+
+            conv = await ConversationRepository(self._session).get_by_id_unscoped(
+                conversation_id
+            )
+            if conv is not None and getattr(conv, "user_id", None) == user_id:
+                return await self.expand_for_conversation(user_id, conv)
+        return await self.expand(user_id, None)

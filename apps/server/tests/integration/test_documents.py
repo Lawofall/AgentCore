@@ -1,13 +1,11 @@
 """Document 子系统第一期 integration tests (Agent记忆与知识系统 §5.7).
 
 Against a real PG schema: the tree CRUD API, owner-scoping, user-rule injection (two-tier,
-read-side full injection), the ``write`` ``.agentcore/rules/`` overlay, and the one-time
-file→document migration (idempotent, non-clobbering). Auto-skips when PostgreSQL is
-unavailable (integration conftest).
+read-side full injection), and the one-time file→document migration (idempotent,
+non-clobbering). Auto-skips when PostgreSQL is unavailable (integration conftest).
 """
 
 import uuid
-from pathlib import Path
 
 from agentcore.db.models import Folder
 from agentcore.db.repositories import DocumentRepository
@@ -17,10 +15,6 @@ from agentcore.memory.store import (
     PREFERENCES_MEMORY_FILE,
     topic_path,
 )
-from agentcore.tools.builtin.file_ops import FileWriteTool
-from agentcore.tools.protocol import ToolContext
-from agentcore.tools.sandbox.subprocess import SubprocessSandbox
-from agentcore.workspace.server import ServerWorkspace
 from tests.integration.conftest import register_and_login
 
 # --- Tree CRUD API ---------------------------------------------------------------------------
@@ -97,11 +91,10 @@ async def test_documents_require_auth(client):
 
 
 async def test_on_demand_user_rule_excluded_from_injected_rules(session_factory):
-    """on_demand user rules never enter the always ``<设定>`` budget/compose path."""
+    """常驻正文进 ``<设定>``。按需只进目录。"""
     uid = str(uuid.uuid4())
     async with session_factory() as session:
         repo = DocumentRepository(session)
-        store = DocumentMemoryStore(session=session)
         await repo.create(
             uid,
             name="常驻.md",
@@ -116,9 +109,9 @@ async def test_on_demand_user_rule_excluded_from_injected_rules(session_factory)
             role="rule",
             ai_maintained=False,
             apply_mode="on_demand",
-            content="- on_demand 规则",
+            content="---\ndescription: 查阅按需\n---\n- on_demand 规则",
         )
-        rules_md = await assemble_injected_rules(store, repo, uid, folder_id=None)
+        rules_md = await assemble_injected_rules(repo, uid, folder_id=None)
         on_demand = await repo.list_on_demand_user_rules(uid, None)
     assert "always 规则" in rules_md
     assert "on_demand 规则" not in rules_md
@@ -136,18 +129,19 @@ async def test_user_rule_injects_without_ai_notes(session_factory):
             name="用户规则.md",
             role="rule",
             ai_maintained=False,
-            apply_mode="always",
-            content="- 必须始终用中文",
+            apply_mode="on_demand",
+            content="---\ndescription: 回复语言\n---\n- 必须始终用中文",
         )
         await store.save(uid, PREFERENCES_MEMORY_FILE, "## 沟通偏好\n- 倾向简洁", scope=None)
         await store.save(uid, CORE_MEMORY_FILE, "## 技术栈与工具\n- 用 Python", scope=None)
-        rules_md = await assemble_injected_rules(store, repo, uid, folder_id=None)
+        rules_md = await assemble_injected_rules(repo, uid, folder_id=None)
+        listed = await repo.list_on_demand_user_rules(uid, None)
         # Keep loads on the live session: using the bound store after this
         # block returns leaves a checkout that blocks DROP SCHEMA in teardown.
         prefs = await store.load(uid, PREFERENCES_MEMORY_FILE)
         core = await store.load(uid, CORE_MEMORY_FILE)
-    assert "必须始终用中文" in rules_md
-    assert "### .agentcore/rules/用户规则.md" in rules_md
+    assert rules_md == ""
+    assert any("必须始终用中文" in (d.content or "") for d in listed)
     assert "用 Python" not in rules_md
     assert "倾向简洁" not in rules_md
     assert "倾向简洁" in prefs
@@ -161,11 +155,17 @@ async def test_user_rule_survives_when_ai_notes_exist(session_factory):
         repo = DocumentRepository(session)
         store = DocumentMemoryStore(session=session)
         await repo.create(
-            uid, name="用户规则.md", role="rule", apply_mode="always", content="- 必须用中文"
+            uid,
+            name="用户规则.md",
+            role="rule",
+            apply_mode="on_demand",
+            content="---\ndescription: 回复语言\n---\n- 必须用中文",
         )
         await store.save(uid, CORE_MEMORY_FILE, "## 技术栈与工具\n- 用 Python", scope=None)
-        rules_md = await assemble_injected_rules(store, repo, uid, folder_id=None)
-    assert "必须用中文" in rules_md
+        rules_md = await assemble_injected_rules(repo, uid, folder_id=None)
+        listed = await repo.list_on_demand_user_rules(uid, None)
+    assert rules_md == ""
+    assert any("必须用中文" in (d.content or "") for d in listed)
     assert "用 Python" not in rules_md
 
 
@@ -178,70 +178,27 @@ async def test_injection_admits_global_and_project_rules(session_factory):
         session.add(Folder(id=proj, user_id=uid, name="proj", rel_path="proj"))
         await session.flush()
         repo = DocumentRepository(session)
-        store = DocumentMemoryStore(session=session)
         await repo.create(
-            uid, name="全局约定.md", role="rule", apply_mode="always", content="全局规则"
+            uid,
+            name="全局约定.md",
+            role="rule",
+            apply_mode="on_demand",
+            content="---\ndescription: 全局\n---\n全局规则",
         )
         await repo.create(
             uid,
             name="用户规则.md",
             role="rule",
             folder_id=proj,
-            apply_mode="always",
-            content="项目规则",
+            apply_mode="on_demand",
+            content="---\ndescription: 项目\n---\n项目规则",
         )
-        rules_md = await assemble_injected_rules(store, repo, uid, folder_id=proj)
-    assert "全局规则" in rules_md
-    assert "项目规则" in rules_md
-    assert rules_md.index("全局规则") < rules_md.index("项目规则")
-
-
-# --- write .agentcore/rules → user rule ----------------------------------------------------------
-
-
-def _ctx(user_id: str) -> ToolContext:
-    return ToolContext.create(
-        execution_id="e",
-        run_id="s",
-        agent_id="a",
-        backend=ServerWorkspace(root=Path("."), sandbox=SubprocessSandbox()),
-        user_id=user_id,
-        conversation_id="",
-    )
-
-
-async def test_file_write_rule_writes_user_rule_and_dedupes(session_factory, monkeypatch):
-    from agentcore.tools.builtin.file_ops import user_rules as overlay
-
-    monkeypatch.setattr(overlay, "async_session_factory", session_factory)
-    monkeypatch.setattr(
-        "agentcore.account.credentials.get_account_credentials", lambda: None
-    )
-    uid = str(uuid.uuid4())
-
-    res = await FileWriteTool().execute(
-        {
-            "file_path": ".agentcore/rules/回复语言.md",
-            "content": "以后都用中文",
-        },
-        _ctx(uid),
-    )
-    assert res.success is True
-    assert "已写入" in (res.output or "")
-
-    res2 = await FileWriteTool().execute(
-        {
-            "file_path": ".agentcore/rules/回复语言.md",
-            "content": "以后都用中文",
-        },
-        _ctx(uid),
-    )
-    assert res2.success is True
-    assert (res2.metadata or {}).get("already_applied") is True
-
-    async with session_factory() as session:
-        docs = await DocumentRepository(session).list_user_rule_docs(uid, None)
-    assert any("以后都用中文" in d.content and d.ai_maintained is False for d in docs)
+        rules_md = await assemble_injected_rules(repo, uid, folder_id=proj)
+        global_rules = await repo.list_on_demand_user_rules(uid, None)
+        project_rules = await repo.list_on_demand_user_rules(uid, proj)
+    assert rules_md == ""
+    assert any("全局规则" in (d.content or "") for d in global_rules)
+    assert any("项目规则" in (d.content or "") for d in project_rules)
 
 
 # --- one-time file→document migration --------------------------------------------------------
@@ -322,8 +279,8 @@ async def test_legacy_rules_dir_renamed_on_read(session_factory):
 
 
 
-async def test_injectable_rules_skip_stray_outside_convention(session_factory):
-    """With AgentCore/rules/ present, a top-level stray always-rule is not injectable."""
+async def test_explicit_apply_is_admitted_outside_the_rules_dir(session_factory):
+    """带法写在正文上就进常驻。不必住在 rules 目录，也不必 role=rule。"""
 
     uid = str(uuid.uuid4())
     async with session_factory() as session:
@@ -331,11 +288,9 @@ async def test_injectable_rules_skip_stray_outside_convention(session_factory):
         await repo.upsert_user_rule_doc(uid, None, "必须用中文.md", "- 必须用中文")
         stray = await repo.create(
             uid,
-            name="漏网规则.md",
-            role="rule",
-            content="- 不该注入",
-            parent_id=None,
-            apply_mode="always",
+            name="漏网.md",
+            role="general",
+            content="---\napply: always\n---\n- 要注入",
         )
         stray_id = stray.id
         rules_dir = await repo.get_rules_dir(uid, None)
@@ -343,9 +298,11 @@ async def test_injectable_rules_skip_stray_outside_convention(session_factory):
 
         docs = await repo.list_injectable_rules(uid, None, ai_maintained=False)
         ids = {d.id for d in docs}
-        assert stray_id not in ids
-        assert any(d.name == "必须用中文.md" for d in docs)
-        assert all(d.parent_id == rules_dir.id for d in docs)
+        assert stray_id in ids
+        saved = await repo.get_user_rule_doc(uid, None, "必须用中文.md")
+        assert saved is not None and saved.id not in ids
+        assert (saved.description or "") == ""
+        assert rules_dir is not None
 
 
 
@@ -432,7 +389,7 @@ async def test_user_rule_apply_mode_always_on_demand_and_reject_conditional(
         assert "常驻规则.md" in names
         assert "合规附录.md" not in names
         on_demand_docs = await repo.list_on_demand_user_rules(uid, None)
-        assert {d.name for d in on_demand_docs} == {"合规附录.md"}
+        assert on_demand_docs == []
 
 
 # --- AI memory write guards (API) ------------------------------------------------------------

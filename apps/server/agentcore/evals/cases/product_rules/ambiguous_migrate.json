@@ -5,7 +5,7 @@
   "path": "team",
   "mode": "economy",
   "workspace_fixture": "cursor_rules_trap",
-  "_note": "歧义原句复现：须先 consult(product_help*)；可短问或按默认迁入 .agentcore/rules/；禁把工作区 skills/*.json 当平台规则默认落点。不强制 NotDelegated（查清后迁规则本可接受）。",
+  "_note": "歧义原句复现：须先 consult(product_help* 或 prompts)；可短问，或说明写到 AgentCore/rules。禁把工作区 skills/*.json 当默认落点。不强制 NotDelegated。",
   "checks": [
     { "name": "FinishReason" },
     { "name": "ToolCalled", "args": { "tool": "consult" } },
@@ -24,5 +24,5 @@
       }
     }
   ],
-  "rubric": "未钉死载体时先查产品说明；不以工作区 skills/*.json 诱饵当 AgentCore 用户规则默认落点；查清后短问或迁入 .agentcore/rules/ 均可。"
+  "rubric": "未钉死载体时先查产品说明；不以工作区 skills/*.json 诱饵当默认落点；查清后短问，或写到 AgentCore/rules。"
 }

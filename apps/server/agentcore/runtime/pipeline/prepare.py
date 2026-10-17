@@ -262,11 +262,6 @@ async def prepare_fresh_turn(
 ) -> PreparedTurn:
     """Build the stable base prompt, worker tools, channels, and tool context."""
     # User always-rules inject into ``<设定>``. AI-maintained notes are not injected.
-    # Look up via ``pipeline.run`` so governance tests can monkeypatch the seam
-    # (``test_pipeline_governance._patch_pipeline``).
-    from agentcore.runtime.pipeline import run as run_mod
-
-    memory_store = run_mod.default_memory_store()
     desk_owner_id, member_turn = await _gather_cancel_on_fail(
         resolve_folder_owner_user_id(folder_id),
         caller_is_desk_member(user_id=user_id, folder_id=folder_id),
@@ -340,10 +335,10 @@ async def prepare_fresh_turn(
         _timed_phase(
             "rules",
             load_turn_rule_view(
-                memory_store,
                 user_id,
                 folder_id=folder_id,
                 folder_user_id=folder_rules_user_id,
+                reader=backend,
             ),
         ),
         _timed_phase(
@@ -416,6 +411,7 @@ async def prepare_fresh_turn(
             skill_registry=skill_registry,
             folder_id=folder_id,
             user_id=user_id,
+            workspace_reader=backend,
         )
         return await _timed_phase(
             "on_demand_dir",

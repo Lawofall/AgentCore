@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
-from typing import Any
 
 import httpx
 import pytest
@@ -17,8 +16,10 @@ from agentcore.account.credentials import (
     cloud_write_user_rule,
 )
 from agentcore.memory.document_store import DocumentMemoryStore
-from agentcore.memory.rules_injection import assemble_turn_rules
-from agentcore.tools.builtin.file_ops import FileDeleteTool, FileWriteTool
+from agentcore.memory.rules_injection import (
+    assemble_turn_rules,
+    load_on_demand_user_rules,
+)
 from agentcore.tools.protocol import ToolContext
 
 pytestmark = pytest.mark.anyio
@@ -49,27 +50,6 @@ def _ctx() -> ToolContext:
         user_id="u1",
         conversation_id="host-1",
     )
-
-
-class _EmptyMemoryStore:
-    """Minimal MemoryStore stub (no AI memory) for assemble_turn_rules tests."""
-
-    async def list(self, user_id: str, scope: str | None = None) -> list[Any]:
-        return []
-
-    async def load(self, user_id: str, path: str, scope: str | None = None) -> str:
-        return ""
-
-    async def save(
-        self, user_id: str, path: str, markdown: str, scope: str | None = None
-    ) -> None:
-        raise AssertionError("empty store must not save")
-
-    async def delete(self, user_id: str, path: str, scope: str | None = None) -> None:
-        raise AssertionError("empty store must not delete")
-
-    async def project_scopes(self, user_id: str) -> list[str]:
-        return []
 
 
 # --- cloud HTTP client --------------------------------------------------------
@@ -223,7 +203,6 @@ async def test_assemble_turn_rules_ticketed_miss_skips_cloud(
 
     with account_credentials_scope(account_creds):
         rules_md = await assemble_turn_rules(
-            _EmptyMemoryStore(),  # type: ignore[arg-type]
             "u1",
             folder_id=None,
         )
@@ -246,7 +225,13 @@ async def test_assemble_turn_rules_ticketed_hit_after_seed(
         None,
         AccountPrepareSnapshot(
             rules_payload={
-                "global_rules": [{"name": "用户规则.md", "content": "- 永远用中文"}],
+                "global_on_demand_rules": [
+                    {
+                        "name": "用户规则.md",
+                        "content": "- 永远用中文",
+                        "description": "回复语言",
+                    }
+                ],
                 "project_rules": [],
             },
             memory_bodies={("", "偏好.md"): "- 偏好偏好\n"},
@@ -262,11 +247,12 @@ async def test_assemble_turn_rules_ticketed_hit_after_seed(
 
     with account_credentials_scope(account_creds):
         rules_md = await assemble_turn_rules(
-            _EmptyMemoryStore(),  # type: ignore[arg-type]
             "u1",
             folder_id=None,
         )
-    assert "永远用中文" in rules_md
+        on_demand = await load_on_demand_user_rules("u1", folder_id=None)
+    assert rules_md == ""
+    assert any(item.name == "用户规则" for item in on_demand)
     assert "偏好偏好" not in rules_md
 
 
@@ -285,109 +271,10 @@ async def test_assemble_turn_rules_cloud_failure_soft_empty(
 
     with account_credentials_scope(account_creds):
         rules_md = await assemble_turn_rules(
-            _EmptyMemoryStore(),  # type: ignore[arg-type]
             "u1",
             folder_id=None,
         )
     assert rules_md == ""
-
-
-async def test_file_write_rule_cloud_success(
-    monkeypatch: pytest.MonkeyPatch, account_creds
-):
-    async def _fake_write(creds, **kwargs):
-        assert kwargs.get("content") == "以后都用中文"
-        assert kwargs.get("name") == "回复语言.md"
-        assert kwargs.get("folder_id") is None
-        assert creds is account_creds
-        return {
-            "changed": True,
-            "action": "write",
-            "message": "已写入规则「回复语言.md」（常驻）。",
-            "name": "回复语言.md",
-            "apply": "always",
-            "ok": True,
-        }
-
-    monkeypatch.setattr(
-        "agentcore.account.credentials.cloud_write_user_rule", _fake_write
-    )
-    monkeypatch.setattr(
-        "agentcore.tools.builtin.file_ops.user_rules.async_session_factory",
-        lambda: (_ for _ in ()).throw(AssertionError("must not open local DB")),
-    )
-    warmed = {"n": 0}
-
-    async def _fake_warm(_creds, *, user_id, folder_id):
-        warmed["n"] += 1
-        assert user_id == "u1"
-        assert folder_id is None
-
-    monkeypatch.setattr(
-        "agentcore.tools.builtin.file_ops.user_rules._rewarm_account_rules_memory",
-        _fake_warm,
-    )
-
-    with account_credentials_scope(account_creds):
-        result = await FileWriteTool().execute(
-            {"file_path": ".agentcore/rules/回复语言.md", "content": "以后都用中文"},
-            _ctx(),
-        )
-    assert result.success is True
-    assert "已写入" in (result.output or "")
-    assert warmed["n"] == 1
-
-
-async def test_file_delete_rule_cloud(
-    monkeypatch: pytest.MonkeyPatch, account_creds
-):
-    async def _fake_delete(creds, **kwargs):
-        del creds
-        assert kwargs.get("name") == "回复语言.md"
-        return {
-            "changed": True,
-            "action": "delete",
-            "message": "已删除规则「回复语言.md」。",
-            "name": "回复语言.md",
-            "ok": True,
-        }
-
-    monkeypatch.setattr(
-        "agentcore.account.credentials.cloud_delete_user_rule", _fake_delete
-    )
-
-    async def _noop_rewarm(*_a, **_k):
-        return None
-
-    monkeypatch.setattr(
-        "agentcore.tools.builtin.file_ops.user_rules._rewarm_account_rules_memory",
-        _noop_rewarm,
-    )
-    with account_credentials_scope(account_creds):
-        result = await FileDeleteTool().execute(
-            {"path": ".agentcore/rules/回复语言.md"}, _ctx()
-        )
-    assert result.success is True
-    assert "已删除" in (result.output or "")
-
-
-async def test_file_write_rule_cloud_failure_explicit(
-    monkeypatch: pytest.MonkeyPatch, account_creds
-):
-    async def _boom(*_a, **_k):
-        raise AccountCloudError("unreachable", code="account_cloud_unreachable")
-
-    monkeypatch.setattr("agentcore.account.credentials.cloud_write_user_rule", _boom)
-
-    with account_credentials_scope(account_creds):
-        result = await FileWriteTool().execute(
-            {"file_path": ".agentcore/rules/回复语言.md", "content": "完整一篇规则正文"},
-            _ctx(),
-        )
-    assert result.success is False
-    assert "请稍后再试" in (result.error or result.output or "")
-
-
 
 
 async def test_document_store_bound_session_skips_cloud(
@@ -446,7 +333,7 @@ def test_on_demand_from_cloud_empty_when_keys_absent():
     ) == []
 
 
-def test_lookup_on_demand_body_project_then_global():
+def test_lookup_on_demand_body_prefers_this_folder():
     from agentcore.memory.rules_injection import lookup_on_demand_rule_body_from_cloud
 
     payload = {
@@ -674,7 +561,6 @@ async def test_assemble_without_ticket_uses_db_path(
         lambda: _SessCtx(),
     )
     rules_md = await assemble_turn_rules(
-        _EmptyMemoryStore(),  # type: ignore[arg-type]
         "u1",
         folder_id=None,
     )

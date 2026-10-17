@@ -1,13 +1,15 @@
-"""Account search providers: add, edit, select, delete, and connectivity-test.
+"""Account search connections: one 开析 slot and one SearXNG slot.
 
-Keys are encrypted at rest. The settings view only ever sees a masked tail.
-A connectivity probe does not consume the platform search-count quota.
+Connect probes first and writes only after the probe succeeds, then selects
+that engine. A failed probe leaves the previous slot untouched. A later search
+failure marks the selected slot ``needs_reconnect`` until the next successful
+connect. Keys are encrypted at rest. The settings view only ever sees a masked tail.
 """
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
-from datetime import datetime
 from urllib.parse import urlparse
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,17 +20,26 @@ from agentcore.core.errors import (
     NotFoundError,
     ValidationError,
 )
+from agentcore.core.logging import get_logger
+from agentcore.db.base import async_session_factory
 from agentcore.db.models import UserSearchProvider
-from agentcore.db.repositories._base import _UNSET
 from agentcore.db.repositories.search import UserSearchProviderRepository
 from agentcore.db.repositories.users import UserRepository
 from agentcore.tools.builtin.web.cleversee import CleverSeeBackend
+from agentcore.tools.builtin.web.cloud_fallback import (
+    get_inference_search_credentials,
+    report_search_connection_failure,
+)
 from agentcore.tools.builtin.web.search_backend import (
     SearchBackend,
     SearXNGBackend,
     describe_search_error,
 )
-from agentcore.tools.builtin.web.search_choice import CLEVERSEE, SEARXNG
+from agentcore.tools.builtin.web.search_choice import (
+    CLEVERSEE,
+    SEARXNG,
+    SearchTarget,
+)
 from agentcore.tools.builtin.web.search_quota import SearchQuotaSnapshot, search_quota_snapshot
 from agentcore.tools.builtin.web.search_secrets import (
     decrypt_search_key,
@@ -36,30 +47,34 @@ from agentcore.tools.builtin.web.search_secrets import (
     search_encryptor,
 )
 
-MAX_SEARCH_PROVIDERS = 8
-_PROBE_QUERY = "ping"
+logger = get_logger(__name__)
+
+PLATFORM = "platform"
+CONNECTED = "connected"
+NEEDS_RECONNECT = "needs_reconnect"
+_PROBE_QUERY = "杭州"
 _LABEL_MAX = 100
 _URL_MAX = 500
+_DETAIL_MAX = 300
+_UUID_RE = re.compile(
+    r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+)
 
 
 @dataclass(frozen=True)
-class SearchProviderView:
-    id: str
-    label: str
-    protocol: str
-    base_url: str
+class SearchSlotView:
     status: str
+    base_url: str
     masked_key: str | None
     message: str | None = None
-    created_at: datetime | None = None
-    updated_at: datetime | None = None
 
 
 @dataclass(frozen=True)
-class SearchProvidersView:
-    selected_provider_id: str | None
+class SearchConnectionView:
+    selected: str
     quota: SearchQuotaSnapshot
-    providers: list[SearchProviderView]
+    cleversee: SearchSlotView | None
+    searxng: SearchSlotView | None
 
 
 def normalize_search_base_url(protocol: str, base_url: str) -> str:
@@ -83,141 +98,139 @@ def normalize_search_label(protocol: str, label: str) -> str:
     return text
 
 
-def _require_protocol(protocol: str) -> str:
-    if protocol not in (SEARXNG, CLEVERSEE):
-        raise ValidationError("不支持的搜索协议")
-    return protocol
+def _failure_detail(message: str) -> str:
+    text = " ".join((message or "").split())
+    return (text or "搜索失败，请重新连接")[:_DETAIL_MAX]
 
 
-class SearchProviderService:
+class SearchConnectionService:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
         self._repo = UserSearchProviderRepository(session)
         self._users = UserRepository(session)
 
-    async def list_providers(self, user_id: str) -> SearchProvidersView:
+    async def get_view(self, user_id: str) -> SearchConnectionView:
         user = await self._users.get_by_id(user_id)
-        selected = getattr(user, "search_provider_id", None) if user is not None else None
+        selected_id = getattr(user, "search_provider_id", None) if user is not None else None
         rows = await self._repo.list_for_user(user_id)
-        if selected and all(row.id != selected for row in rows):
-            selected = None
+        by_protocol = {row.protocol: row for row in rows}
+        selected = PLATFORM
+        if selected_id:
+            match = next((row for row in rows if row.id == selected_id), None)
+            if match is not None and match.protocol in (CLEVERSEE, SEARXNG):
+                selected = match.protocol
         quota = await search_quota_snapshot(user_id)
-        return SearchProvidersView(
-            selected_provider_id=selected,
+        return SearchConnectionView(
+            selected=selected,
             quota=quota,
-            providers=[self._view(row) for row in rows],
+            cleversee=_slot(by_protocol.get(CLEVERSEE)),
+            searxng=_slot(by_protocol.get(SEARXNG)),
         )
 
-    async def create_provider(
+    async def select(self, user_id: str, engine: str) -> SearchConnectionView:
+        if engine == PLATFORM:
+            await self._users.set_search_provider(user_id, None)
+            return await self.get_view(user_id)
+        row = await self._require_slot(user_id, engine)
+        await self._users.set_search_provider(user_id, row.id)
+        return await self.get_view(user_id)
+
+    async def connect_cleversee(self, user_id: str, api_key: str) -> SearchConnectionView:
+        key = (api_key or "").strip()
+        if not key:
+            raise ValidationError("开析需要 API Key")
+        self._require_encryptor()
+        base_url = normalize_search_base_url(CLEVERSEE, "")
+        await _probe(CLEVERSEE, base_url, key)
+        await self._upsert(user_id, protocol=CLEVERSEE, base_url=base_url, api_key=key)
+        return await self.get_view(user_id)
+
+    async def connect_searxng(
         self,
         user_id: str,
-        *,
-        protocol: str,
-        label: str,
         base_url: str,
         api_key: str,
-    ) -> SearchProviderView:
-        protocol = _require_protocol(protocol)
-        if await self._repo.count_for_user(user_id) >= MAX_SEARCH_PROVIDERS:
-            raise ValidationError(f"最多保存 {MAX_SEARCH_PROVIDERS} 个搜索服务")
+    ) -> SearchConnectionView:
+        url = normalize_search_base_url(SEARXNG, base_url)
         key = (api_key or "").strip()
-        if protocol == CLEVERSEE and not key:
-            raise ValidationError("开析需要 API key")
-        row = await self._repo.create(
-            user_id=user_id,
-            label=normalize_search_label(protocol, label),
-            protocol=protocol,
-            base_url=normalize_search_base_url(protocol, base_url),
-            api_key_enc=self._encrypt(key) if key else None,
-        )
-        return self._view(row, plaintext_key=key)
+        if key:
+            self._require_encryptor()
+        await _probe(SEARXNG, url, key)
+        await self._upsert(user_id, protocol=SEARXNG, base_url=url, api_key=key)
+        return await self.get_view(user_id)
 
-    async def update_provider(
-        self,
-        user_id: str,
-        provider_id: str,
-        *,
-        label: str | None,
-        base_url: str | None,
-        api_key: str | None,
-        fields_set: set[str],
-    ) -> SearchProviderView:
-        row = await self._repo.get(provider_id, user_id=user_id)
-        if row is None:
-            raise NotFoundError("搜索服务不存在")
-        label_value: str | object = (
-            normalize_search_label(row.protocol, label or "") if "label" in fields_set else _UNSET
-        )
-        url_value: str | object = (
-            normalize_search_base_url(row.protocol, base_url or "")
-            if "base_url" in fields_set
-            else _UNSET
-        )
-        key_text = (api_key or "").strip() if "api_key" in fields_set else ""
-        key_value: bytes | None | object = self._encrypt(key_text) if key_text else _UNSET
-        # Empty key means keep. A CleverSee row that still has no key cannot run.
-        if (
-            row.protocol == CLEVERSEE
-            and "api_key" in fields_set
-            and not key_text
-            and not row.api_key_enc
-        ):
-            raise ValidationError("开析需要 API key")
-        updated = await self._repo.update(
-            provider_id,
-            user_id=user_id,
-            label=label_value,
-            base_url=url_value,
-            api_key_enc=key_value,
-        )
-        if updated is None:
-            raise NotFoundError("搜索服务不存在")
-        return self._view(updated, plaintext_key=key_text)
-
-    async def delete_provider(self, user_id: str, provider_id: str) -> None:
-        row = await self._repo.get(provider_id, user_id=user_id)
-        if row is None:
-            raise NotFoundError("搜索服务不存在")
+    async def disconnect(self, user_id: str, engine: str) -> SearchConnectionView:
+        row = await self._require_slot(user_id, engine)
         user = await self._users.get_by_id(user_id)
-        await self._repo.delete(provider_id, user_id=user_id, commit=False)
-        if user is not None and user.search_provider_id == provider_id:
+        await self._repo.delete(row.id, user_id=user_id, commit=False)
+        if user is not None and user.search_provider_id == row.id:
             await self._users.set_search_provider(user_id, None, commit=False)
         await self._session.commit()
+        return await self.get_view(user_id)
 
-    async def select_provider(self, user_id: str, provider_id: str | None) -> None:
-        if provider_id:
-            row = await self._repo.get(provider_id, user_id=user_id)
-            if row is None:
-                raise NotFoundError("搜索服务不存在")
-        await self._users.set_search_provider(user_id, provider_id or None)
-
-    async def test_provider(self, user_id: str, provider_id: str) -> SearchProviderView:
+    async def mark_selected_failed(self, user_id: str, message: str) -> None:
+        user = await self._users.get_by_id(user_id)
+        provider_id = getattr(user, "search_provider_id", None) if user is not None else None
+        if not provider_id:
+            return
         row = await self._repo.get(provider_id, user_id=user_id)
         if row is None:
-            raise NotFoundError("搜索服务不存在")
-        key = decrypt_search_key(row.api_key_enc)
-        if row.protocol == CLEVERSEE and not key:
-            raise ValidationError("开析需要 API key")
-        backend: SearchBackend
-        if row.protocol == CLEVERSEE:
-            backend = CleverSeeBackend(key, row.base_url)
+            return
+        detail = _failure_detail(message)
+        await self._repo.mark_needs_reconnect(
+            row.id,
+            user_id=user_id,
+            detail=detail,
+            commit=False,
+        )
+        await self._session.commit()
+        logger.info(
+            "search_connection.needs_reconnect",
+            user_id=user_id,
+            protocol=row.protocol,
+        )
+
+    async def _require_slot(self, user_id: str, engine: str) -> UserSearchProvider:
+        if engine not in (CLEVERSEE, SEARXNG):
+            raise ValidationError("不支持的搜索服务")
+        row = await self._repo.get_by_protocol(user_id, engine)
+        if row is None:
+            raise NotFoundError("这个搜索服务还没有连接")
+        return row
+
+    async def _upsert(self, user_id: str, *, protocol: str, base_url: str, api_key: str) -> None:
+        label = normalize_search_label(protocol, "")
+        enc = self._encrypt(api_key) if api_key else None
+        row = await self._repo.get_by_protocol(user_id, protocol)
+        if row is None:
+            row = await self._repo.create(
+                user_id=user_id,
+                label=label,
+                protocol=protocol,
+                base_url=base_url,
+                api_key_enc=enc,
+                status=CONNECTED,
+                commit=False,
+            )
         else:
-            backend = SearXNGBackend(row.base_url, api_key=key or None)
-        message: str | None = None
-        status = "error"
-        try:
-            results = await backend.search(_PROBE_QUERY, max_results=1)
-        except Exception as exc:  # noqa: BLE001 — persist the probe outcome, don't crash settings
-            message = describe_search_error(exc, backend)[:300]
-            status = "error"
-        else:
-            status = "active"
-            message = None if results else "已连通，这次没有结果。"
-        finally:
-            await backend.aclose()
-        await self._repo.set_status(provider_id, user_id=user_id, status=status)
-        fresh = await self._repo.get(provider_id, user_id=user_id)
-        return self._view(fresh or row, plaintext_key=key, message=message, status=status)
+            saved = await self._repo.save_connected(
+                row.id,
+                user_id=user_id,
+                label=label,
+                base_url=base_url,
+                api_key_enc=enc,
+                clear_key=not api_key,
+                commit=False,
+            )
+            if saved is None:
+                raise NotFoundError("这个搜索服务还没有连接")
+            row = saved
+        await self._users.set_search_provider(user_id, row.id, commit=False)
+        await self._session.commit()
+
+    def _require_encryptor(self) -> None:
+        if search_encryptor() is None:
+            raise KeyStorageUnavailableError("无法保存搜索密钥：服务器未配置加密主密钥")
 
     def _encrypt(self, plaintext: str) -> bytes:
         enc = search_encryptor()
@@ -225,26 +238,58 @@ class SearchProviderService:
             raise KeyStorageUnavailableError("无法保存搜索密钥：服务器未配置加密主密钥")
         return enc.encrypt(plaintext.encode())
 
-    def _view(
-        self,
-        row: UserSearchProvider,
-        *,
-        plaintext_key: str = "",
-        message: str | None = None,
-        status: str | None = None,
-    ) -> SearchProviderView:
-        masked = mask_search_key(plaintext_key) if plaintext_key else None
-        if masked is None and row.api_key_enc:
-            masked = mask_search_key(decrypt_search_key(row.api_key_enc))
-        return SearchProviderView(
-            id=row.id,
-            label=row.label,
-            protocol=row.protocol,
-            base_url=row.base_url,
-            status=status or row.status,
-            masked_key=masked,
-            message=message,
-            created_at=row.created_at,
-            updated_at=row.updated_at,
-        )
 
+def _slot(row: UserSearchProvider | None) -> SearchSlotView | None:
+    if row is None:
+        return None
+    status = row.status if row.status in (CONNECTED, NEEDS_RECONNECT) else NEEDS_RECONNECT
+    masked = mask_search_key(decrypt_search_key(row.api_key_enc))
+    return SearchSlotView(
+        status=status,
+        base_url=row.base_url,
+        masked_key=masked,
+        message=row.detail if status == NEEDS_RECONNECT else None,
+    )
+
+
+async def _probe(protocol: str, base_url: str, api_key: str) -> None:
+    backend: SearchBackend
+    if protocol == CLEVERSEE:
+        backend = CleverSeeBackend(api_key, base_url)
+    else:
+        backend = SearXNGBackend(base_url, api_key=api_key or None)
+    try:
+        await backend.search(_PROBE_QUERY, max_results=1)
+    except Exception as exc:  # noqa: BLE001 — the probe outcome is the connect result
+        raise ValidationError(_failure_detail(describe_search_error(exc, backend))) from exc
+    finally:
+        await backend.aclose()
+
+
+async def note_own_search_failure(user_id: str, message: str) -> None:
+    """Mark the selected own engine needs-reconnect. Never raises into the search call."""
+    if not _UUID_RE.fullmatch(user_id or ""):
+        return
+    try:
+        async with async_session_factory() as session:
+            await SearchConnectionService(session).mark_selected_failed(user_id, message)
+    except Exception as exc:  # noqa: BLE001 — bookkeeping must not hide the search error
+        logger.warning("search_connection.note_failed", error_type=type(exc).__name__)
+
+
+async def record_provider_search_failure(target: SearchTarget, user_id: str, reason: str) -> None:
+    """Record an own-engine search failure on the account that owns the slot.
+
+    The server writes the row directly. A sidecar that called the engine itself
+    (keyless SearXNG) reports the same fact over inference. A proxied call is
+    recorded on the server that ran it, so the sidecar does not report twice.
+    """
+    if target.kind != "provider" or not target.provider_id:
+        return
+    creds = get_inference_search_credentials()
+    if creds is None:
+        await note_own_search_failure(user_id, reason)
+        return
+    if target.proxy:
+        return
+    await report_search_connection_failure(creds, reason)

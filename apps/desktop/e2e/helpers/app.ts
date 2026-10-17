@@ -12,7 +12,8 @@ export async function openWebapp(page: Page): Promise<void> {
 export async function ensureAuthed(page: Page): Promise<void> {
   const userBox = page.getByPlaceholder("邮箱或用户名");
   const composer = page.getByPlaceholder(/输入消息/);
-  const outage = page.getByText("服务暂时不可用");
+  // exact: the reason line also contains this phrase (strict-mode violation otherwise).
+  const outage = page.getByText("服务暂时不可用", { exact: true });
   await Promise.race([
     userBox.waitFor({ state: "visible", timeout: 30_000 }),
     composer.waitFor({ state: "visible", timeout: 30_000 }),

@@ -601,7 +601,8 @@ _BALANCE_BODY_CODES = frozenset(
     }
 )
 _BALANCE_MARKERS = re.compile(
-    r"(insufficient\s+(balance|credits)|out\s+of\s+credits|余额不足|账户余额)",
+    r"(insufficient\s+(balance|credits)|out\s+of\s+credits|余额不足|账户余额|"
+    r"subscription\s+ended\b.{0,120}\bpayment\s+method)",
     re.IGNORECASE,
 )
 # Upstream 404 that names a missing / denied *model* (not a wrong base_url path).

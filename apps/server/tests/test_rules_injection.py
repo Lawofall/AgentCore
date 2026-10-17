@@ -5,13 +5,7 @@ Pure, DB-free: compose + frontmatter strip + equal-authority ``<设定>`` wordin
 ``tests/integration/test_documents.py``.
 """
 
-from agentcore.memory.always_join import (
-    ancestor_rule_bodies_by_scope,
-    join_always_layers,
-)
 from agentcore.memory.rules_injection import (
-    _ANCESTOR_SETTINGS_LABEL,
-    _FOLDER_SETTINGS_LABEL,
     RuleFragment,
     _labeled_rule_body,
     compose_injected_rules,
@@ -20,64 +14,9 @@ from agentcore.memory.rules_injection import (
 from agentcore.runtime.resolve.prompt import assemble_system_prompt
 
 
-def test_join_always_layers_scope_not_author():
-    frags = join_always_layers(
-        folder_settings_label=_FOLDER_SETTINGS_LABEL,
-        ancestor_settings_label=_ANCESTOR_SETTINGS_LABEL,
-        global_rules=["全局规则"],
-        ancestor_layers=[(None, ["外层规则"])],
-        current_rules=["当前规则"],
-        include_current=True,
-    )
-    md = "\n\n".join(f.body for f in frags)
-    order = (
-        "全局规则",
-        "外层规则",
-        "当前规则",
-    )
-    positions = [md.index(t) for t in order]
-    assert positions == sorted(positions)
-    assert md.index(_ANCESTOR_SETTINGS_LABEL) < md.index("外层规则")
-    assert md.index(_FOLDER_SETTINGS_LABEL) < md.index("当前规则")
-
-
-def _body(doc: dict) -> str:
-    return str(doc["content"])
-
-
-def test_ancestor_rule_bodies_tagged_folder_id_wins():
-    buckets = ancestor_rule_bodies_by_scope(
-        [
-            {"content": "中层", "folder_id": "mid"},
-            {"content": "外层", "folder_id": "outer"},
-        ],
-        ["outer", "mid"],
-        body_of=_body,
-    )
-    assert buckets == [["外层"], ["中层"]]
-
-
-def test_ancestor_rule_bodies_untagged_zip_when_counts_match():
-    buckets = ancestor_rule_bodies_by_scope(
-        [{"content": "外层"}, {"content": "中层"}],
-        ["outer", "mid"],
-        body_of=_body,
-    )
-    assert buckets == [["外层"], ["中层"]]
-
-
-def test_ancestor_rule_bodies_untagged_bag_on_outermost_when_counts_differ():
-    buckets = ancestor_rule_bodies_by_scope(
-        [{"content": "甲"}, {"content": "乙"}, {"content": "丙"}],
-        ["outer", "mid"],
-        body_of=_body,
-    )
-    assert buckets == [["甲", "乙", "丙"], []]
-
-
 def test_labeled_rule_body_prefixes_filename():
     out = _labeled_rule_body("回复语言.md", "---\napply: always\n---\n用中文回复")
-    assert out == "### .agentcore/rules/回复语言.md\n用中文回复"
+    assert out == "### 回复语言.md\n用中文回复"
 
 
 def test_compose_joins_all_fragments_in_order():

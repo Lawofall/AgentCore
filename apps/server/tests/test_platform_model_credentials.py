@@ -331,10 +331,13 @@ async def test_resolve_model_config_platform_chat_uses_per_model_key(monkeypatch
 
 
 @pytest.mark.asyncio
-async def test_resolve_model_config_platform_background_downgrade_resolves_that_model(
+async def test_resolve_model_config_title_follow_main_uses_main_model_key(
     monkeypatch,
 ):
-    """Background purpose 降档 to platform_background_model → its per-model key is used."""
+    """空后台槽跟随平台主模型，用主模型自己的 key，不降到 PLATFORM_BACKGROUND_MODEL。"""
+    from agentcore.llm.model_profiles import ExpandedProfile
+    from agentcore.llm.resolve import ModelSelection
+
     monkeypatch.setattr(settings, "platform_api_key", "sk-default")
     monkeypatch.setattr(settings, "platform_base_url", "https://default/v1")
     monkeypatch.setattr(settings, "platform_model", "glm-5.2")
@@ -342,11 +345,57 @@ async def test_resolve_model_config_platform_background_downgrade_resolves_that_
     monkeypatch.setattr(settings, "billing_mode", "platform")
     monkeypatch.setattr(settings, "platform_model_credentials", _OVERRIDE)
     _mock_keyless(monkeypatch)
+    monkeypatch.setattr(
+        "agentcore.llm.model_profiles.LlmModelProfileService.expand",
+        AsyncMock(
+            return_value=ExpandedProfile(
+                profile_id="preset",
+                name="平台预置",
+                kind="system",
+                main=ModelSelection(model="glm-5.2", origin="platform", provider_id=None),
+            )
+        ),
+    )
     cfg = await resolve_model_config(MagicMock(), "u1", "title")
     assert cfg is not None
     assert cfg.source == "platform"
-    assert cfg.model == "relay-b"  # downgraded model name
-    assert cfg.api_key == "sk-relay-b-key"  # resolved for the downgraded model
+    assert cfg.model == "glm-5.2"
+    assert cfg.api_key == "sk-default"
+
+
+async def test_resolve_model_config_explicit_platform_slot_uses_background_model_key(
+    monkeypatch,
+):
+    """显式平台后台槽仍降到 platform_background_model，并用该模型自己的 key。"""
+    from agentcore.llm.model_profiles import ExpandedProfile
+    from agentcore.llm.resolve import ModelSelection
+
+    monkeypatch.setattr(settings, "platform_api_key", "sk-default")
+    monkeypatch.setattr(settings, "platform_base_url", "https://default/v1")
+    monkeypatch.setattr(settings, "platform_model", "glm-5.2")
+    monkeypatch.setattr(settings, "platform_background_model", "relay-b")
+    monkeypatch.setattr(settings, "billing_mode", "platform")
+    monkeypatch.setattr(settings, "platform_model_credentials", _OVERRIDE)
+    _mock_keyless(monkeypatch)
+    monkeypatch.setattr(
+        "agentcore.llm.model_profiles.LlmModelProfileService.expand",
+        AsyncMock(
+            return_value=ExpandedProfile(
+                profile_id="preset",
+                name="平台预置",
+                kind="system",
+                main=ModelSelection(model="glm-5.2", origin="platform", provider_id=None),
+                background=ModelSelection(
+                    model="glm-5.2", origin="platform", provider_id=None
+                ),
+            )
+        ),
+    )
+    cfg = await resolve_model_config(MagicMock(), "u1", "title")
+    assert cfg is not None
+    assert cfg.source == "platform"
+    assert cfg.model == "relay-b"
+    assert cfg.api_key == "sk-relay-b-key"
 
 
 # --- PlatformProvider: per-request model → key (辩论跨模型 / F3) --------------

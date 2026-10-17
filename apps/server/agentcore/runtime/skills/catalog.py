@@ -5,10 +5,12 @@ from __future__ import annotations
 from agentcore.runtime.skills.data_file_landing import _DATA_FILE_LANDING
 from agentcore.runtime.skills.page_ui import _PAGE_UI
 from agentcore.runtime.skills.product_help import build_product_help_body
+from agentcore.runtime.skills.prompts import _PROMPTS
 from agentcore.runtime.skills.registry import (
     AUDIENCE_CEO_ONLY,
     GROUP_DELIVERY,
     GROUP_PRODUCT,
+    GROUP_WORKSPACE,
     SkillRegistry,
     SystemSkill,
 )
@@ -18,6 +20,13 @@ from agentcore.runtime.skills.registry import (
 # usual false friend. Python len ≤80. HOW stays in the body. ``blurb`` is
 # toolbox-card only. A bare noun ("整理表") is opened on unrelated turns.
 _SYSTEM_SKILLS: tuple[SystemSkill, ...] = (
+    SystemSkill(
+        name="prompts",
+        summary="用户要把规矩写成常驻、按需或碰到文件时才查阅。普通稿、干活不查阅。",
+        blurb="本桌规矩怎么写成常驻、按需、碰到文件",
+        body=_PROMPTS,
+        group=GROUP_WORKSPACE,
+    ),
     SystemSkill(
         name="data_file_landing",
         summary="用户要把数据文件交成可打开的表时才查阅。成篇、做页面、问产品不查阅。",

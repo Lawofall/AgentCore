@@ -28,6 +28,7 @@ from agentcore.auth.usernames import (
 )
 from agentcore.config import settings
 from agentcore.core.errors import (
+    AccountLockedError,
     AdminProductForbiddenError,
     AuthenticationError,
     AuthorizationError,
@@ -64,7 +65,7 @@ def _subject_hash(username: str) -> str:
 
 _MIN_PASSWORD_LENGTH = 8
 _MAX_FAILED_ATTEMPTS = 5
-_LOCKOUT_DURATION = timedelta(minutes=15)
+_LOCKOUT_DURATION = timedelta(minutes=10)
 _USER_AGENT_MAX = 512
 # Benign-concurrency grace for refresh rotation: a just-rotated token re-presented
 # within this window is treated as the *same* logical refresh, not a leak. Clients
@@ -261,16 +262,21 @@ class AuthService:
                 user_id=user.user_id,
                 platform=platform,
             )
-            raise AuthenticationError("账户已临时锁定，请稍后再试")
+            raise AccountLockedError(locked_until=creds.locked_until, now=now)
 
         if not verify_password(password, creds.password_hash):
-            await self._register_failure(creds.user_id, now)
+            attempts = await self._register_failure(creds.user_id, now)
+            locked = attempts >= _MAX_FAILED_ATTEMPTS
             logger.warning(
                 "auth.login_failed",
-                reason="password",
+                reason="locked" if locked else "password",
                 user_id=user.user_id,
                 platform=platform,
             )
+            if locked:
+                # Same ``now`` the row was locked with, so the countdown matches
+                # ``locked_until`` instead of starting a second window.
+                raise AccountLockedError(locked_until=now + _LOCKOUT_DURATION, now=now)
             raise AuthenticationError("用户名或密码错误")
 
         if creds.failed_attempts or creds.locked_until is not None:
@@ -820,8 +826,8 @@ class AuthService:
         if now - started > max_age:
             raise AuthenticationError("Refresh token family expired")
 
-    async def _register_failure(self, user_id: str, now: datetime) -> None:
-        await self._credentials.increment_failure(
+    async def _register_failure(self, user_id: str, now: datetime) -> int:
+        return await self._credentials.increment_failure(
             user_id,
             max_attempts=_MAX_FAILED_ATTEMPTS,
             lock_until=now + _LOCKOUT_DURATION,

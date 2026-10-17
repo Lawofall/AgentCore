@@ -91,15 +91,6 @@ def _patch_pipeline(monkeypatch, provider, registry: ToolRegistry) -> None:
 
     monkeypatch.setattr(pipeline, "build_turn_router", _fake_build_turn_router)
 
-    class _FakeStore:
-        async def load(self, _user_id: str, _path: str, scope: str | None = None) -> str:
-            return ""
-
-        async def list(self, _user_id: str, scope: str | None = None) -> list:
-            return []
-
-    monkeypatch.setattr("agentcore.runtime.pipeline.run.default_memory_store", lambda: _FakeStore())
-
     async def _noop_dispose() -> None:
         return None
 

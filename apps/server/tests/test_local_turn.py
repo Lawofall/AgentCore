@@ -297,7 +297,7 @@ def _patch_persistence(
         _orphan_hot,
     )
     # Local derived mint (title/followups) now goes through run_background_llm.
-    async def _run_bg(user_id, *, purpose="title", runner):
+    async def _run_bg(user_id, *, purpose="title", runner, conversation_id=None):
         from agentcore.billing.gate import BackgroundLlmResult
         from agentcore.llm.credentials import LLMCredentials
 

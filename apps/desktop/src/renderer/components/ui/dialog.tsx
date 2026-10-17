@@ -10,8 +10,10 @@ import type { ComponentProps } from "react";
  * radii follow `desktop-layout.mdc` / `color-tokens.mdc` (dialogs = `rounded-xl`,
  * popover surface, `bg-overlay` scrim). Compose with `Dialog` + `DialogContent`
  * (+ optional `DialogHeader` / `DialogBody` / `DialogTitle` / `DialogFooter`).
- * Width via `size` (`md` confirm/forms, `lg` default readers, `xl` command
- * palette, `2xl` dual-pane reader) — never a second `max-w-*` on `className`.
+ * Width via `size` only (`md` 28rem, `lg` 32rem, `xl` 36rem, `2xl` 42rem).
+ * No fifth token, and never the page column (1200px). Height stays inside
+ * the dialog: readers cap at `min(80vh, 36rem)`, one-item editors at
+ * `min(80vh, 40rem)`. Never a second `max-w-*` on `className`.
  */
 export const Dialog = DialogPrimitive.Root;
 export const DialogTrigger = DialogPrimitive.Trigger;

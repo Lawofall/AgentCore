@@ -1593,6 +1593,23 @@ def _assert_honest_tool_schema_copy(msg: str) -> None:
     assert "The tool schema is not supported" not in msg
 
 
+async def test_complete_400_go_subscription_payment_is_insufficient_balance():
+    """Go「订阅因付款方式停了」是普通 400，标题要能把它当成余额不足去换 Key。"""
+    body = (
+        b'{"error":{"message":"Upstream request failed: Your Go subscription ended '
+        b'because its payment method needs authorization."}}'
+    )
+    provider = await _mock_provider(
+        lambda request: httpx.Response(400, content=body),
+        base_url=_GO_URL,
+    )
+    try:
+        with pytest.raises(LLMInsufficientBalanceError):
+            await provider.complete(_req())
+    finally:
+        await provider.close()
+
+
 def test_client_error_message_400_unknown_bracket_code_still_passthrough():
     """Unknown vendor bracket codes keep the unclassified 400 passthrough."""
     from agentcore.llm.errors import client_error_message

@@ -169,7 +169,7 @@ function renderCatalog(
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
-  return render(
+  const view = render(
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={[path]}>
         <Routes>
@@ -194,6 +194,7 @@ function renderCatalog(
       </MemoryRouter>
     </QueryClientProvider>,
   );
+  return view;
 }
 
 function alwaysRail() {
@@ -296,7 +297,7 @@ describe("PromptCatalog 概览", () => {
       expect(screen.getByTestId("prompt-overview")).toBeTruthy();
     });
     expect(screen.queryByText("自带")).toBeNull();
-    expect(screen.queryByRole("heading", { name: "必带" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "常驻" })).toBeNull();
     expect(screen.queryByRole("heading", { name: "按需" })).toBeNull();
     expect(screen.getByRole("heading", { name: "交代" })).toBeTruthy();
     expect(screen.queryByRole("navigation", { name: "工具箱" })).toBeNull();
@@ -352,8 +353,9 @@ describe("PromptCatalog 概览", () => {
     await waitFor(() => {
       expect(screen.getByTestId("prompt-overview")).toBeTruthy();
     });
-    const title = screen.getByRole("heading", { name: "交代" });
-    const row = title.parentElement?.parentElement as HTMLElement;
+    const heading = screen.getByRole("heading", { name: "交代" });
+    const row = heading.parentElement?.parentElement;
+    if (!row) throw new Error("交代标题行缺失");
     const toggle = within(row).getByRole("switch", { name: "出厂" });
     expect(within(row).getByRole("button", { name: "新建夹" })).toBeTruthy();
     expect(within(row).getByRole("button", { name: /^新建$/ })).toBeTruthy();
@@ -395,9 +397,11 @@ describe("PromptCatalog 概览", () => {
     expect(within(dialog).queryByText("三选一")).toBeNull();
     expect(screen.queryByTestId("memory-updates-view")).toBeNull();
     expect(screen.getByTestId("prompt-overview")).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole("button", { name: "关闭" }));
+    expect(screen.getByTestId("prompt-overview")).toBeTruthy();
   });
 
-  it("官方 HOW 在按需里标官方，不进必带、不进夹", async () => {
+  it("官方 HOW 在按需里标官方，不进常驻、不进夹", async () => {
     renderCatalog("/toolbox/mine/skills", {
       ...base,
       skills: [
@@ -431,7 +435,7 @@ describe("PromptCatalog 概览", () => {
       within(factory).getByRole("button", { name: "跑命令 / 启服" }),
     ).toBeTruthy();
     expect(within(factory).getAllByText("官方")).toHaveLength(2);
-    expect(within(factory).queryByText("必带")).toBeNull();
+    expect(within(factory).queryByText("常驻")).toBeNull();
     expect(screen.queryByTestId("prompt-rail-always")).toBeNull();
     expect(screen.queryByTestId("my-skills")).toBeNull();
     expect(screen.queryByTestId("prompt-rail-official")).toBeNull();
@@ -526,13 +530,13 @@ describe("PromptCatalog 概览", () => {
     await waitFor(() => {
       expect(previewText(onDemandRail(), "合同审查")).toBeTruthy();
     });
+    expect(onDemandRail().textContent).toContain("市场");
+    expect(onDemandRail().textContent).not.toContain("我的");
+    expect(onDemandRail().textContent).not.toContain("法律合规");
     const dialog = await openReadDialog(onDemandRail(), "合同审查");
     expect(within(dialog).getByText("市场")).toBeTruthy();
     expect(within(dialog).queryByText("我的")).toBeNull();
     expect(within(dialog).getByText("法律合规")).toBeTruthy();
-    expect(onDemandRail().textContent).toContain("市场");
-    expect(onDemandRail().textContent).not.toContain("我的");
-    expect(onDemandRail().textContent).not.toContain("法律合规");
     expect(screen.queryByRole("button", { name: "上架" })).toBeNull();
   });
 });
@@ -657,7 +661,7 @@ describe("PromptCatalog 拖拽搬家", () => {
     });
   });
 
-  it("拖过货架后松手在必带落点写成常驻", async () => {
+  it("拖过货架后松手在常驻落点写成常驻", async () => {
     await renderMineCatalog();
     dropOnAlways("d1");
     await waitFor(() => {
@@ -1396,16 +1400,18 @@ describe("PromptCatalog 夹", () => {
     renderCatalog();
     fireEvent.contextMenu(await screen.findByRole("button", { name: "法律" }));
     fireEvent.click(await screen.findByRole("menuitem", { name: "删除" }));
-    const dialog = await screen.findByRole("dialog");
+    const dialog = await screen.findByRole("dialog", { name: /删除/ });
     expect(dialog.textContent).toContain("回到货架");
     expect(deleteDocument).not.toHaveBeenCalled();
     expect(reparentDocument).not.toHaveBeenCalled();
     fireEvent.click(within(dialog).getByRole("button", { name: "取消" }));
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: /删除/ })).toBeNull(),
+    );
 
     fireEvent.contextMenu(screen.getByRole("button", { name: "法律" }));
     fireEvent.click(await screen.findByRole("menuitem", { name: "删除" }));
-    const again = await screen.findByRole("dialog");
+    const again = await screen.findByRole("dialog", { name: /删除/ });
     vi.mocked(reparentDocument).mockImplementation(async () => {
       vi.mocked(listScopeEntries).mockResolvedValue([
         { ...entry, parentId: "other-1" },
@@ -1562,7 +1568,7 @@ describe("PromptCatalog 我的条目多选", () => {
     expect(await screen.findByText("删除 2 项")).toBeTruthy();
     expect(screen.queryByText("重命名")).toBeNull();
     fireEvent.click(screen.getByText("删除 2 项"));
-    const dialog = await screen.findByRole("dialog");
+    const dialog = await screen.findByRole("dialog", { name: /删除/ });
     expect(within(dialog).getByText("删除这 2 条？")).toBeTruthy();
     expect(within(dialog).getByText(/不可撤销/)).toBeTruthy();
     fireEvent.click(within(dialog).getByRole("button", { name: "删除" }));
@@ -1605,7 +1611,7 @@ describe("PromptCatalog 我的条目多选", () => {
     await renderTwoMine();
     fireEvent.contextMenu(within(onDemandRail()).getByText("合同审查"));
     fireEvent.click(await screen.findByText("删除"));
-    const dialog = await screen.findByRole("dialog");
+    const dialog = await screen.findByRole("dialog", { name: /删除/ });
     expect(within(dialog).getByText("删除「合同审查」？")).toBeTruthy();
     expect(confirmSpy).not.toHaveBeenCalled();
     fireEvent.click(within(dialog).getByRole("button", { name: "删除" }));

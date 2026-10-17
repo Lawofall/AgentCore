@@ -37,8 +37,8 @@ import {
   sidePanelFocusTabId,
   sidePanelMaxWidth,
   simpleTurnDetailTabId,
-  turnTraceTabId,
   terminalDismissKey,
+  turnTraceTabId,
   useSidePanelStore,
 } from "../sidePanel";
 import { nextDockActiveAfterFloat } from "../sidePanel/float";

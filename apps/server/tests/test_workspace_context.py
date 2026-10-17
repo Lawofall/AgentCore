@@ -684,7 +684,6 @@ def test_workspace_facts_follow_resident_core_for_ceo_and_worker():
     )
     env = render_ceo_turn_envelope(
         workspace_context=facts,
-        workspace_file_index="文件：空",
         include_runtime=False,
     )
     worker = compose_worker_base_prompt(base, workspace_context=facts)
@@ -702,15 +701,14 @@ def test_workspace_facts_follow_resident_core_for_ceo_and_worker():
     assert "执行：云端沙箱" not in env and "执行：云端沙箱" not in worker_env
     assert "<身份>" not in ceo
     assert "<运行时>" not in worker
-    assert "文件：空" in env
-    assert env.index("文件：空") < env.index("</工作区>")
+    assert "本对话：" not in env
     assert facts.count("</工作区>") == 1
     assert env.count("</工作区>") == 1
     assert worker_env.count("</工作区>") == 1
     assert env.count("<工作区>\n") == 1
     assert "<工作区文件>" not in env
-    assert "文件：空" not in worker
-    assert "文件：空" not in worker_env
+    assert "本对话：" not in worker
+    assert "本对话：" not in worker_env
     _assert_how_identifiers_not_in_facts(facts)
 
 

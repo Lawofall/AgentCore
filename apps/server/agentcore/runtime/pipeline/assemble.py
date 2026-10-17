@@ -11,11 +11,8 @@ from agentcore.config import settings
 from agentcore.core.types import DEFAULT_PERMISSION_AXES, WorkspaceBoundary
 from agentcore.llm.profiles import TurnProfiles
 from agentcore.runtime.approvals import ApprovalGate
-from agentcore.runtime.context import (
-    build_workspace_overview,
-    resolve_channel_profile,
-)
-from agentcore.runtime.context.envelope_switches import include_file_index
+from agentcore.runtime.context import resolve_channel_profile
+from agentcore.runtime.context.conversation_edits import build_conversation_edits_block
 from agentcore.runtime.events import EventSink
 from agentcore.runtime.interaction import default_interaction_registry
 from agentcore.runtime.resolve.prompt import (
@@ -78,16 +75,14 @@ async def assemble_ceo_turn(
     x_client_platform: str | None,
 ) -> AssembledTurn:
     """Assemble the CEO coordinator toolset and the turn's chat system prompt."""
-    # File index is independent of coordinator wiring — start it immediately so a
-    # large desk listing overlaps the toolset / consult work instead of sitting
-    # on the first-token path after both finish.
-    if include_file_index():
-        overview_task = asyncio.create_task(
+    # Folder-chat mutation pin is independent of coordinator wiring — start
+    # the journal read so it overlaps the toolset / consult work. Bare chats
+    # skip it: scratch *is* the tree.
+    if folder_id is not None:
+        edits_task = asyncio.create_task(
             _timed_phase(
-                "workspace_overview",
-                build_workspace_overview(
-                    backend,
-                    shared_workspace=folder_id is not None,
+                "conversation_edits",
+                build_conversation_edits_block(
                     conversation_id=conversation_id,
                     exclude_turn_id=message_id,
                 ),
@@ -95,10 +90,10 @@ async def assemble_ceo_turn(
         )
     else:
 
-        async def _no_file_index() -> str:
+        async def _no_conversation_edits() -> str:
             return ""
 
-        overview_task = asyncio.create_task(_no_file_index())
+        edits_task = asyncio.create_task(_no_conversation_edits())
     await asyncio.sleep(0)
     try:
         return await _assemble_ceo_wired(
@@ -119,13 +114,13 @@ async def assemble_ceo_turn(
             suspension_saver=suspension_saver,
             suspension_deleter=suspension_deleter,
             x_client_platform=x_client_platform,
-            overview_task=overview_task,
+            edits_task=edits_task,
         )
     except BaseException:
-        if not overview_task.done():
-            overview_task.cancel()
+        if not edits_task.done():
+            edits_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
-                await overview_task
+                await edits_task
         raise
 
 
@@ -148,7 +143,7 @@ async def _assemble_ceo_wired(
     suspension_saver: SuspensionSaver | None,
     suspension_deleter: SuspensionDeleter | None,
     x_client_platform: str | None,
-    overview_task: asyncio.Task[str],
+    edits_task: asyncio.Task[str],
 ) -> AssembledTurn:
     # The CEO owns the conversation and replies directly, but it is a
     # COORDINATOR: it carries only the read / retrieval built-ins
@@ -253,6 +248,7 @@ async def _assemble_ceo_wired(
         skill_registry=prepared.skill_registry,
         folder_id=folder_id,
         user_id=prepared.base_tool_context.user_id,
+        workspace_reader=backend,
     )
 
     # The entry chat agent gets the SLIM CEO core + the unified ``<按需目录>``.
@@ -265,14 +261,14 @@ async def _assemble_ceo_wired(
     )
     from agentcore.runtime.engine.governance import resolve_openai_tool_defs
 
-    # CEO catalog, session header, and the already-running file index overlap.
-    on_demand_entries, _, workspace_overview = await _gather_cancel_on_fail(
+    # CEO catalog, session header, and the already-running edits pin overlap.
+    on_demand_entries, _, conversation_edits = await _gather_cancel_on_fail(
         _timed_phase(
             "on_demand_dir",
             list_consult_entries(chat_tools, prepared.base_tool_context.user_id),
         ),
         hydrate_session_header(conversation_id),
-        overview_task,
+        edits_task,
     )
     chat_system_prompt = compose_ceo_chat_prompt(
         prepared.system_prompt,
@@ -299,7 +295,7 @@ async def _assemble_ceo_wired(
     chat_envelope = resolve_emitted_envelope(
         render_ceo_turn_envelope(
             workspace_context=prepared.workspace_facts,
-            workspace_file_index=workspace_overview,
+            conversation_edits=conversation_edits,
             attachment_material=attachment_material_scene(prepared.attachment_context),
             attachment_context=prepared.attachment_context,
             table_context=prepared.table_context,

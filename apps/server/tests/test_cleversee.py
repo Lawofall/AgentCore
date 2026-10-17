@@ -79,6 +79,26 @@ async def test_cleversee_requires_api_key():
         await backend.search("q")
 
 
+async def test_cleversee_maps_invalid_api_key(monkeypatch):
+    req = httpx.Request("POST", "https://cloud-iqs.aliyuncs.com/search/unified")
+
+    class _Client:
+        async def post(self, *args, **kwargs):
+            return httpx.Response(
+                403,
+                json={"errorCode": "Retrieval.InvalidAPIKey", "errorMessage": "Incorrect APIKey"},
+                request=req,
+            )
+
+        async def aclose(self):
+            return None
+
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: _Client())
+    backend = CleverSeeBackend(api_key="iqs-test", base_url="https://cloud-iqs.aliyuncs.com")
+    with pytest.raises(EgressError, match="API Key 不正确"):
+        await backend.search("q")
+
+
 async def test_cleversee_maps_quota_without_body(monkeypatch):
     req = httpx.Request("POST", "https://cloud-iqs.aliyuncs.com/search/unified")
 

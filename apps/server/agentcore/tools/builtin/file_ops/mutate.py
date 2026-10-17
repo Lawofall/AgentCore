@@ -56,6 +56,54 @@ from .read import _format_numbered_lines
 
 logger = get_logger(__name__)
 
+
+async def _workspace_always_quota_error(
+    context: ToolContext,
+    rel_path: str,
+    new_content: str,
+    *,
+    old_content: str | None,
+    start: float,
+) -> ToolResult | None:
+    from agentcore.memory.workspace_files import refuse_always_rule_write
+
+    message = await refuse_always_rule_write(
+        context.backend, rel_path, new_content, old_content=old_content
+    )
+    if message is None:
+        return None
+    return _error(message, start, contract_failure=True)
+
+
+async def _workspace_always_edit_quota_error(
+    context: ToolContext,
+    rel_path: str,
+    *,
+    old_string: str,
+    new_string: str,
+    replace_all: bool,
+    start: float,
+) -> ToolResult | None:
+    from agentcore.memory.workspace_files import is_workspace_rule_path
+
+    if not is_workspace_rule_path(rel_path):
+        return None
+    try:
+        current = await context.backend.read(rel_path)
+    except PathNotFound:
+        return None
+    except WorkspaceError as e:
+        dead = _maybe_channel_dead_error(e, start)
+        if dead is not None:
+            return dead
+        return None
+    preview = apply_text_replace(current, old_string, new_string, all_=replace_all)
+    if not isinstance(preview, TextReplaceOk):
+        return None
+    return await _workspace_always_quota_error(
+        context, rel_path, preview.content, old_content=current, start=start
+    )
+
 # 写类工具「回显结果」：worker 写 / 替换后，常会为「确认写对没」再花一整轮 read 回读自检
 # （trace 4d715ea0 实测：多 worker 读→改→回读→handoff，那一轮回读零信息增量）。
 # Artifact-first：写成功回执 = artifact manifest（path/chars/lines/hash/标题树/末段预览），
@@ -422,9 +470,7 @@ class FileWriteTool:
         # Schema layer: 这是什么。
         return ToolSchema(
             name="write",
-            description=(
-                "写入文件。用户规则写 .agentcore/rules/*.md。"
-            ),
+            description="写入文件。",
             parameters={
                 "type": "object",
                 "properties": {
@@ -461,17 +507,6 @@ class FileWriteTool:
                 "file_path 不能为空：请提供工作区内的相对文件路径（如 report.md）",
                 start,
             )
-
-        from .user_rules import maybe_user_rule_write
-
-        rule_hit = await maybe_user_rule_write(
-            requested_path=str(requested_path),
-            content=content if isinstance(content, str) else str(content or ""),
-            context=context,
-            start=start,
-        )
-        if rule_hit is not None:
-            return rule_hit
 
         prepared = await prepared_write_relpath(
             requested_path, context, host_grant_mode="attach_rw"
@@ -563,6 +598,12 @@ class FileWriteTool:
                     start,
                     contract_failure=True,
                 )
+
+        quota_err = await _workspace_always_quota_error(
+            context, rel_path, content, old_content=old_content, start=start
+        )
+        if quota_err is not None:
+            return quota_err
 
         try:
             written = await context.backend.write(rel_path, content)
@@ -690,19 +731,6 @@ class StrReplaceTool:
         if not rel_path:
             return _error("file_path 不能为空：请提供工作区内的相对文件路径", start)
 
-        from .user_rules import maybe_user_rule_str_replace
-
-        rule_hit = await maybe_user_rule_str_replace(
-            requested_path=str(rel_path),
-            old_string=old_string,
-            new_string=new_string,
-            replace_all=replace_all,
-            context=context,
-            start=start,
-        )
-        if rule_hit is not None:
-            return rule_hit
-
         prepared = await prepared_write_relpath(rel_path, context, host_grant_mode="attach_rw")
         if isinstance(prepared, ToolResult):
             return prepared
@@ -732,6 +760,17 @@ class StrReplaceTool:
         )
         if applied is not None:
             return applied
+
+        quota_err = await _workspace_always_edit_quota_error(
+            context,
+            rel_path,
+            old_string=old_string,
+            new_string=new_string,
+            replace_all=replace_all,
+            start=start,
+        )
+        if quota_err is not None:
+            return quota_err
 
         try:
             outcome = await context.backend.replace(

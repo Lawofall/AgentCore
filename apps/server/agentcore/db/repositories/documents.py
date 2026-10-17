@@ -516,6 +516,11 @@ class DocumentRepository:
         User-disputed entries are excluded here, which is also why they stop counting toward
         the always quota: the pool measures what actually rides the prompt.
         """
+        if ai_maintained is False:
+            from agentcore.memory.rule_resolve import counts_as_always_content
+
+            scoped = await self.list_scoped_markdown(user_id, folder_id)
+            return [doc for doc in scoped if counts_as_always_content(doc.content or "")]
         conditions: list[ColumnElement[bool]] = [
             Document.user_id == user_id,
             _scope_clause(folder_id),
@@ -557,53 +562,54 @@ class DocumentRepository:
     async def list_on_demand_user_rules(
         self, user_id: str, folder_id: str | None
     ) -> list[Document]:
-        """On-demand user-rule docs of one scope (``ai_maintained=false``, not memory topics).
+        """Markdown whose frontmatter says on-demand and has a description.
 
-        These ride the「规则目录」+ ``consult`` — never the always ``<设定>`` budget.
-        Same convention-parent filter as :meth:`list_injectable_rules` for user rules,
-        and the same user-disputed exclusion (a disputed entry leaves the catalog too).
+        ``role`` and the rules directory are not the ticket.
         """
-        conditions: list[ColumnElement[bool]] = [
-            Document.user_id == user_id,
-            _scope_clause(folder_id),
-            Document.role == "rule",
-            Document.apply_mode == "on_demand",
-            Document.ai_maintained.is_(False),
-            Document.kind == "document",
-            Document.deleted_at.is_(None),
-            Document.disputed_at.is_(None),
-        ]
-        parent_filter = await self._injectable_parent_filter(
-            user_id, folder_id, ai_maintained=False
-        )
-        if parent_filter is not None:
-            conditions.append(parent_filter)
-        result = await self._session.execute(
-            select(Document).where(*conditions).order_by(Document.name.asc())
-        )
-        return list(result.scalars().all())
+        from agentcore.memory.rule_resolve import live_rule_from_doc
+
+        docs = await self.list_scoped_markdown(user_id, folder_id)
+        out: list[Document] = []
+        for doc in docs:
+            live = live_rule_from_doc(doc, column_apply="", rank=0)
+            if live is not None and live.apply == "on_demand":
+                out.append(doc)
+        return out
 
     async def list_path_user_rules(
         self, user_id: str, folder_id: str | None
     ) -> list[Document]:
-        """Path-scoped user rules of one scope. Bounded patterns stay off ``<设定>``."""
-        conditions: list[ColumnElement[bool]] = [
-            Document.user_id == user_id,
-            _scope_clause(folder_id),
-            Document.role == "rule",
-            Document.apply_mode == "paths",
-            Document.ai_maintained.is_(False),
-            Document.kind == "document",
-            Document.deleted_at.is_(None),
-            Document.disputed_at.is_(None),
-        ]
-        parent_filter = await self._injectable_parent_filter(
-            user_id, folder_id, ai_maintained=False
-        )
-        if parent_filter is not None:
-            conditions.append(parent_filter)
+        """Bounded path-channel markdown. Unbounded patterns count as 常驻."""
+        from agentcore.documents.path_rules import patterns_are_unbounded
+        from agentcore.memory.rule_resolve import live_rule_from_doc
+
+        docs = await self.list_scoped_markdown(user_id, folder_id)
+        out: list[Document] = []
+        for doc in docs:
+            live = live_rule_from_doc(doc, column_apply="", rank=0)
+            if (
+                live is not None
+                and live.apply == "paths"
+                and not patterns_are_unbounded(live.patterns)
+            ):
+                out.append(doc)
+        return out
+
+    async def list_scoped_markdown(
+        self, user_id: str, folder_id: str | None
+    ) -> list[Document]:
+        """Person-saved markdown in one scope. Channel is frontmatter, not ``role``."""
         result = await self._session.execute(
-            select(Document).where(*conditions).order_by(Document.name.asc())
+            select(Document)
+            .where(
+                Document.user_id == user_id,
+                _scope_clause(folder_id),
+                Document.kind == "document",
+                Document.ai_maintained.is_(False),
+                Document.deleted_at.is_(None),
+                Document.disputed_at.is_(None),
+            )
+            .order_by(Document.name.asc())
         )
         return list(result.scalars().all())
 
@@ -635,13 +641,16 @@ class DocumentRepository:
         name: str,
         content: str,
         *,
-        apply: str = "always",
+        apply: str = "on_demand",
         description: str | None = None,
     ) -> Document:
-        """Create-or-replace one named user-rule markdown under ``AgentCore/rules/``."""
+        """Create-or-replace one named user-rule markdown.
+
+        Description is derived from the body on every write.
+        """
         rules_dir = await self.ensure_rules_dir(user_id, folder_id)
         doc = await self.get_user_rule_doc(user_id, folder_id, name)
-        mode: ApplyMode = apply if apply in ("always", "on_demand", "paths") else "always"  # type: ignore[assignment]
+        mode: ApplyMode = apply if apply in ("always", "on_demand", "paths") else "on_demand"  # type: ignore[assignment]
         body = set_entry_frontmatter(content, apply=mode, description=description)
         if doc is None:
             doc = Document(
@@ -732,13 +741,15 @@ class DocumentRepository:
             content="",
         )
         self._session.add(doc)
-        if kind == "document":
+        if kind == "document" and role == "rule":
             mode = apply_mode if apply_mode in ("always", "on_demand", "paths") else "on_demand"
             try:
                 body = set_entry_frontmatter(content, apply=mode)  # type: ignore[arg-type]
             except FrontmatterEditError as exc:
                 raise ValueError(str(exc)) from exc
             self._set_content_and_derive(doc, body)
+        elif kind == "document":
+            self._set_content_and_derive(doc, content)
         else:
             doc.content = ""
             doc.description = ""

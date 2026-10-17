@@ -557,7 +557,7 @@ def test_delta_names_the_reordered_project_catalog_not_the_container():
     assert delta.changed == ("folder_catalog",)
 
 
-def test_delta_reports_the_volatile_tail_when_only_the_file_index_moved():
+def test_delta_reports_the_volatile_tail_when_only_workspace_facts_moved():
     _record_ceo_turn(conversation_id="c1", turn_id="t1", folder_catalog="A", tail="FILES-1")
     _record_ceo_turn(conversation_id="c1", turn_id="t2", folder_catalog="A", tail="FILES-2")
     delta = prompt_section_delta("c1")

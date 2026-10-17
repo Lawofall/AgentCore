@@ -189,17 +189,21 @@ class RuleConsultSource:
 
     Ticketed sidecar turns share the prepare snapshot with the directory
     (``load_on_demand_user_rules``): miss → empty, no live ``/rules/list``.
-    Unticketed turns read the local document session.
+    Unticketed turns read the local document session. Workspace
+    ``AgentCore/rules`` files overlay the same names when a reader is bound.
     """
 
     folder_id: str | None = None
     skip_names: Collection[str] = field(default_factory=frozenset)
+    workspace_reader: object | None = None
 
     async def list_directory(self, user_id: str) -> Sequence[ConsultDirectoryEntry]:
         from agentcore.memory.rules_injection import load_on_demand_user_rules
 
         skip = set(self.skip_names)
-        rules = await load_on_demand_user_rules(user_id, folder_id=self.folder_id)
+        rules = await load_on_demand_user_rules(
+            user_id, folder_id=self.folder_id, reader=self.workspace_reader
+        )
         return [
             ConsultDirectoryEntry(name=r.name, summary=r.summary, section="rule")
             for r in rules
@@ -213,7 +217,10 @@ class RuleConsultSource:
         if not key or key in set(self.skip_names):
             return None
         return await lookup_on_demand_rule_body(
-            user_id, folder_id=self.folder_id, name=key
+            user_id,
+            folder_id=self.folder_id,
+            name=key,
+            reader=self.workspace_reader,
         )
 
 
@@ -315,15 +322,14 @@ def build_merged_consult_source(
     *,
     skill_registry: SkillRegistry | None,
     tool_names: Collection[str],
-    memory_store: object | None,
     folder_id: str | None,
     include_rules: bool = True,
     skill_audience: str | None = None,
     tool_registry: Any | None = None,
     skip_rule_names: Collection[str] | None = None,
+    workspace_reader: object | None = None,
 ) -> MergedConsultSource:
     """Assemble the turn's unified consult source (CEO or worker)."""
-    del memory_store
     skill = (
         SkillConsultSource(
             registry=skill_registry,
@@ -340,7 +346,9 @@ def build_merged_consult_source(
     )
     rule = (
         RuleConsultSource(
-            folder_id=folder_id, skip_names=skip_rule_names or frozenset()
+            folder_id=folder_id,
+            skip_names=skip_rule_names or frozenset(),
+            workspace_reader=workspace_reader,
         )
         if include_rules
         else None
@@ -353,22 +361,22 @@ async def build_merged_consult_source_for_user(
     user_id: str,
     skill_registry: SkillRegistry | None,
     tool_names: Collection[str],
-    memory_store: object | None,
     folder_id: str | None,
     include_rules: bool = True,
     skill_audience: str | None = None,
     tool_registry: Any | None = None,
+    workspace_reader: object | None = None,
 ) -> MergedConsultSource:
     """Same as :func:`build_merged_consult_source`. Official HOW is factory-only."""
     del user_id
     return build_merged_consult_source(
         skill_registry=skill_registry,
         tool_names=tool_names,
-        memory_store=memory_store,
         folder_id=folder_id,
         include_rules=include_rules,
         skill_audience=skill_audience,
         tool_registry=tool_registry,
+        workspace_reader=workspace_reader,
     )
 
 

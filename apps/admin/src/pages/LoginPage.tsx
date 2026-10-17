@@ -5,10 +5,12 @@ import {
   loginIdentifierError,
   passwordFieldError,
 } from "@/lib/emailAuth";
+import { lockButtonLabel, lockUntilFromApiError, useUnlockCountdown } from "@/lib/loginLockout";
 import {
   loadRememberedUsername,
   saveRememberedUsername,
 } from "@/lib/rememberedUsername";
+import { LoginLockNotice } from "@/pages/LoginLockNotice";
 import { errorMessage } from "@/services/api";
 import { login, loginMfa } from "@/services/auth";
 import { useAuthStore } from "@/stores/auth";
@@ -40,10 +42,17 @@ export function LoginPage() {
   const [totpCode, setTotpCode] = useState("");
   const [mfaMode, setMfaMode] = useState<MfaMode>("totp");
   const [submitting, setSubmitting] = useState(false);
+  const [lock, setLock] = useState<{ until: number; identifier: string } | null>(
+    null,
+  );
 
   const mfaLength = mfaMode === "totp" ? TOTP_LENGTH : RECOVERY_LENGTH;
   const mfaReady = totpCode.length === mfaLength;
 
+  const lockUntil =
+    lock != null && lock.identifier === username.trim() ? lock.until : null;
+  const lockLeft = useUnlockCountdown(lockUntil);
+  const loginHeld = lockLeft > 0;
   const identifierErr = loginIdentifierError(username);
   const passwordErr = passwordFieldError(password);
   const identifierDirty = attempted || username.length > 0;
@@ -53,10 +62,11 @@ export function LoginPage() {
   const handleCredentials = async (e: FormEvent) => {
     e.preventDefault();
     setAttempted(true);
-    if (!credentialsReady || submitting) return;
+    if (!credentialsReady || submitting || loginHeld) return;
+    const trimmed = username.trim();
     setSubmitting(true);
+    setLock(null);
     try {
-      const trimmed = username.trim();
       const outcome = await login(trimmed, password, persistSession);
       saveRememberedUsername(trimmed);
       if (outcome.kind === "mfa_required") {
@@ -76,7 +86,9 @@ export function LoginPage() {
       if (outcome.user.role === "admin") setAuthenticated(outcome.user);
       else setForbidden(outcome.user);
     } catch (err) {
-      toast.error(errorMessage(err));
+      const until = lockUntilFromApiError(err);
+      if (until != null) setLock({ until, identifier: trimmed });
+      else toast.error(errorMessage(err));
       setSubmitting(false);
     }
   };
@@ -205,13 +217,20 @@ export function LoginPage() {
               />
               保持登录
             </label>
+            {lockUntil != null && (
+              <LoginLockNotice key={lockUntil} left={lockLeft} />
+            )}
             <Button
               type="submit"
-              disabled={submitting}
+              disabled={submitting || loginHeld}
               className="mt-1 w-full"
             >
               {submitting && <Spinner />}
-              {submitting ? "登录中…" : "登录"}
+              {submitting
+                ? "登录中…"
+                : loginHeld
+                  ? lockButtonLabel(lockLeft)
+                  : "登录"}
             </Button>
           </form>
         ) : (

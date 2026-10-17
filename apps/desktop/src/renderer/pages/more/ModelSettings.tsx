@@ -26,6 +26,7 @@ import {
   buildDefaultProviderGroups,
   decodePointer,
   encodePointer,
+  isPlatformGroupId,
   pointerValue,
 } from "@/lib/llmDefaults";
 import { useNarrowLayoutState } from "@/lib/narrowLayout";
@@ -94,11 +95,12 @@ function notifyUnlessWarnings(
   notifySuccess(message);
 }
 
-/** 从分组取第一个可选槽（平台或 BYOK），用于新建种子。 */
+/** 从分组取第一个可选 BYOK 槽，用于新建种子。不计遗留平台 / 孤儿组。 */
 function firstSlotFromGroups(
   groups: DefaultProviderGroup[],
 ): ModelProfileSlot | null {
   for (const g of groups) {
+    if (isPlatformGroupId(g.providerId) || g.orphan) continue;
     const m = g.models.find((opt) => opt.available !== false);
     if (!m) continue;
     return decodePointer(encodePointer(g.providerId, m.model));
@@ -107,31 +109,9 @@ function firstSlotFromGroups(
 }
 
 /**
- * 无可选模型时的引导。
- * 平台可用：稍后重试 / 去设置检查（不硬推第三方）。
- * 平台不可用：接入服务商。
+ * 无可选模型时的引导。装配拣选器只出 BYOK，一律接到服务商。
  */
-function NoAvailableModelsGuide({
-  className,
-  platformAvailable,
-}: {
-  className?: string;
-  platformAvailable: boolean;
-}) {
-  if (platformAvailable) {
-    return (
-      <p className={cn("text-xs text-muted-foreground", className)}>
-        暂无可用模型。请稍后重试，或到{" "}
-        <Link
-          to="/more/providers"
-          className="text-primary underline-offset-2 hover:underline"
-        >
-          设置 · 服务商
-        </Link>{" "}
-        检查配置。
-      </p>
-    );
-  }
+function NoAvailableModelsGuide({ className }: { className?: string }) {
   return (
     <p className={cn("text-xs text-muted-foreground", className)}>
       暂无可用模型。请到{" "}
@@ -203,7 +183,6 @@ export function ModelSettings({ embedded = false }: { embedded?: boolean }) {
               <ModelProfilesSection
                 providers={providers}
                 catalog={catalog}
-                platformAvailable={platformAvailable}
                 onChanged={refresh}
               />
             ) : (
@@ -254,12 +233,10 @@ function EmptyProfilesCta() {
 function ModelProfilesSection({
   providers,
   catalog,
-  platformAvailable,
   onChanged,
 }: {
   providers: LlmProviderView[];
   catalog: ReturnType<typeof useModels>["data"];
-  platformAvailable: boolean;
   onChanged: () => void;
 }) {
   const {
@@ -314,18 +291,21 @@ function ModelProfilesSection({
 
   const seedMain = (): ModelProfileSlot | null => {
     const cur = catalog?.current;
-    if (cur?.id) {
+    if (cur?.id && cur.origin === "byok" && cur.provider_id) {
       return {
-        origin: cur.origin,
-        provider_id: cur.provider_id ?? null,
+        origin: "byok",
+        provider_id: cur.provider_id,
         model: cur.id,
       };
     }
-    const first = catalogModels.find((m) => m.available !== false);
-    if (first) {
+    const first = catalogModels.find(
+      (m) =>
+        m.available !== false && m.origin === "byok" && Boolean(m.provider_id),
+    );
+    if (first?.provider_id) {
       return {
-        origin: first.origin,
-        provider_id: first.provider_id ?? null,
+        origin: "byok",
+        provider_id: first.provider_id,
         model: first.id,
       };
     }
@@ -393,11 +373,9 @@ function ModelProfilesSection({
 
   const onCreate = () => {
     const main = seedMain();
-    // 无目录种子时：有 BYOK 仍可开编辑器手填；仅平台空目录 / 无服务商才拦。
+    // 无 BYOK 种子时：有服务商仍可开编辑器手填；无服务商才拦。
     if (!main && providers.length === 0) {
-      setActionError(
-        <NoAvailableModelsGuide platformAvailable={platformAvailable} />,
-      );
+      setActionError(<NoAvailableModelsGuide />);
       return;
     }
     setActionError(null);
@@ -493,7 +471,6 @@ function ModelProfilesSection({
               providers={providers}
               catalog={catalog}
               catalogModels={catalogModels}
-              platformAvailable={platformAvailable}
               initial={{
                 name: "未命名组合",
                 main: seedMain(),
@@ -517,7 +494,6 @@ function ModelProfilesSection({
                 providers={providers}
                 catalog={catalog}
                 catalogModels={catalogModels}
-                platformAvailable={platformAvailable}
                 initial={{
                   name: profile.name,
                   main: profile.main ?? null,
@@ -804,34 +780,11 @@ function ProfileListRow({
   );
 }
 
-/** 槽位的「清除 / 恢复跟随」——挂在 {@link SettingField} 的标签行右侧。 */
-function SlotClearAction({
-  label,
-  disabled,
-  onClear,
-}: {
-  label: string;
-  disabled: boolean;
-  onClear: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      disabled={disabled}
-      onClick={onClear}
-      className="text-xs text-primary underline-offset-2 hover:underline disabled:opacity-60"
-    >
-      {label}
-    </button>
-  );
-}
-
 export function ProfileEditor({
   title,
   providers,
   catalog,
   catalogModels,
-  platformAvailable,
   initial,
   saveWarnings,
   pending,
@@ -846,7 +799,6 @@ export function ProfileEditor({
   providers: LlmProviderView[];
   catalog: ReturnType<typeof useModels>["data"];
   catalogModels: ModelCatalogItem[];
-  platformAvailable: boolean;
   initial: ProfileDraft;
   /** 上次保存响应当次提醒（如复制后立刻打开编辑器）。 */
   saveWarnings?: string[];
@@ -1044,9 +996,9 @@ export function ProfileEditor({
     hint: string | undefined,
     value: ModelProfileSlot | null,
     onChange: (next: ModelProfileSlot | null) => void,
-    allowClear: boolean,
     fieldClassName?: string,
     compactTrigger?: boolean,
+    wideMenu?: boolean,
   ) => (
     <SettingField
       className={fieldClassName}
@@ -1054,15 +1006,6 @@ export function ProfileEditor({
       htmlFor={id}
       hint={hint}
       hintPlacement={hint ? "label" : "below"}
-      action={
-        allowClear && value ? (
-          <SlotClearAction
-            label="恢复跟随"
-            disabled={busy}
-            onClear={() => onChange(null)}
-          />
-        ) : undefined
-      }
     >
       <ProfileModelSelect
         id={id}
@@ -1070,9 +1013,10 @@ export function ProfileEditor({
         describedBy={hint ? `${id}-hint` : undefined}
         groups={groups}
         value={pointerValue(value)}
-        disabled={busy || !canChoose}
+        disabled={busy || (!canChoose && !value)}
         followLabel="跟随主模型"
         compactTrigger={compactTrigger}
+        wideMenu={wideMenu}
         onChange={(next) => onChange(decodePointer(next))}
       />
     </SettingField>
@@ -1143,12 +1087,7 @@ export function ProfileEditor({
               compactTrigger
               onChange={(value) => applyMain(decodePointer(value))}
             />
-            {showEmptyGuide && (
-              <NoAvailableModelsGuide
-                className="mt-2"
-                platformAvailable={platformAvailable}
-              />
-            )}
+            {showEmptyGuide && <NoAvailableModelsGuide className="mt-2" />}
           </SettingField>
           <div
             className="flex w-max max-w-full shrink-0 flex-wrap items-start gap-4"
@@ -1206,8 +1145,8 @@ export function ProfileEditor({
               undefined,
               worker,
               (next) => commitShelf({ worker: next }),
-              false,
               "w-44 shrink-0",
+              true,
               true,
             )}
             {renderSlot(
@@ -1216,8 +1155,8 @@ export function ProfileEditor({
               undefined,
               background,
               (next) => commitShelf({ background: next }),
-              false,
               "w-36 shrink-0",
+              true,
               true,
             )}
           </div>
@@ -1263,12 +1202,7 @@ export function ProfileEditor({
             disabled={busy}
             onChange={(value) => applyMain(decodePointer(value))}
           />
-          {showEmptyGuide && (
-            <NoAvailableModelsGuide
-              className="mt-1.5"
-              platformAvailable={platformAvailable}
-            />
-          )}
+          {showEmptyGuide && <NoAvailableModelsGuide className="mt-1.5" />}
         </SettingField>
         {effortSpec ? (
           <SettingField
@@ -1350,7 +1284,6 @@ export function ProfileEditor({
               "协作时队员使用",
               worker,
               setWorker,
-              true,
             )}
             {renderSlot(
               "profile-background",
@@ -1358,7 +1291,6 @@ export function ProfileEditor({
               "标题等",
               background,
               setBackground,
-              true,
             )}
           </div>
         )}

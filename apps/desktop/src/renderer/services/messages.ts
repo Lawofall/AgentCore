@@ -32,149 +32,45 @@ import {
 import { useExecutionStore } from "@/stores/execution";
 import { hydrateInteractionsFromJournal } from "@/stores/interactions";
 import type { components } from "@/types/api.generated";
-import type {
-  ContextBlockWire,
-  ProcessStep,
-  SSEEvent,
-  UsageBreakdown,
-} from "@/types/events";
+import type { ContextBlockWire, ProcessStep, SSEEvent } from "@/types/events";
 
 type Schemas = components["schemas"];
 /** A window of messages (cursor-windowed, oldest-first) from the REST endpoint. */
 type BackendMessageListResponse = Schemas["MessageListResponse"];
+type GeneratedMessage = Schemas["MessageDetail"];
+type GeneratedRuns = NonNullable<GeneratedMessage["runs"]>;
 
 /**
- * A persisted message as the REST endpoint shapes it. Mirrors the generated
- * `MessageDetail`, but types `runs.events` as the client's {@link SSEEvent}
- * union (the OpenAPI carries it as opaque JSON — SSE/event payloads are exempt
- * from the generated-types rule, API 开发规范) so the team-graph replay fold is
- * typed end to end.
+ * Persisted message row. The field list is generated `MessageDetail`.
+ * `runs` is the only structural override: OpenAPI carries events, process,
+ * and captain context as opaque JSON, and the client types them as the SSE
+ * unions. `usage.finish_reason` stays because reload still reads it; REST
+ * `UsageBreakdown` does not declare it.
  */
-export interface BackendMessage {
-  id: string;
-  conversation_id: string;
-  role: string;
-  content: string | null;
-  reasoning_content: string | null;
-  /** The turn's log correlation id (messages.trace_id) — replayed onto
-   * `message.traceId` so a reloaded bubble can copy it for one-step log lookup. */
-  trace_id?: string | null;
-  attachments?: {
-    name: string;
-    path: string;
-    truncated: boolean;
-    kind?: "file" | "dir" | "conversation" | "document";
-    workspace_path?: string | null;
-    source_folder_id?: string | null;
-    conversation_id?: string | null;
-    document_id?: string | null;
-  }[];
-  /** Conversation-page ``@`` role chips (soft mention; not attachment kind). */
-  agent_mentions?: { agent_id: string; role: string }[];
-  citations?: {
-    url: string;
-    title: string;
-    snippet?: string;
-    site?: string;
-    id?: string | null;
-    date?: string | null;
-    tier?: string | null;
-    query?: string | null;
-    deep_read?: boolean | null;
-    registrant?: string | null;
-    citable?: boolean | null;
-  }[];
-  /** 回合调研台账（引用即出处 P1, DERIVED）：messages.evidence_ledger。 */
-  evidence_ledger?: {
-    id: string;
-    url?: string;
-    title?: string;
-    snippet?: string;
-    site?: string;
-    date?: string;
-    tier?: string;
-    query?: string;
-    deep_read?: boolean;
-    registrant?: string;
-    citable?: boolean;
-  }[];
-  /** Persisted turn replay payload. `events` is a multi-agent turn's ordered
-   * run/tool SSE events (replayed through the same fold as the live stream to
-   * rebuild the team graph on reload, §9.3); `process` is a single-agent turn's
-   * 思考·正文·工具 inline timeline (前端UX设计.md §一B). `run_processes` is the
-   * per-worker-run timeline map (对称 CEO process). null for user / plain turns. (Opaque JSON
-   * in the OpenAPI — SSE/event payloads are exempt from the generated-types rule.) */
-  runs?: {
-    events: SSEEvent[];
-    finish_reason: string | null;
-    process?: ProcessStep[] | null;
-    /** Per-run ProcessStep[] (run_id → steps); reload seeds run detail timelines. */
-    run_processes?: Record<string, ProcessStep[]> | null;
-    /** 收到的上下文 · CEO 侧 (上下文传递可视化 通道①): the captain's `run_context` blocks,
-     * persisted turn-level (the captain is the bubble above the graph, present even in pure
-     * chat where `events` is empty). Replayed onto `message.captainContext` on reload. */
-    captain_context?: ContextBlockWire[] | null;
-    /** 报错回合's terminal error (Tier 2 a): projected from the journal's `turn_end` outcome
-     * fact so the inline error card replays on reload (live, the error rode a transport-only
-     * `error` SSE event). Replayed onto `message.error` — same `{code, message}` shape the
-     * live handler attaches. null for a clean turn. */
-    error?: { code: string; message: string } | null;
-    /** 预检警告（P2 DURABLE）：journaled turn_warning lifted for plain-chat reload. */
-    turn_warning?: string | null;
-    /** List GET may drop bulky events; false → fetch GET …/messages/{id} for graph. */
-    events_complete?: boolean;
-    /** 裸聊自动建文件夹（§5.4）：journal 仍投影；对话内不再画落点条，故不抬到气泡。 */
-    auto_folder?: { folder_id: string; name: string } | null;
-  } | null;
-  /** 回合 token 用量 (Tier 2 重载持久化): the turn's token snapshot in the ledger short-key
-   * shape, projected server-side from the row's `usage` column. Replayed onto
-   * `message.usage` so the bubble's meta row caption replays on reload — live, it rode
-   * `message_end`. null for user rows and no-spend (errored/empty) turns without a
-   * structured error. Failed empty turns may still project usage with ``error`` only. */
+export type BackendMessage = Omit<GeneratedMessage, "runs" | "usage"> & {
+  runs?:
+    | (Omit<
+        GeneratedRuns,
+        | "events"
+        | "process"
+        | "run_processes"
+        | "captain_context"
+        | "events_complete"
+      > & {
+        events?: SSEEvent[];
+        process?: ProcessStep[] | null;
+        run_processes?: Record<string, ProcessStep[]> | null;
+        captain_context?: ContextBlockWire[] | null;
+        /** Absent on a hand-built row; the wire default is a full journal. */
+        events_complete?: boolean;
+      })
+    | null;
   usage?:
-    | (UsageBreakdown & {
-        error?: { code: string; message: string } | null;
-        /** Persist column may carry finish_reason; REST UsageBreakdown strips it. */
+    | (NonNullable<GeneratedMessage["usage"]> & {
         finish_reason?: string | null;
       })
     | null;
-  /** Progressive assistant-row lifecycle (``usage.status``). Overlay / salvage
-   * criterion — ``running`` hydrates as streaming partial; ``incomplete`` as
-   * interrupted unless usage/runs already cancelled. */
-  status?: "running" | "complete" | "incomplete" | "failed" | null;
-  /** Cold-path pause latch (``usage.paused``). Write keeps ``status=running``;
-   * when true, hydrate as paused (not streaming) — finishReason=paused. */
-  paused?: boolean | null;
-  /** 消息来源（如 execution_harvest）；写入 usage JSON，读路径投影到此字段. */
-  origin?: string | null;
-  /** 曾中断恢复（``usage.recovered``）：本回合崩过、由租约清扫重驱原地跑完. */
-  recovered?: boolean | null;
-  /** 回合轮次 (Tier 2 重载持久化): ReAct rounds the turn ran, projected from the same column.
-   * Replayed onto `message.rounds`; 底栏「用量」在 > 1 时展示。null for
-   * user / pre-feature rows. */
-  rounds?: number | null;
-  /** 回合墙钟用时 (ms)：与 message_end.duration_ms 同锚；重载自 usage JSON 投影。 */
-  duration_ms?: number | null;
-  /** 各次 LLM 吐字时长之和 (ms)：与 message_end.generation_ms 同锚。 */
-  generation_ms?: number | null;
-  /** 用量 TTFT (ms)：与 message_end.ttft_ms 同锚。 */
-  ttft_ms?: number | null;
-  /** Server-attested turn result (`turn_metrics.status` / `message_end.outcome`). */
-  outcome?: ("ok" | "partial" | "paused" | "error") | null;
-  /** 协作质量 (学·度量 §2.5): orchestration signals（采集仍在、产品不展示调度明细）; nested in usage column. */
-  collab?: {
-    boundary_yields: number;
-    scope_signals: number;
-    revises: number;
-    escalations: number;
-    audit_drops?: number;
-  } | null;
-  /** 本回合团队状态（journal 派生；没派工是 no_batch）。 */
-  team_batch?: import("@/types/events").TeamBatchStatus | null;
-  /** 回合 ¥ 成本 (P2 DERIVED)：messages.cost 列；重载 footer 直接用。 */
-  cost?: import("@/services/usage").CostBreakdown | null;
-  created_at: string;
-}
+};
 
 /** A loaded slice of a conversation, plus the flags that drive infinite scroll. */
 export interface MessageWindow {
@@ -354,7 +250,9 @@ export function toMessage(m: BackendMessage): Message {
     // mirroring the live `attachTurnMetaToLastMessage` stamp — usage is already
     // the ledger short-key shape (normalized server-side); rounds > 1 只进「用量」。
     // Both undefined for user / no-spend turns → no meta row (live parity).
-    usage: m.usage ?? undefined,
+    usage: m.usage
+      ? { ...m.usage, last_prompt: m.usage.last_prompt ?? undefined }
+      : undefined,
     rounds: m.rounds ?? undefined,
     durationMs: m.duration_ms ?? undefined,
     generationMs: m.generation_ms ?? undefined,

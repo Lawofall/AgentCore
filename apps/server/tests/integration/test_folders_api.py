@@ -774,40 +774,45 @@ async def test_folder_isolation_between_users(client, new_client):
         ).status_code == 404
 
 
-async def test_soft_delete_hibernates_folder_settings_until_restore(client, session_factory):
-    """软删：这张桌的设定退出注入、行还在；恢复后回来。全局层不陪葬。"""
-    from agentcore.memory.document_store import DocumentMemoryStore
-    from agentcore.memory.rules_injection import assemble_injected_rules
-    from agentcore.memory.scope_chain import db_scope_chain
+async def test_soft_delete_keeps_folder_rule_rows_out_of_the_catalog(
+    client, session_factory
+):
+    """文件夹上的旧行不进目录。软删后行还在，恢复也不把它们灌进账号库。"""
+    from agentcore.memory.rule_resolve import live_rule_from_doc
 
     uid = await register_and_login(client, "foldersettings")
     folder_id = await _create_cloud_folder(client, "SettingsDesk")
     async with session_factory() as session:
         repo = DocumentRepository(session)
-        await repo.upsert_user_rule_doc(uid, None, "全局语言.md", "- 全局必须用中文")
-        await repo.upsert_user_rule_doc(uid, folder_id, "本桌语言.md", "- 本桌必须用中文")
+        await repo.upsert_user_rule_doc(
+            uid,
+            None,
+            "全局语言.md",
+            "- 全局必须用中文",
+            description="账号语言",
+        )
+        await repo.upsert_user_rule_doc(
+            uid,
+            folder_id,
+            "本桌语言.md",
+            "- 本桌必须用中文",
+            description="本桌语言",
+        )
 
-    async def _inject() -> str:
+    async def _names() -> list[str]:
         async with session_factory() as session:
-            return await assemble_injected_rules(
-                DocumentMemoryStore(session=session),
-                DocumentRepository(session),
-                uid,
-                folder_id=folder_id,
-                scope_chain=await db_scope_chain(uid, folder_id, session=session),
-            )
+            docs = await DocumentRepository(session).list_on_demand_user_rules(uid, None)
+        names: list[str] = []
+        for doc in docs:
+            live = live_rule_from_doc(doc, column_apply="on_demand", rank=0)
+            if live is not None:
+                names.append(live.name)
+        return names
 
-    live = await _inject()
-    assert "全局必须用中文" in live
-    assert "本桌必须用中文" in live
-    assert "全局偏好别用 emoji" not in live
-    assert "本仓用 Rust" not in live
+    assert await _names() == ["全局语言"]
 
     assert (await client.delete(f"/v1/folders/{folder_id}")).status_code == 200
-    hibernating = await _inject()
-    assert "全局必须用中文" in hibernating
-    assert "本仓用 Rust" not in hibernating
-    assert "本桌必须用中文" not in hibernating
+    assert await _names() == ["全局语言"]
     async with session_factory() as session:
         leftover = (
             await session.execute(
@@ -816,6 +821,7 @@ async def test_soft_delete_hibernates_folder_settings_until_restore(client, sess
                 .where(
                     Document.user_id == uid,
                     Document.folder_id == folder_id,
+                    Document.name == "本桌语言.md",
                 )
             )
         ).scalar_one()
@@ -823,7 +829,4 @@ async def test_soft_delete_hibernates_folder_settings_until_restore(client, sess
 
     restored = await client.post(f"/v1/folders/trash/{folder_id}/restore")
     assert restored.status_code == 200, restored.text
-    back = await _inject()
-    assert "全局必须用中文" in back
-    assert "本桌必须用中文" in back
-    assert "本仓用 Rust" not in back
+    assert await _names() == ["全局语言"]

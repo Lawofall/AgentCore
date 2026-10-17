@@ -36,7 +36,7 @@ compact copy (``prefix_breach`` / ``prefix_breach_section`` / ``tools_changed`` 
 - **被什么击穿** — ``breach`` classifies the first divergence (tools table / system prompt /
   mid-history rewrite / pure append). Tools sit ahead of messages: a mid-chain
   ``tools[]`` rewrite is still ``tools``, not ``history_growth``. ``breach_section`` names
-  the leaf when the system prompt is the culprit (e.g. ``workspace_facts`` = 文件索引变动,
+  the leaf when the system prompt is the culprit (e.g. ``workspace_facts`` = 本对话写改针变动,
   ``attachment_context`` = 变尾段本身). ``folder_catalog`` slot is kept;
   production no longer assembles that section.
 - **随对话长度的差异** — ``prompt_messages`` / ``prompt_chars`` / ``input_tokens`` /

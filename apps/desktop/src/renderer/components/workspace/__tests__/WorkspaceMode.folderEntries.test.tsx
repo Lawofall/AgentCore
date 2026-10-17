@@ -2,12 +2,8 @@
 import { WorkspaceMode } from "@/components/workspace/WorkspacePanel";
 import type { FileSource } from "@/lib/fileSource";
 import { useConversationStore } from "@/stores/conversation";
-import {
-  WORKSPACE_TAB_ID,
-  fileTabId,
-  useSidePanelStore,
-} from "@/stores/sidePanel";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { WORKSPACE_TAB_ID, useSidePanelStore } from "@/stores/sidePanel";
+import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const convs = vi.hoisted(() => ({
@@ -88,7 +84,7 @@ vi.mock("@/components/files/fileWorkbench/EntriesSection", () => ({
 
 afterEach(cleanup);
 
-describe("WorkspaceMode · .agentcore 条目", () => {
+describe("WorkspaceMode · 文件树不挂文件夹规矩", () => {
   beforeEach(() => {
     convs.list = [];
     useConversationStore.setState({ currentConversationId: "c1" });
@@ -101,10 +97,10 @@ describe("WorkspaceMode · .agentcore 条目", () => {
     });
   });
 
-  it("绑定 folderId 时挂条目，不挂「全局设定」", () => {
+  it("绑定 folderId 时也不挂文件夹条目", () => {
     convs.list = [{ id: "c1", folderId: "f1" }];
     render(<WorkspaceMode />);
-    expect(screen.getByRole("button", { name: "打开条目" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "打开条目" })).toBeNull();
     expect(screen.queryByText("全局设定")).toBeNull();
     expect(screen.getByTestId("file-browser")).toBeTruthy();
   });
@@ -115,24 +111,5 @@ describe("WorkspaceMode · .agentcore 条目", () => {
     expect(screen.queryByRole("button", { name: "打开条目" })).toBeNull();
     expect(screen.queryByText("全局设定")).toBeNull();
     expect(screen.getByTestId("file-browser")).toBeTruthy();
-  });
-
-  it("点条目开带通道的 File tab；删条目关掉对应 tab", () => {
-    convs.list = [{ id: "c1", folderId: "f1" }];
-    render(<WorkspaceMode />);
-    fireEvent.click(screen.getByRole("button", { name: "打开条目" }));
-
-    const opened = useSidePanelStore.getState().tabs[0];
-    expect(opened).toMatchObject({
-      kind: "file",
-      channel: "document",
-      path: "doc-1",
-      name: "语气.md",
-    });
-    expect(opened?.id).toBe(fileTabId("doc-1", null, "document"));
-    expect(opened?.id).not.toBe(fileTabId("doc-1"));
-
-    fireEvent.click(screen.getByRole("button", { name: "删除条目" }));
-    expect(useSidePanelStore.getState().tabs).toHaveLength(0);
   });
 });

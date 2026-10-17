@@ -1,16 +1,16 @@
 {
   "id": "product_rules_nail_carrier",
   "category": "tool_use",
-  "user_message": "把 .cursor/rules 里的约定迁到 .agentcore/rules/",
+  "user_message": "把 .cursor/rules 里的约定存成我的规矩",
   "path": "team",
   "mode": "economy",
   "workspace_fixture": "cursor_rules_trap",
-  "_note": "已钉死正确载体 .agentcore/rules/：允许解释或委派；禁迁成 skills。不强制 NotDelegated（CEO 可先问/先解释）。",
+  "_note": "落点是 AgentCore/rules/*.md，frontmatter 标明带法。允许解释或委派；禁迁成 skills。不强制 NotDelegated。",
   "checks": [
     { "name": "FinishReason" },
     {
       "name": "ContentMatches",
-      "args": { "pattern": "\\.agentcore/rules" }
+      "args": { "pattern": "AgentCore/rules|write|常驻|按需" }
     },
     {
       "name": "NoFabricationMarker",
@@ -26,5 +26,5 @@
       }
     }
   ],
-  "rubric": "目标载体已钉死为 .agentcore/rules/；可解释或开工，但不得改道 skills/*.json。"
+  "rubric": "落点是 AgentCore/rules；可解释或开工，但不得改道 skills/*.json。"
 }

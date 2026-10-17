@@ -375,7 +375,7 @@ function bucketItems(map: Map<string, PromptCatalogItem[]>, key: string) {
   return next;
 }
 
-/** 必带 = constitution + user always；用户夹 = 按需. 官方 HOW / 出厂工具收在 rail 上，概览铺货架卡. */
+/** 常驻 = constitution + user always；用户夹 = 按需. 官方 HOW / 出厂工具收在 rail 上，概览铺货架卡. */
 export function buildPromptRail(
   data: Capabilities,
   mine: MineCatalogRow[],

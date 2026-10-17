@@ -6,6 +6,7 @@
  */
 
 import { IconButton } from "@/components/ui";
+import { cn } from "@/lib/utils";
 import type { EditorView } from "@codemirror/view";
 import {
   Bold,
@@ -29,8 +30,10 @@ import * as cmd from "./sourceCommands";
 
 export function SourceToolbar({
   getView,
+  className,
 }: {
   getView: () => EditorView | null;
+  className?: string;
 }) {
   const run = (fn: (v: EditorView) => void) => () => {
     const view = getView();
@@ -38,7 +41,12 @@ export function SourceToolbar({
   };
 
   return (
-    <div className="flex flex-wrap items-center gap-0.5 border-b border-border px-2 py-1.5">
+    <div
+      className={cn(
+        "flex flex-wrap items-center gap-0.5 border-b border-border px-2 py-1.5",
+        className,
+      )}
+    >
       <Btn title="标题 1" onClick={run((v) => cmd.setHeading(v, 1))}>
         <Heading1 className="size-4" />
       </Btn>

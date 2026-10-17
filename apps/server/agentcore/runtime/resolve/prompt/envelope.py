@@ -4,20 +4,20 @@ Frozen constitution / identity / on-demand catalog stay in ``messages[0]``.
 If this turn's composed system differs from that node 0, DeepSeek in-history
 appends the changed ``<设定>`` / ``<按需目录>`` (or the full new string when the
 rest drifted) as ``role: system`` after history and before the envelope
-(``usage.in_history_system`` replay). Date, workspace (+ CEO file
-index), scene gates, attachments, and table ride a synthetic
-user message fenced with ``[系统提示]``. A new envelope that matches the last
-one already in the window is omitted. The envelope is snapshotted on
-``turn_started`` and stamped onto the prompting user row
+(``usage.in_history_system`` replay). Date, workspace (+ folder-chat
+this-conversation writes), scene gates, attachments, and table ride a
+synthetic user message fenced with ``[系统提示]``. A new envelope that
+matches the last one already in the window is omitted. The envelope is
+snapshotted on ``turn_started`` and stamped onto the prompting user row
 (``usage.turn_envelope``) so later turns replay it in order. The LLM window
 is append-only: prior envelopes stay; this turn appends a new envelope only
 when it differs, plus the new user utterance. UI bubbles still show the original user text.
 Workers use the same fence for date / workspace / attachments (opening user
 tail, not ``role: system``) so sibling runs share a frozen system prefix.
-Do not copy the CEO file index onto workers. Resume restamp of worker facts
-appends ``[系统提示]`` after history and never rewrites the emitted
-``role: system``; debate stays out. Tool-failure facts stay in receipts /
-synthesis, not ``role: system``.
+Do not copy the CEO conversation-edits pin onto workers. Resume restamp of
+worker facts appends ``[系统提示]`` after history and never rewrites the
+emitted ``role: system``; debate stays out. Tool-failure facts stay in
+receipts / synthesis, not ``role: system``.
 See docs/03-AI核心/执行引擎架构设计.md §七.
 """
 
@@ -33,15 +33,12 @@ from agentcore.llm.provider.protocol import (
     llm_content_text,
 )
 from agentcore.runtime.context import ContextAssembler, SectionOrder
-from agentcore.runtime.context.envelope_switches import (
-    include_file_index,
-    include_runtime_date,
-)
-from agentcore.runtime.context.workspace_overview import attach_workspace_file_index
+from agentcore.runtime.context.envelope_switches import include_runtime_date
 from agentcore.runtime.resolve.prompt.base import render_runtime_date_block
 from agentcore.runtime.resolve.prompt.ceo_core import _attachment_material_block
 
 TURN_ENVELOPE_FENCE = "[系统提示]"
+_WORKSPACE_CLOSE = "</工作区>"
 
 
 def _runtime_fragment(include_runtime: bool) -> str | None:
@@ -51,31 +48,35 @@ def _runtime_fragment(include_runtime: bool) -> str | None:
     return render_runtime_date_block()
 
 
-def _file_index_fragment(workspace_file_index: str | None) -> str:
-    """CEO file index, unless this conversation left that projection out."""
-    index = (workspace_file_index or "").strip()
-    if not index or not include_file_index():
-        return ""
-    return index
+def _attach_before_workspace_close(prompt: str, extra: str) -> str:
+    """Insert untagged lines before ``</工作区>``. No-op if either side is empty."""
+    body = (extra or "").strip()
+    if not prompt or not body:
+        return prompt or ""
+    close = prompt.rfind(_WORKSPACE_CLOSE)
+    if close < 0:
+        return prompt
+    before = prompt[:close].rstrip()
+    after = prompt[close:]
+    return f"{before}\n{body}\n{after}"
 
 
 def _ceo_workspace_block(
     workspace_context: str | None,
-    workspace_file_index: str | None,
+    conversation_edits: str | None,
 ) -> str | None:
-    """Facts, plus the CEO file index inside the same ``<工作区>``.
+    """Facts, plus the CEO conversation-edits pin inside the same ``<工作区>``.
 
-    Fact lines are already filtered. When every fact line is off and the index
-    remains, this opens the tag for that index alone.
-    ``attach_workspace_file_index`` still refuses to invent a wrapper.
+    Fact lines are already filtered. When every fact line is off and the pin
+    remains, this opens the tag for that pin alone.
     """
     facts = (workspace_context or "").strip()
-    index = _file_index_fragment(workspace_file_index)
+    pin = (conversation_edits or "").strip()
     if facts:
-        return attach_workspace_file_index(facts, index) or None
-    if not index:
+        return _attach_before_workspace_close(facts, pin) or None
+    if not pin:
         return None
-    return f"<工作区>\n{index}\n</工作区>"
+    return f"<工作区>\n{pin}\n</工作区>"
 
 
 # Stamped on the prompting user row (``messages.usage``). REST UsageBreakdown
@@ -245,7 +246,7 @@ def resolve_emitted_envelope(rendered: str, history: Sequence[object] | None) ->
 def render_ceo_turn_envelope(
     *,
     workspace_context: str | None = None,
-    workspace_file_index: str | None = None,
+    conversation_edits: str | None = None,
     table_context: str | None = None,
     attachment_material: bool = False,
     attachment_context: str = "",
@@ -262,7 +263,7 @@ def render_ceo_turn_envelope(
         )
         .add(
             "workspace_facts",
-            _ceo_workspace_block(workspace_context, workspace_file_index),
+            _ceo_workspace_block(workspace_context, conversation_edits),
             SectionOrder.WORKSPACE_FACTS,
         )
         .add("attachment_material", material_block, SectionOrder.WORKING_SET)
@@ -283,7 +284,7 @@ def render_worker_turn_envelope(
     attachment_context: str | None = None,
     include_runtime: bool = True,
 ) -> str:
-    """Worker opening ``[系统提示]`` (no CEO file index / table)."""
+    """Worker opening ``[系统提示]`` (no CEO conversation-edits pin / table)."""
     body = (
         ContextAssembler()
         .add(

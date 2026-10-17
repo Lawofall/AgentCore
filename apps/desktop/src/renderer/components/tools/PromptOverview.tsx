@@ -579,7 +579,7 @@ function FolderMenu({
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
-      <ContextMenuContent>
+      <ContextMenuContent onCloseAutoFocus={(event) => event.preventDefault()}>
         <ContextMenuItem onSelect={() => onRename(folder)}>
           <Pencil size={14} className="shrink-0" />
           重命名

@@ -90,33 +90,22 @@ class _StubTool:
 
 
 def _patch_pipeline(monkeypatch, provider: _ScriptedProvider, registry: ToolRegistry):
-    """Swap ONLY the LLM provider, the memory load, and the CEO toolset assembly for
-    controlled doubles — everything that carries the finish_reason (captain executor,
+    """Swap ONLY the LLM provider and the CEO toolset assembly for controlled
+    doubles — everything that carries the finish_reason (captain executor,
     react_loop, LoopController governance, finish-mapping, message_end, runs payload)
     stays REAL.
 
     Patch each seam WHERE IT IS LOOKED UP (pytest convention): ``prepare_chat_turn``
     (via ``run_chat_pipeline``) reads ``build_turn_router`` off the package facade
-    (``pipeline_pkg.build_turn_router``), but it imports ``default_memory_store``
-    and ``_assemble_ceo_toolset`` by name into the ``pipeline.run`` submodule and calls
-    them as locals — so those two must be patched on ``run``, not on the package
-    (patching the facade would silently miss the local call, and the facade doesn't even
-    re-export ``default_memory_store``)."""
+    (``pipeline_pkg.build_turn_router``), but it imports ``_assemble_ceo_toolset``
+    by name into the ``pipeline.run`` submodule and calls it as a local — so the
+    toolset must be patched on ``run``, not on the package (patching the facade
+    would silently miss the local call)."""
 
     async def _fake_build_turn_router(*_a, **_k):
         return provider
 
     monkeypatch.setattr(pipeline, "build_turn_router", _fake_build_turn_router)
-
-    class _FakeStore:
-        async def load(self, _user_id: str, _path: str, scope: str | None = None) -> str:
-            return ""
-
-        async def list(self, _user_id: str, scope: str | None = None) -> list:
-            # No topic notes ⇒ no 按需目录 / consult on this single-agent path.
-            return []
-
-    monkeypatch.setattr("agentcore.runtime.pipeline.run.default_memory_store", lambda: _FakeStore())
 
     # delegate / debate are unused on this single-agent path, but the pipeline
     # tail folds their usage/ledger/citations — give them empty doubles. The delegate

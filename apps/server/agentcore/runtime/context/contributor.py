@@ -28,8 +28,9 @@ class SectionOrder(IntEnum):
     future sections to slot between without renumbering. The tail (attachment and
     later volatile sections) is deliberately LAST so the foundation/hint prefix can stay
     byte-identical across turns — a **cost optimization** for exact-prefix cache
-    billing (e.g. DeepSeek), not a product invariant. CEO file index rides the end
-    of ``WORKSPACE_FACTS`` (same ``<工作区>``), not a second tag. Discipline: new
+    billing (e.g. DeepSeek), not a product invariant. Folder-chat conversation
+    edits ride the end of ``WORKSPACE_FACTS`` (same ``<工作区>``), not a second
+    tag. Discipline: new
     sections only append after the current tail or insert at a new stable key
     between existing slots; never reorder existing keys.
 
@@ -80,9 +81,9 @@ class SectionOrder(IntEnum):
     # not baked into ``assemble_system_prompt``. ``role: system`` stays frozen
     # (constitution / catalog).
     WORKSPACE_FACTS = 750
-    # Retired as a separate XML tag 2026-09-01: CEO file index is the last
-    # subsection of ``<工作区>`` (attached into WORKSPACE_FACTS). Slot kept so
-    # billed prefix keys are not reshuffled.
+    # Retired as a separate XML tag 2026-09-01: workspace listing is not
+    # injected; folder-chat conversation edits attach into WORKSPACE_FACTS.
+    # Slot kept so billed prefix keys are not reshuffled.
     WORKSPACE_OVERVIEW = 800
     # Retired 2026-09-01: per-turn ``<工作集>`` XML removed. Path ledger still
     # feeds compaction only (``working_set.py``). Slot kept so billed prefix

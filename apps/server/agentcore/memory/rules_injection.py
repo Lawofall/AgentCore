@@ -1,11 +1,12 @@
-"""Always-on user-rule injection (Agent记忆与知识系统 · 读侧全量注入).
+"""Markdown injection (Agent记忆与知识系统).
 
-``<设定>`` carries the user's own rules (``ai_maintained=false``) only. AI-maintained
-notes (偏好 / 画像 / 导航 / 主题) stay on disk and are not injected. Read side injects
-every always-on **user** entry in display order as one equal-authority join (no greedy
-pack / keep-rank / silent drop). The write-side quota gate owns「常驻满了」.
-Frontmatter is stripped before the model sees the body via the **storage-layer parser**
-(``agentcore.documents.frontmatter``).
+A saved markdown document enters this turn only when it has a channel.
+Account documents follow assembly membership. The current folder's documents
+enter only while the turn sits at that desk. Ancestors are not a scope.
+
+常驻 bodies go in ``<设定>`` (account, then this folder). 按需 is a catalog
+line plus ``consult``. 碰到文件 follows the path. Frontmatter is stripped
+before the model sees a consulted body (``agentcore.documents.frontmatter``).
 """
 
 from __future__ import annotations
@@ -23,27 +24,16 @@ from agentcore.documents.frontmatter import (
     set_entry_frontmatter,
     strip_entry_frontmatter,
 )
-from agentcore.memory.always_join import join_always_layers
-from agentcore.memory.scope_chain import (
-    ancestor_scopes,
-    cloud_scope_chain,
-    db_scope_chain,
-    own_scope_chain,
-)
 from agentcore.memory.store import (
     CORE_MEMORY_FILE,
     NAVIGATION_MEMORY_FILE,
     PREFERENCES_MEMORY_FILE,
-    MemoryStore,
 )
 
 logger = get_logger(__name__)
 
-# Layer labels inside the shared <设定> block (scope, not author).
+# Layer label inside the shared <设定> block (this folder, not an ancestor).
 _FOLDER_SETTINGS_LABEL = "（以下为「当前文件夹」专属设定，仅在本文件夹内适用）"
-_ANCESTOR_SETTINGS_LABEL = (
-    "（以下为「上层文件夹」的设定，其下所有文件夹一并适用）"
-)
 
 _RULE_MUTATE_ACTIONS = frozenset({"write", "read", "delete", "list"})
 _MAX_RULE_NAME_CHARS = 80
@@ -96,16 +86,16 @@ def _resolve_write_apply(
     content: str,
     existing_apply: str | None,
 ) -> ApplyMode | FrontmatterError:
-    if apply in ("always", "on_demand", "paths"):
-        return apply  # type: ignore[return-value]
+    """The caller's mode, else frontmatter, else the saved mode. Unset stays 按需."""
     parsed = parse_entry_frontmatter(content)
     if isinstance(parsed, FrontmatterError):
         return parsed
+    if apply in ("always", "on_demand", "paths"):
+        return apply  # type: ignore[return-value]
     if parsed.apply_present:
         return parsed.apply
     if existing_apply in ("always", "on_demand", "paths"):
         return existing_apply  # type: ignore[return-value]
-    # 新条目没写 apply：与解析器同一缺省（按需）。
     return "on_demand"
 
 
@@ -124,7 +114,7 @@ def _format_rule_catalog(docs: Sequence[object]) -> str:
 
 @dataclass(frozen=True)
 class UserRuleMutationResult:
-    """Shared mutate outcome for file overlay + account ``/rules/write|read|delete``."""
+    """Shared mutate outcome for account ``/rules/write|read|delete``."""
 
     action: str
     changed: bool
@@ -148,11 +138,9 @@ async def mutate_user_rule(
     apply: str | None = None,
     description: str | None = None,
 ) -> UserRuleMutationResult:
-    """Persist one named user-rule markdown (tool + account shared).
+    """Persist one named user-rule markdown (toolbox / account shared).
 
-    Write-side always quota uses ``writer=ai``: net growth past the cap raises
-    :class:`~agentcore.memory.always_quota.AlwaysQuotaExceededError`; shrink / list /
-    read / unchanged skip the gate.
+    Description is derived from the body on every write.
     """
     action_key = (action or "write").strip().lower() or "write"
     if action_key not in _RULE_MUTATE_ACTIONS:
@@ -265,39 +253,39 @@ async def mutate_user_rule(
 
     from agentcore.memory.always_quota import (
         AlwaysQuotaExceededError,
+        AlwaysUsage,
         always_entry_chars,
         check_always_write,
         notify_always_quota_exceeded,
     )
     from agentcore.memory.rule_resolve import counts_as_always_content
 
-    existing_always = existing is not None and counts_as_always_content(
+    new_is_always = counts_as_always_content(body)
+    editing_existing = existing is not None and counts_as_always_content(
         existing.content or ""
     )
-    new_is_always = counts_as_always_content(body)
-    if new_is_always:
+    if new_is_always or editing_existing:
         decision = await check_always_write(
             repo,
             user_id,
             folder_id=folder_id,
-            writer="ai",
-            editing_existing_always=existing_always,
-            exclude_id=existing.id if existing is not None else None,
+            writer="user",
+            editing_existing_always=editing_existing,
+            exclude_id=getattr(existing, "id", None) if existing is not None else None,
             new_content=body,
-            new_is_always=True,
+            new_is_always=new_is_always,
         )
         if not decision.allowed:
-            usage = decision.usage
-            assert usage is not None
-            quota_err = AlwaysQuotaExceededError(
+            usage = decision.usage or AlwaysUsage(used_chars=0, max_chars=0)
+            exc = AlwaysQuotaExceededError(
                 usage,
                 decision.message,
                 file=filename,
                 scope=folder_id,
-                attempted_chars=always_entry_chars(body),
+                attempted_chars=always_entry_chars(body) if new_is_always else 0,
             )
-            await notify_always_quota_exceeded(user_id, quota_err)
-            raise quota_err
+            await notify_always_quota_exceeded(user_id, exc)
+            raise exc
 
     doc = await repo.upsert_user_rule_doc(
         user_id,
@@ -334,9 +322,7 @@ def _labeled_rule_body(name: str, content: str) -> str | None:
     if not body:
         return None
     title = (name or "").strip() or "untitled.md"
-    from agentcore.memory.rule_files import rule_entry_relpath
-
-    return f"### {rule_entry_relpath(title)}\n{body}"
+    return f"### {title}\n{body}"
 
 
 @dataclass(frozen=True)
@@ -359,21 +345,10 @@ def compose_injected_rules(fragments: Sequence[RuleFragment]) -> str:
     return "\n\n".join(f.body for f in fragments)
 
 
-def _join_frags(**kwargs: object) -> list[RuleFragment]:
-    return [
-        RuleFragment(body=item.body)
-        for item in join_always_layers(
-            folder_settings_label=_FOLDER_SETTINGS_LABEL,
-            ancestor_settings_label=_ANCESTOR_SETTINGS_LABEL,
-            **kwargs,  # type: ignore[arg-type]
-        )
-    ]
-
-
 async def _scope_live_rules(
     repo: DocumentRepository, user_id: str, folder_id: str | None, rank: int
 ):
-    """Always + on_demand + path docs of one scope, tagged with ``rank``."""
+    """Saved markdown of one scope. Rank 0 is the account; rank 1 is this folder."""
     from agentcore.assembly.bind import current_omit_desk_rules, current_skill_membership
     from agentcore.memory.rule_resolve import LiveRule, live_rule_from_doc
 
@@ -381,67 +356,72 @@ async def _scope_live_rules(
         return []
     membership = current_skill_membership() if folder_id is None else None
     out: list[LiveRule] = []
-    loaded = (
-        ("always", await repo.list_injectable_rules(user_id, folder_id, ai_maintained=False)),
-        ("on_demand", await repo.list_on_demand_user_rules(user_id, folder_id)),
-        ("paths", await repo.list_path_user_rules(user_id, folder_id)),
-    )
-    for column, docs in loaded:
-        for doc in docs:
-            override = None
-            if membership is not None:
-                mode = membership.get(str(getattr(doc, "id", "") or ""))
-                if mode is None:
-                    continue
-                override = mode
-            live = live_rule_from_doc(
-                doc, column_apply=column, rank=rank, apply_override=override
-            )
-            if live is not None:
-                out.append(live)
+    loaded = await repo.list_scoped_markdown(user_id, folder_id)
+    for doc in loaded:
+        override = None
+        if membership is not None:
+            mode = membership.get(str(getattr(doc, "id", "") or ""))
+            if mode is None:
+                continue
+            override = mode
+        live = live_rule_from_doc(
+            doc, column_apply="", rank=rank, apply_override=override
+        )
+        if live is not None:
+            out.append(live)
     return out
 
 
-def _fragments_from_resolved(
-    resolved, *, ancestor_count: int, has_current: bool
-) -> list[RuleFragment]:
-    """Always-channel winners, outer rank first. Empty layers drop out."""
-    by_rank: dict[int, list[str]] = {}
+def _settings_from_resolved(resolved) -> str:
+    """Account 常驻, then this folder's 常驻. Empty layers drop out."""
+    account: list[str] = []
+    folder: list[str] = []
     for rule in resolved.always:
         body = _labeled_rule_body(f"{rule.name}.md", rule.content)
-        if body:
-            by_rank.setdefault(rule.rank, []).append(body)
-    ancestor_layers = [
-        (None, by_rank.get(index, [])) for index in range(1, ancestor_count + 1)
-    ]
-    current_rank = ancestor_count + 1
-    return _join_frags(
-        global_rules=by_rank.get(0, []),
-        ancestor_layers=ancestor_layers,
-        current_rules=by_rank.get(current_rank, []) if has_current else [],
-        include_current=has_current,
-    )
+        if not body:
+            continue
+        if rule.rank == 0:
+            account.append(body)
+        else:
+            folder.append(body)
+    parts: list[str] = []
+    if account:
+        parts.append("\n\n".join(account))
+    if folder:
+        parts.append(f"{_FOLDER_SETTINGS_LABEL}\n" + "\n\n".join(folder))
+    return "\n\n".join(parts)
 
 
 async def _user_rule_fragments(
-    repo: DocumentRepository, user_id: str, *, scope_chain: Sequence[str]
+    repo: DocumentRepository,
+    user_id: str,
+    *,
+    folder_id: str | None = None,
 ) -> list[RuleFragment]:
-    """User always-rules. Same name: nearest desk only."""
+    """Account ``<设定>``, then this folder. Ancestors are not a scope."""
+    resolved = await _resolved_pair(
+        repo, user_id, folder_id=folder_id, folder_user_id=None
+    )
+    text = _settings_from_resolved(resolved)
+    return [RuleFragment(body=text)] if text else []
+
+
+async def _resolved_pair(
+    repo: DocumentRepository,
+    user_id: str,
+    *,
+    folder_id: str | None,
+    folder_user_id: str | None,
+):
+    """Account markdown for ``user_id``, plus this folder's markdown for its owner."""
     from agentcore.memory.rule_resolve import resolve_rules
 
-    ancestors = ancestor_scopes(scope_chain)
-    live = await _scope_live_rules(repo, user_id, None, 0)
-    for index, scope in enumerate(ancestors, start=1):
-        live.extend(await _scope_live_rules(repo, user_id, scope, index))
-    if scope_chain:
-        live.extend(
-            await _scope_live_rules(repo, user_id, scope_chain[-1], len(ancestors) + 1)
-        )
-    return _fragments_from_resolved(
-        resolve_rules(live),
-        ancestor_count=len(ancestors),
-        has_current=bool(scope_chain),
-    )
+    account = await _scope_live_rules(repo, user_id, None, 0)
+    folder: list = []
+    if folder_id:
+        owner = folder_user_id or user_id
+        folder = await _scope_live_rules(repo, owner, folder_id, 1)
+    return resolve_rules([*account, *folder])
 
 
 @dataclass(frozen=True)
@@ -451,52 +431,22 @@ class _CloudRules:
     has_current: bool
 
 
-def _bucket_ancestor_docs(
-    grouped: Sequence[tuple[str, list[Mapping[str, object]]]],
-    ancestors: Sequence[str],
-) -> list[list[tuple[Mapping[str, object], str]]]:
-    """One layer per ancestor, outermost-first. Same split as always-join.
-
-    Tagged ``folder_id`` wins. Untagged lists zip when the count matches that
-    list; otherwise the bag sits on the outermost ancestor. No ancestors but a
-    non-empty payload → one synthetic outer layer (old clouds).
-    """
-    flat: list[tuple[Mapping[str, object], str]] = [
-        (doc, column) for column, docs in grouped for doc in docs
-    ]
-    if not flat:
-        return []
-    if not ancestors:
-        return [flat]
-    layers: list[list[tuple[Mapping[str, object], str]]] = [[] for _ in ancestors]
-    tagged = any(str(doc.get("folder_id") or "") for doc, _ in flat)
-    if tagged:
-        index = {scope: i for i, scope in enumerate(ancestors)}
-        for doc, column in flat:
-            slot = index.get(str(doc.get("folder_id") or ""))
-            if slot is not None:
-                layers[slot].append((doc, column))
-        return layers
-    for _column, docs in grouped:
-        if len(docs) == len(ancestors):
-            for i, doc in enumerate(docs):
-                layers[i].append((doc, _column))
-        else:
-            layers[0].extend((doc, _column) for doc in docs)
-    return layers
-
-
 def _cloud_rules(payload: Mapping[str, object], *, folder_id: str | None) -> _CloudRules:
-    """Outer-to-inner live rules. Later rows overwrite the same consult name."""
+    """Account lists plus this folder's lists. Ancestor keys are not a scope.
+
+    The list name is the channel when the cached body has no ``apply`` key.
+    ``folder_id`` selects whether this folder's lists are in scope.
+    """
     from agentcore.assembly.bind import current_omit_desk_rules, current_skill_membership
     from agentcore.memory.rule_resolve import live_rule_from_mapping
 
     membership = current_skill_membership()
-    skip_desk = current_omit_desk_rules()
-    chain = cloud_scope_chain(payload, folder_id)
+    omit_folder = current_omit_desk_rules() or folder_id is None
     out: list = []
 
-    def _add(docs: list[Mapping[str, object]], column: str, rank: int) -> None:
+    def _add(docs: list[Mapping[str, object]], rank: int, channel: str) -> None:
+        if rank != 0 and omit_folder:
+            return
         for doc in docs:
             override = None
             if rank == 0 and membership is not None:
@@ -506,95 +456,51 @@ def _cloud_rules(payload: Mapping[str, object], *, folder_id: str | None) -> _Cl
                     continue
                 override = mode
             live = live_rule_from_mapping(
-                doc, column_apply=column, rank=rank, apply_override=override
+                doc, column_apply=channel, rank=rank, apply_override=override
             )
             if live is not None:
                 out.append(live)
 
-    _add(_iter_cloud_rule_docs(payload, "global_rules"), "always", 0)
-    _add(_iter_cloud_rule_docs(payload, "global_on_demand_rules"), "on_demand", 0)
-    _add(_iter_cloud_rule_docs(payload, "global_path_rules"), "paths", 0)
-    if skip_desk or not chain:
-        return _CloudRules(rules=out, ancestor_count=0, has_current=False)
-
-    ancestors = ancestor_scopes(chain)
-    grouped = (
-        ("always", _iter_cloud_rule_docs(payload, "ancestor_rules")),
-        ("on_demand", _iter_cloud_rule_docs(payload, "ancestor_on_demand_rules")),
-        ("paths", _iter_cloud_rule_docs(payload, "ancestor_path_rules")),
-    )
-    layers = _bucket_ancestor_docs(grouped, ancestors)
-    for index, layer in enumerate(layers, start=1):
-        for doc, column in layer:
-            live = live_rule_from_mapping(doc, column_apply=column, rank=index)
-            if live is not None:
-                out.append(live)
-    current_rank = len(layers) + 1
-    _add(_iter_cloud_rule_docs(payload, "project_rules"), "always", current_rank)
-    _add(_iter_cloud_rule_docs(payload, "project_on_demand_rules"), "on_demand", current_rank)
-    _add(_iter_cloud_rule_docs(payload, "project_path_rules"), "paths", current_rank)
-    return _CloudRules(rules=out, ancestor_count=len(layers), has_current=True)
+    _add(_iter_cloud_rule_docs(payload, "global_rules"), 0, "always")
+    _add(_iter_cloud_rule_docs(payload, "global_on_demand_rules"), 0, "on_demand")
+    _add(_iter_cloud_rule_docs(payload, "global_path_rules"), 0, "paths")
+    _add(_iter_cloud_rule_docs(payload, "project_rules"), 1, "always")
+    _add(_iter_cloud_rule_docs(payload, "project_on_demand_rules"), 1, "on_demand")
+    _add(_iter_cloud_rule_docs(payload, "project_path_rules"), 1, "paths")
+    return _CloudRules(rules=out, ancestor_count=0, has_current=bool(out))
 
 
 def _user_rule_fragments_from_cloud(
     payload: Mapping[str, object], *, folder_id: str | None
 ) -> list[RuleFragment]:
-    """Map ``POST /v1/account/rules/list`` into scope layers. Same name: nearest only."""
+    """``<设定>`` slices from ``POST /v1/account/rules/list``."""
     from agentcore.memory.rule_resolve import resolve_rules
 
     loaded = _cloud_rules(payload, folder_id=folder_id)
-    return _fragments_from_resolved(
-        resolve_rules(loaded.rules),
-        ancestor_count=loaded.ancestor_count,
-        has_current=loaded.has_current,
-    )
+    text = _settings_from_resolved(resolve_rules(loaded.rules))
+    return [RuleFragment(body=text)] if text else []
 
 
 async def assemble_injected_rules(
-    store: MemoryStore,
     repo: DocumentRepository,
     user_id: str,
     *,
     folder_id: str | None,
-    scope_chain: Sequence[str] | None = None,
     folder_user_id: str | None = None,
 ) -> str:
-    """Load + compose this turn's ``<设定>`` body (user always-rules only).
+    """Load + compose this turn's ``<设定>`` body.
 
-    Display order is global → ancestors → current. AI-maintained notes are not
-    loaded. ``store`` is unused on the read path (callers still pass the pipeline
-    seam). Account-level rules stay on ``user_id``; folder layers use the desk
-    owner when ``folder_user_id`` is set.
-
-    ``scope_chain`` (outermost-first, current last) is resolved by the caller —
-    omitting it injects the current folder only. Production entry:
-    :func:`assemble_turn_rules`.
+    Account 常驻, then the current folder's 常驻. Ancestors are not a scope.
     """
-    del store
-    from agentcore.memory.rule_resolve import resolve_rules
-
-    chain = tuple(scope_chain) if scope_chain is not None else own_scope_chain(folder_id)
-    folder_actor = folder_user_id or user_id
-    ancestors = ancestor_scopes(chain)
-    live = await _scope_live_rules(repo, user_id, None, 0)
-    for index, scope in enumerate(ancestors, start=1):
-        live.extend(await _scope_live_rules(repo, folder_actor, scope, index))
-    if chain:
-        live.extend(
-            await _scope_live_rules(repo, folder_actor, chain[-1], len(ancestors) + 1)
-        )
-    return compose_injected_rules(
-        _fragments_from_resolved(
-            resolve_rules(live),
-            ancestor_count=len(ancestors),
-            has_current=bool(chain),
-        )
+    resolved = await _resolved_pair(
+        repo, user_id, folder_id=folder_id, folder_user_id=folder_user_id
     )
+    return _settings_from_resolved(resolved)
 
 
 @dataclass(frozen=True)
 class TurnRuleView:
-    """常驻正文 plus bounded path rules for this desk."""
+    """``<设定>`` body plus path rules for this turn."""
 
     settings: str = ""
     path_rules: tuple = ()
@@ -607,65 +513,61 @@ class TurnRuleView:
 
 
 async def load_turn_rule_view(
-    store: MemoryStore,
     user_id: str,
     *,
     folder_id: str | None,
     folder_user_id: str | None = None,
+    reader: object | None = None,
 ) -> TurnRuleView:
-    """常驻 ``<设定>`` body and the path-rule index inputs. Errors → empty."""
+    """``<设定>`` body and path rules. Errors → empty, so injection cannot break a turn."""
     from agentcore.account.credentials import get_account_credentials
     from agentcore.db.base import async_session_factory
     from agentcore.memory.account_prepare_cache import get_account_rules_memory_snapshot
     from agentcore.memory.rule_resolve import resolve_rules
+    from agentcore.memory.workspace_files import (
+        current_workspace_markdown_reader,
+        discover_workspace_rules,
+        workspace_markdown_reader_scope,
+    )
 
+    active_reader = reader if reader is not None else current_workspace_markdown_reader()
     try:
+        with workspace_markdown_reader_scope(active_reader):
+            extra = await discover_workspace_rules(active_reader)
         folder_actor = folder_user_id or user_id
         creds = get_account_credentials()
         if creds is not None and folder_actor == user_id:
             snap = get_account_rules_memory_snapshot(user_id, folder_id)
             if snap is None:
-                return TurnRuleView()
-            payload = snap.rules_payload
-            loaded = _cloud_rules(payload, folder_id=folder_id)
-            resolved = resolve_rules(loaded.rules)
-            settings = compose_injected_rules(
-                _fragments_from_resolved(
-                    resolved,
-                    ancestor_count=loaded.ancestor_count,
-                    has_current=loaded.has_current,
+                resolved = resolve_rules(extra)
+                return TurnRuleView(
+                    settings=_settings_from_resolved(resolved),
+                    path_rules=resolved.path,
                 )
+            loaded = _cloud_rules(snap.rules_payload, folder_id=folder_id)
+            resolved = resolve_rules([*loaded.rules, *extra])
+            return TurnRuleView(
+                settings=_settings_from_resolved(resolved),
+                path_rules=resolved.path,
             )
-            return TurnRuleView(settings=settings, path_rules=resolved.path)
         async with async_session_factory() as session:
             repo = DocumentRepository(session)
-            chain = await db_scope_chain(folder_actor, folder_id, session=session)
-            ancestors = ancestor_scopes(chain)
-            live = await _scope_live_rules(repo, user_id, None, 0)
-            for index, scope in enumerate(ancestors, start=1):
-                live.extend(await _scope_live_rules(repo, folder_actor, scope, index))
-            if chain:
-                live.extend(
-                    await _scope_live_rules(
-                        repo, folder_actor, chain[-1], len(ancestors) + 1
-                    )
-                )
-            resolved = resolve_rules(live)
-            settings = compose_injected_rules(
-                _fragments_from_resolved(
-                    resolved,
-                    ancestor_count=len(ancestors),
-                    has_current=bool(chain),
-                )
+            account = await _scope_live_rules(repo, user_id, None, 0)
+            folder: list = []
+            if folder_id:
+                owner = folder_user_id or user_id
+                folder = await _scope_live_rules(repo, owner, folder_id, 1)
+            resolved = resolve_rules([*account, *folder, *extra])
+            return TurnRuleView(
+                settings=_settings_from_resolved(resolved),
+                path_rules=resolved.path,
             )
-            return TurnRuleView(settings=settings, path_rules=resolved.path)
     except Exception as e:  # noqa: BLE001 - user rules must never break a turn's assembly
         logger.warning("memory.user_rules_load_failed", user_id=user_id, error=str(e))
         return TurnRuleView()
 
 
 async def assemble_turn_rules(
-    store: MemoryStore,
     user_id: str,
     *,
     folder_id: str | None,
@@ -674,14 +576,11 @@ async def assemble_turn_rules(
     """Turn-time convenience over :func:`assemble_injected_rules` (the pipeline entry point).
 
     With account creds, prepare reads the process snapshot cache only (warm seeds it);
-    miss → empty injection — never await cloud HTTP on the turn hot path. User-rule
-    loading degrades to「no rules」on ANY error so injection can never break a turn.
-
-    Nested folders inherit outside-in (§5.4): the ancestor chain comes from the warm
-    snapshot on the ticketed path and from ``folders.rel_path`` otherwise.
+    miss → empty injection — never await cloud HTTP on the turn hot path. Loading
+    degrades to no markdown on any error so injection cannot break a turn.
     """
     view = await load_turn_rule_view(
-        store, user_id, folder_id=folder_id, folder_user_id=folder_user_id
+        user_id, folder_id=folder_id, folder_user_id=folder_user_id
     )
     return view.settings
 
@@ -719,10 +618,46 @@ def _resolved_from_cloud(payload: Mapping[str, object], *, folder_id: str | None
     return resolve_rules(_cloud_rules(payload, folder_id=folder_id).rules)
 
 
+def _merge_file_catalog(
+    rules: list[OnDemandUserRule], extra: Sequence[object]
+) -> list[OnDemandUserRule]:
+    from agentcore.memory.rule_resolve import LiveRule
+
+    replaced: dict[str, str] = {}
+    for row in extra:
+        if not isinstance(row, LiveRule):
+            continue
+        if row.apply != "on_demand" or not row.description.strip():
+            continue
+        replaced[row.name] = row.description
+    out: list[OnDemandUserRule] = []
+    seen: set[str] = set()
+    for rule in rules:
+        if rule.name in seen:
+            continue
+        seen.add(rule.name)
+        if rule.name in replaced:
+            out.append(OnDemandUserRule(name=rule.name, summary=replaced[rule.name]))
+        else:
+            out.append(rule)
+    for name, summary in replaced.items():
+        if name not in seen:
+            out.append(OnDemandUserRule(name=name, summary=summary))
+    return out
+
+
+async def _workspace_on_demand(
+    reader: object | None,
+) -> list:
+    from agentcore.memory.workspace_files import discover_workspace_rules
+
+    return await discover_workspace_rules(reader)
+
+
 def on_demand_user_rules_from_cloud(
     payload: Mapping[str, object], *, folder_id: str | None
 ) -> list[OnDemandUserRule]:
-    """按需 winners with a non-empty description. Same name: nearest desk only."""
+    """On-demand rows for the account and, when present, this folder."""
     resolved = _resolved_from_cloud(payload, folder_id=folder_id)
     return [
         OnDemandUserRule(name=rule.name, summary=rule.description)
@@ -733,15 +668,16 @@ def on_demand_user_rules_from_cloud(
 def lookup_on_demand_rule_body_from_cloud(
     payload: Mapping[str, object], *, folder_id: str | None, name: str
 ) -> str | None:
-    """Body of the nearest on-demand winner. A nearer always/path rule hides the name."""
+    """Body for ``name``. The current folder wins over the account on a clash."""
     key = rule_consult_name(name)
     if not key:
         return None
     resolved = _resolved_from_cloud(payload, folder_id=folder_id)
-    for rule in resolved.on_demand:
-        if rule.name == key:
-            return _consult_body(rule.content)
-    return None
+    match = [rule for rule in resolved.on_demand if rule.name == key]
+    if not match:
+        return None
+    chosen = max(match, key=lambda rule: rule.rank)
+    return _consult_body(chosen.content)
 
 
 def _consult_body(content: str) -> str | None:
@@ -753,55 +689,68 @@ def _consult_body(content: str) -> str | None:
 
 
 async def load_on_demand_user_rules(
-    user_id: str, *, folder_id: str | None
+    user_id: str, *, folder_id: str | None, reader: object | None = None
 ) -> list[OnDemandUserRule]:
-    """Merge global + the folder chain's on_demand user rules for the「规则目录」(or []).
+    """On-demand catalog for the account and, when set, this folder.
 
-    Degrades to [] on any error (same defensive posture as always-rule loading).
+    Degrades to [] on any error.
     Account-ticketed turns read the process prepare snapshot only (warm seeds it;
-    miss → []); local / server turns read the document session.
+    miss → []); local / server turns read the document session. Workspace
+    ``AgentCore/rules`` files overlay the same names at folder rank.
     """
     from agentcore.account.credentials import get_account_credentials
     from agentcore.db.base import async_session_factory
     from agentcore.memory.account_prepare_cache import get_account_rules_memory_snapshot
+    from agentcore.memory.workspace_files import current_workspace_markdown_reader
 
+    active_reader = reader if reader is not None else current_workspace_markdown_reader()
     try:
+        extra = await _workspace_on_demand(active_reader)
         creds = get_account_credentials()
         if creds is not None:
             snap = get_account_rules_memory_snapshot(user_id, folder_id)
             if snap is None:
-                return []
-            return on_demand_user_rules_from_cloud(snap.rules_payload, folder_id=folder_id)
+                return _merge_file_catalog([], extra)
+            return _merge_file_catalog(
+                on_demand_user_rules_from_cloud(snap.rules_payload, folder_id=folder_id),
+                extra,
+            )
         async with async_session_factory() as session:
-            from agentcore.memory.rule_resolve import resolve_rules
-
             repo = DocumentRepository(session)
-            live = await _scope_live_rules(repo, user_id, None, 0)
-            chain = await db_scope_chain(user_id, folder_id, session=session)
-            for index, scope in enumerate(chain, start=1):
-                live.extend(await _scope_live_rules(repo, user_id, scope, index))
-            resolved = resolve_rules(live)
-            return [
+            resolved = await _resolved_pair(
+                repo, user_id, folder_id=folder_id, folder_user_id=None
+            )
+            rules = [
                 OnDemandUserRule(name=rule.name, summary=rule.description)
                 for rule in resolved.on_demand
             ]
+            return _merge_file_catalog(rules, extra)
     except Exception as e:  # noqa: BLE001 - must never break turn assembly
         logger.warning("memory.on_demand_rules_load_failed", user_id=user_id, error=str(e))
         return []
 
 
 async def lookup_on_demand_rule_body(
-    user_id: str, *, folder_id: str | None, name: str
+    user_id: str, *, folder_id: str | None, name: str, reader: object | None = None
 ) -> str | None:
-    """Nearest on-demand body. A nearer always or path rule hides the name."""
+    """On-demand body. Workspace files win over the account when the name clashes."""
     key = rule_consult_name(name)
     if not key:
         return None
     from agentcore.account.credentials import get_account_credentials
     from agentcore.db.base import async_session_factory
     from agentcore.memory.account_prepare_cache import get_account_rules_memory_snapshot
+    from agentcore.memory.workspace_files import (
+        current_workspace_markdown_reader,
+        matching_workspace_rule,
+    )
 
+    active_reader = reader if reader is not None else current_workspace_markdown_reader()
     try:
+        extra = await _workspace_on_demand(active_reader)
+        match = matching_workspace_rule(extra, key)
+        if match is not None and match.apply == "on_demand" and match.description.strip():
+            return _consult_body(match.content)
         if get_account_credentials() is not None:
             snap = get_account_rules_memory_snapshot(user_id, folder_id)
             if snap is None:
@@ -810,17 +759,15 @@ async def lookup_on_demand_rule_body(
                 snap.rules_payload, folder_id=folder_id, name=key
             )
         async with async_session_factory() as session:
-            from agentcore.memory.rule_resolve import resolve_rules
-
             repo = DocumentRepository(session)
-            live = await _scope_live_rules(repo, user_id, None, 0)
-            chain = await db_scope_chain(user_id, folder_id, session=session)
-            for index, scope in enumerate(chain, start=1):
-                live.extend(await _scope_live_rules(repo, user_id, scope, index))
-            for rule in resolve_rules(live).on_demand:
-                if rule.name == key:
-                    return _consult_body(rule.content)
-            return None
+            resolved = await _resolved_pair(
+                repo, user_id, folder_id=folder_id, folder_user_id=None
+            )
+            found = [rule for rule in resolved.on_demand if rule.name == key]
+            if not found:
+                return None
+            chosen = max(found, key=lambda rule: rule.rank)
+            return _consult_body(chosen.content)
     except Exception as e:  # noqa: BLE001 — never break consult over rules IO
         logger.warning(
             "consult.rule_fetch_failed", user_id=user_id, name=key, error=str(e)

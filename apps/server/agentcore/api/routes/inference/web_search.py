@@ -14,6 +14,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, field_validator
 
 from agentcore.api.routes.inference.token import inference_user
+from agentcore.api.schemas import StatusResponse
 from agentcore.conversation.inference_rate_limit import enforce_inference_proxy_rate_limit
 from agentcore.core.error_codes import ErrorCode
 from agentcore.core.errors import QuotaExceededError
@@ -26,9 +27,11 @@ from agentcore.llm.credentials import (
     INFERENCE_MESSAGE_HEADER,
     INFERENCE_TRACE_HEADER,
 )
+from agentcore.tools.builtin.web.provider_service import note_own_search_failure
 from agentcore.tools.builtin.web.search_backend import DEFAULT_MAX_RESULTS, get_search_backend
 from agentcore.tools.builtin.web.search_choice import (
     SearchRouteView,
+    SearchTarget,
     load_search_target,
     route_from_target,
 )
@@ -41,6 +44,15 @@ from agentcore.tools.builtin.web.search_quota import (
 logger = get_logger(__name__)
 
 router = APIRouter()
+
+
+async def _note_provider_failure(
+    target: SearchTarget | None,
+    user_id: str,
+    message: str,
+) -> None:
+    if target is not None and target.kind == "provider":
+        await note_own_search_failure(user_id, message)
 
 # Sidecar HTTP contract ceiling (the built-in tool always requests 8).
 _MAX_RESULTS_CAP = 12
@@ -105,6 +117,7 @@ async def inference_web_search(
         # Same outer rate fence as chat/completions (once per sidecar turn via message_id).
         await enforce_inference_proxy_rate_limit(user.user_id, message_id=message_id)
 
+        target: SearchTarget | None = None
         try:
             target = await load_search_target(user.user_id)
             if target.kind == "platform":
@@ -130,26 +143,30 @@ async def inference_web_search(
         except QuotaExceededError:
             raise
         except EgressError as exc:
+            message = str(exc) or "云端搜索暂时不可用"
             logger.warning(
                 "inference.web_search_failed",
-                error=str(exc),
+                error=message,
                 error_type=type(exc).__name__,
             )
+            await _note_provider_failure(target, user.user_id, message)
             return JSONResponse(
                 status_code=502,
                 content={
                     "error": {
                         "code": ErrorCode.INTERNAL_ERROR,
-                        "message": str(exc) or "云端搜索暂时不可用",
+                        "message": message,
                     }
                 },
             )
         except Exception as exc:  # noqa: BLE001 - surface clean 502; never leak traceback
+            detail = describe_net_error(exc)
             logger.warning(
                 "inference.web_search_failed",
-                error=describe_net_error(exc),
+                error=detail,
                 error_type=type(exc).__name__,
             )
+            await _note_provider_failure(target, user.user_id, detail)
             return JSONResponse(
                 status_code=502,
                 content={
@@ -178,6 +195,20 @@ async def inference_web_search(
             ],
             source="cloud",
         )
+
+
+class SearchConnectionFailureRequest(BaseModel):
+    message: str = Field(default="", max_length=300)
+
+
+@router.post("/inference/search_connection/failure", response_model=StatusResponse)
+async def inference_search_connection_failure(
+    body: SearchConnectionFailureRequest,
+    user: User = Depends(inference_user),
+) -> StatusResponse:
+    """Sidecar report: the keyless SearXNG it called just failed."""
+    await note_own_search_failure(user.user_id, body.message)
+    return StatusResponse()
 
 
 @router.get("/inference/search_route", response_model=SearchRouteView)

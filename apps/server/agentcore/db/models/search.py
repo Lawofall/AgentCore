@@ -1,13 +1,13 @@
-"""Account web-search providers and the platform search-count ledger.
+"""Account web-search connections and the platform search-count ledger.
 
 Platform SearXNG is the default index and is metered by ``platform_search_uses``.
-A row in ``user_search_providers`` is the account's own CleverSee key or own
-SearXNG URL; those calls do not write the ledger.
+A row in ``user_search_providers`` is one engine slot (开析 or SearXNG) for the
+account. At most one row per engine. Those calls do not write the ledger.
 """
 
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, DateTime, Index, LargeBinary, String, text
+from sqlalchemy import CheckConstraint, DateTime, Index, LargeBinary, String, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -24,8 +24,13 @@ class UserSearchProvider(Base):
             name="ck_user_search_providers_protocol",
         ),
         CheckConstraint(
-            "status in ('unchecked', 'active', 'error')",
+            "status in ('connected', 'needs_reconnect')",
             name="ck_user_search_providers_status",
+        ),
+        UniqueConstraint(
+            "user_id",
+            "protocol",
+            name="uq_user_search_providers_user_protocol",
         ),
         Index("ix_user_search_providers_user", "user_id"),
     )
@@ -37,9 +42,12 @@ class UserSearchProvider(Base):
     base_url: Mapped[str] = mapped_column(String(500))
     # AES-256-GCM ciphertext. NULL when a SearXNG instance has no key.
     api_key_enc: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    # connected = last probe succeeded. needs_reconnect = a later search failed;
+    # only a successful connect clears it.
     status: Mapped[str] = mapped_column(
-        String(20), default="unchecked", server_default=text("'unchecked'")
+        String(20), default="connected", server_default=text("'connected'")
     )
+    detail: Mapped[str | None] = mapped_column(String(300), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=text("now()")
     )

@@ -20,9 +20,8 @@ export type FilesPreviewSceneId = (typeof FILES_PREVIEW_SCENES)[number]["id"];
 export const FILES_PREVIEW_PROJECT_FOLDER_ID = "folder-demo";
 
 /**
- * 文件夹自己的盘上文件——预览里跟条目同屏：左栏只有文件夹树；
- * 文件夹条目经 ``renderWorkroomLead`` 进 ``.agentcore``（盘上 ``AgentCore/``），钉在同级最前。
- * 账号提示词在工具箱；文件页只挂文件夹 ``.agentcore``。
+ * 文件夹自己的盘上文件。盘上真有 ``AgentCore/`` 时树里仍显示（标签 ``.agentcore``）。
+ * 规矩在工具箱的账号库，文件页不另钉一条空的规矩抽屉。
  */
 const PREVIEW_WORKSPACE_TREE: FileNode[] = [
   { path: "合同", name: "合同", isDir: true },

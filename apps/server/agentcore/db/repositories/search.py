@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from agentcore.core.types import new_id
 from agentcore.db.models import PlatformSearchUse, UserSearchProvider
-from agentcore.db.repositories._base import _UNSET, commit_or_flush
+from agentcore.db.repositories._base import commit_or_flush
 
 
 class UserSearchProviderRepository:
@@ -42,6 +42,15 @@ class UserSearchProviderRepository:
         )
         return result.scalar_one_or_none()
 
+    async def get_by_protocol(self, user_id: str, protocol: str) -> UserSearchProvider | None:
+        result = await self._session.execute(
+            select(UserSearchProvider).where(
+                UserSearchProvider.user_id == user_id,
+                UserSearchProvider.protocol == protocol,
+            )
+        )
+        return result.scalar_one_or_none()
+
     async def create(
         self,
         *,
@@ -50,6 +59,8 @@ class UserSearchProviderRepository:
         protocol: str,
         base_url: str,
         api_key_enc: bytes | None,
+        status: str = "connected",
+        detail: str | None = None,
         commit: bool = True,
     ) -> UserSearchProvider:
         row = UserSearchProvider(
@@ -59,51 +70,43 @@ class UserSearchProviderRepository:
             protocol=protocol,
             base_url=base_url,
             api_key_enc=api_key_enc,
-            status="unchecked",
+            status=status,
+            detail=detail,
         )
         self._session.add(row)
         await commit_or_flush(self._session, commit=commit)
         await self._session.refresh(row)
         return row
 
-    async def update(
+    async def save_connected(
         self,
         provider_id: str,
         *,
         user_id: str,
-        label: str | object = _UNSET,
-        base_url: str | object = _UNSET,
-        api_key_enc: bytes | None | object = _UNSET,
+        label: str,
+        base_url: str,
+        api_key_enc: bytes | None,
         clear_key: bool = False,
         commit: bool = True,
     ) -> UserSearchProvider | None:
         row = await self.get(provider_id, user_id=user_id)
         if row is None:
             return None
-        reset_status = False
-        if label is not _UNSET:
-            row.label = str(label or "").strip()
-        if base_url is not _UNSET:
-            row.base_url = str(base_url).strip().rstrip("/")
-            reset_status = True
-        if clear_key:
-            row.api_key_enc = None
-            reset_status = True
-        elif api_key_enc is not _UNSET:
-            row.api_key_enc = api_key_enc  # type: ignore[assignment]
-            reset_status = True
-        if reset_status:
-            row.status = "unchecked"
+        row.label = label
+        row.base_url = base_url
+        row.api_key_enc = None if clear_key else api_key_enc
+        row.status = "connected"
+        row.detail = None
         await commit_or_flush(self._session, commit=commit)
         await self._session.refresh(row)
         return row
 
-    async def set_status(
+    async def mark_needs_reconnect(
         self,
         provider_id: str,
         *,
         user_id: str,
-        status: str,
+        detail: str,
         commit: bool = True,
     ) -> None:
         await self._session.execute(
@@ -112,7 +115,7 @@ class UserSearchProviderRepository:
                 UserSearchProvider.id == provider_id,
                 UserSearchProvider.user_id == user_id,
             )
-            .values(status=status)
+            .values(status="needs_reconnect", detail=detail[:300])
         )
         await commit_or_flush(self._session, commit=commit)
 

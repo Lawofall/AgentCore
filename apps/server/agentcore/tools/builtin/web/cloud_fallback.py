@@ -85,6 +85,15 @@ def inference_search_credentials_scope(
         reset_inference_search_credentials(token)
 
 
+def inference_search_failure_url(base_url: str) -> str:
+    """``POST …/v1/inference/search_connection/failure`` beside web_search."""
+    search_url = inference_web_search_url(base_url)
+    suffix = "/web_search"
+    if search_url.endswith(suffix):
+        return search_url[: -len(suffix)] + "/search_connection/failure"
+    raise ValueError(f"unexpected inference web_search url: {search_url}")
+
+
 def inference_web_search_url(base_url: str) -> str:
     """Derive ``POST …/v1/inference/web_search`` from inference ``base_url``.
 
@@ -173,6 +182,33 @@ def _cloud_search_error_message(resp: httpx.Response) -> str:
             if isinstance(message, str) and message.strip():
                 return message.strip()
     return "云端搜索暂时不可用"
+
+
+async def report_search_connection_failure(
+    creds: InferenceSearchCredentials,
+    message: str,
+) -> None:
+    """Tell the account that the sidecar's own engine just failed. Never raises."""
+    url = inference_search_failure_url(creds.base_url)
+    headers = {
+        "Authorization": f"Bearer {creds.api_key}",
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+        **(creds.extra_headers or {}),
+    }
+    try:
+        async with outbound_async_client(
+            timeout=httpx.Timeout(SEARCH_TIMEOUT, connect=WEB_CONNECT_TIMEOUT)
+        ) as client:
+            resp = await client.post(
+                url,
+                json={"message": (message or "")[:300]},
+                headers=headers,
+            )
+        if resp.status_code >= 400:
+            logger.warning("search_connection.note_failed", status=resp.status_code)
+    except Exception as exc:  # noqa: BLE001 — the search error is already being returned
+        logger.warning("search_connection.note_failed", error_type=type(exc).__name__)
 
 
 async def try_cloud_web_search_fallback(

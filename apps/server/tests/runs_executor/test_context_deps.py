@@ -83,25 +83,37 @@ def test_dep_pointer_caps_file_list_with_elision():
     assert "共 30 个文件" in body  # and the full count is disclosed
 
 
-def test_dep_block_prose_dep_unchanged_full_text():
-    # No files → the existing full-text path: a short prose dep is passed through whole.
+def test_dep_block_prose_without_brief_is_not_forwarded():
+    # No files and no brief: the essay does not ride the edge.
     plan = _plan(RunSpec(run_id="u", agent_id="u", role="研究员", task="调研"))
     block = _dep_context_blocks(plan, ["u"], {"u": _state("纯文字结论无文件")})[0]
-    assert block.body == "纯文字结论无文件"
-    assert block.fidelity == "pass_through"  # no files → prose pass_through
-    assert block.truncated is False  # short prose fits the budget whole
+    assert block.fidelity == "absent"
+    assert "纯文字结论无文件" not in block.body
+    assert "没有简报" in block.body
+    assert "勿编造" in block.body
 
 
-def test_dep_block_leads_with_author_debrief_summary():
-    # 完工交接简报: a pass_through dep's block LEADS with the upstream author's own 结论 (from the
-    # structured debrief, so the downstream sees the gist first / it survives any later trim); the
-    # deliverable content is already clean and 建议下一步 is for the CEO, not downstream prose.
+def test_dep_block_brief_only_when_essay_exists():
+    # A handoff brief is the chain payload. The essay is not appended.
     plan = _plan(RunSpec(run_id="u", agent_id="u", role="研究员", task="调研"))
     state = _state("详细调研正文……", debrief={"summary": "方案A明显更优", "next_steps": "做A的POC"})
     block = _dep_context_blocks(plan, ["u"], {"u": state})[0]
-    assert block.body.startswith("【上游交接结论】方案A明显更优")
-    assert "详细调研正文" in block.body  # the deliverable body still follows the lead
-    assert "做A的POC" not in block.body  # next_steps is CEO-facing, not shipped downstream
+    assert block.fidelity == "summarize"
+    assert block.body == "方案A明显更优"
+    assert "详细调研正文" not in block.body
+    assert "做A的POC" not in block.body
+    assert block.truncated is True
+
+
+def test_degraded_debrief_is_not_the_chain_payload():
+    # Engine slice of the essay is for the CEO, not the next hop.
+    plan = _plan(RunSpec(run_id="u", agent_id="u", role="研究员", task="调研"))
+    essay = "起始结论" + ("数" * 400)
+    state = _state(essay, debrief={"summary": essay[:200], "degraded": True})
+    block = _dep_context_blocks(plan, ["u"], {"u": state})[0]
+    assert block.fidelity == "absent"
+    assert "起始结论" not in block.body
+    assert "没有简报" in block.body
 
 
 def test_dep_block_promotes_brief_when_content_empty():
@@ -114,7 +126,7 @@ def test_dep_block_promotes_brief_when_content_empty():
     blocks = _dep_context_blocks(plan, ["u"], {"u": state})
     assert len(blocks) == 1
     block = blocks[0]
-    assert block.fidelity == "pass_through"
+    assert block.fidelity == "summarize"
     assert "前置缺席" not in block.heading
     assert "方案A更优" in block.body
     assert "成本更低" in block.body
@@ -168,9 +180,9 @@ def test_dep_summarize_uses_author_summary_over_blind_head_chop(monkeypatch):
     assert not any(name == "delegate.context_capped" for name, _ in spy.events)
 
 
-def test_dep_summarize_mechanical_cap_logs(monkeypatch):
+def test_dep_summarize_without_brief_does_not_slice_the_essay(monkeypatch):
+    # No authored brief: do not head/tail the essay into the downstream window.
     from agentcore.runtime import context_cap
-    from agentcore.runtime.runs.constants import DEP_SUMMARY_CHARS
     from tests.conftest import LogSpy
 
     spy = LogSpy()
@@ -182,15 +194,12 @@ def test_dep_summarize_mechanical_cap_logs(monkeypatch):
         task="调研",
         policy=RunPolicy(result_handling="summarize"),
     )
-    content = "头" + ("噪" * (DEP_SUMMARY_CHARS + 200)) + "尾结论"
+    content = "头" + ("噪" * 800) + "尾结论"
     block = _dep_context_blocks(_plan(spec), ["u"], {"u": _state(content)})[0]
-    assert block.fidelity == "summarize"
-    assert block.truncated is True
-    fields = spy.get("delegate.context_capped")
-    assert fields["site"] == "dep_context"
-    assert fields["fidelity"] == "summarize"
-    assert fields["original_chars"] == len(content)
-    assert fields["final_chars"] == len(block.body)
+    assert block.fidelity == "absent"
+    assert "尾结论" not in block.body
+    assert "噪" not in block.body
+    assert not any(name == "delegate.context_capped" for name, _ in spy.events)
 
 
 async def test_dag_file_writing_upstream_passes_pointer_downstream():

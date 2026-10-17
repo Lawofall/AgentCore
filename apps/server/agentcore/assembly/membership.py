@@ -19,40 +19,39 @@ _MODES = frozenset({"always", "on_demand", "paths"})
 def _is_account_rule(doc: object) -> bool:
     if getattr(doc, "folder_id", None):
         return False
-    if getattr(doc, "role", None) != "rule":
-        return False
     if getattr(doc, "ai_maintained", False):
         return False
     if getattr(doc, "kind", None) != "document":
         return False
-    return str(getattr(doc, "apply_mode", "") or "") in _MODES
+    from agentcore.memory.rule_resolve import live_rule_from_doc
+
+    return live_rule_from_doc(doc, column_apply="", rank=0) is not None
 
 
 async def seed_assembly_skills_from_account(
     session: AsyncSession, user_id: str, assembly_id: str
 ) -> None:
-    """Copy every account rule onto a newly materialized assembly."""
+    """Copy every account markdown that has a 带法 onto a new assembly."""
     from agentcore.db.repositories import DocumentRepository
+    from agentcore.memory.rule_resolve import live_rule_from_doc
 
     repo = DocumentRepository(session)
-    buckets = (
-        ("always", await repo.list_injectable_rules(user_id, None, ai_maintained=False)),
-        ("on_demand", await repo.list_on_demand_user_rules(user_id, None)),
-        ("paths", await repo.list_path_user_rules(user_id, None)),
-    )
+    docs = await repo.list_scoped_markdown(user_id, None)
     seen: set[str] = set()
-    for mode, docs in buckets:
-        for doc in docs:
-            if doc.id in seen:
-                continue
-            seen.add(doc.id)
-            session.add(
-                AssemblySkill(
-                    assembly_id=assembly_id,
-                    document_id=doc.id,
-                    apply_mode=mode,
-                )
+    for doc in docs:
+        if doc.id in seen:
+            continue
+        live = live_rule_from_doc(doc, column_apply="", rank=0)
+        if live is None or live.apply not in _MODES:
+            continue
+        seen.add(doc.id)
+        session.add(
+            AssemblySkill(
+                assembly_id=assembly_id,
+                document_id=doc.id,
+                apply_mode=live.apply,
             )
+        )
     if seen:
         await session.commit()
 

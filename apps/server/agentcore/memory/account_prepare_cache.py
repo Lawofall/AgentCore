@@ -31,7 +31,6 @@ from agentcore.account.credentials import (
     cloud_list_user_rules,
 )
 from agentcore.core.logging import get_logger
-from agentcore.memory.scope_chain import cloud_scope_chain
 
 logger = get_logger(__name__)
 
@@ -57,8 +56,6 @@ class AccountPrepareSnapshot:
     # Unused leftover slot (DocumentMemoryStore cache_only still keys off it).
     memory_bodies: Mapping[tuple[str, str], str] = field(default_factory=dict)
     memory_descriptions: Mapping[tuple[str, str], str] = field(default_factory=dict)
-    # Folder scope chain, outermost-first, current folder last.
-    folder_chain: tuple[str, ...] = ()
     degraded: bool = False
 
 
@@ -232,10 +229,8 @@ async def warm_account_rules_memory(
     elif rules_res is not None:
         degraded = True
 
-    folder_chain = cloud_scope_chain(rules_payload, folder_id)
     snapshot = AccountPrepareSnapshot(
         rules_payload=rules_payload,
-        folder_chain=folder_chain,
         degraded=degraded,
     )
     seed_account_rules_memory_cache(uid, folder_id, snapshot)

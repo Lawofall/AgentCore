@@ -7,12 +7,7 @@ from agentcore.documents.frontmatter import (
     parse_entry_frontmatter,
     set_entry_frontmatter,
 )
-from agentcore.documents.path_rules import (
-    glob_match,
-    path_rule_note,
-    path_rules_note_for_paths,
-    render_path_index,
-)
+from agentcore.documents.path_rules import glob_match
 from agentcore.memory.rule_resolve import (
     LiveRule,
     counts_as_always_content,
@@ -55,7 +50,7 @@ def test_paths_round_trip():
     assert parsed.description == "改组件时"
 
 
-def test_same_name_nearest_wins_across_modes():
+def test_same_name_nearest_enrolled_wins():
     outer = LiveRule(
         name="提交",
         content="---\napply: on_demand\ndescription: 外层\n---\n外层正文\n",
@@ -73,13 +68,13 @@ def test_same_name_nearest_wins_across_modes():
         rank=1,
     )
     resolved = resolve_rules([outer, inner])
-    assert resolved.on_demand == ()
     assert len(resolved.path) == 1
-    assert resolved.path[0].body == "用中文"
-    assert "外层正文" not in render_path_index(resolved.path)
+    assert resolved.path[0].description == "改 Python 时"
+    assert len(resolved.on_demand) == 1
+    assert resolved.on_demand[0].description == "外层"
 
 
-def test_empty_on_demand_description_claims_the_name():
+def test_empty_description_does_not_hide_an_enrolled_rule():
     outer = LiveRule(
         name="合规",
         content="---\napply: on_demand\ndescription: 外层\n---\n外层\n",
@@ -97,11 +92,12 @@ def test_empty_on_demand_description_claims_the_name():
         rank=1,
     )
     resolved = resolve_rules([outer, inner])
-    assert resolved.on_demand == ()
+    assert len(resolved.on_demand) == 1
+    assert resolved.on_demand[0].description == "外层"
 
 
-def test_path_index_and_note_follow_a_real_path():
-    rule = resolve_rules(
+def test_path_frontmatter_is_the_path_channel():
+    resolved = resolve_rules(
         [
             LiveRule(
                 name="组件",
@@ -112,11 +108,7 @@ def test_path_index_and_note_follow_a_real_path():
                 rank=0,
             )
         ]
-    ).path
-    index = render_path_index(rule)
-    assert "<路径约定>" in index
-    assert "**/*.tsx：组件用函数" in index
-    assert path_rule_note(rule, "src/App.tsx")
-    assert path_rule_note(rule, "README.md") == ""
-    note = path_rules_note_for_paths(rule, ["src/App.tsx"])
-    assert "不要 class" in note
+    )
+    assert resolved.on_demand == ()
+    assert len(resolved.path) == 1
+    assert resolved.path[0].body == "不要 class"

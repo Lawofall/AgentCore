@@ -25,6 +25,7 @@ from agentcore.tools.builtin.web.cloud_fallback import (
     cloud_inference_web_search,
     get_inference_search_credentials,
 )
+from agentcore.tools.builtin.web.provider_service import record_provider_search_failure
 from agentcore.tools.builtin.web.relevance import (
     dropped_host_samples,
     filter_results_for_injection,
@@ -749,6 +750,7 @@ class WebSearchTool:
             finish_phases()
             reason = describe_search_error(e, backend)
             logger.warning("tool.web_search_error", query=query, error=reason, error_repr=repr(e))
+            await record_provider_search_failure(target, context.user_id, reason)
             # Local SearXNG product copy → stable code for curated user face (never lift
             # ``: detail`` / host tokens from the net-error copy onto failure.message).
             searxng_face = reason.startswith("本地搜索服务")

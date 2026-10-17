@@ -1,9 +1,12 @@
-"""Nearest-name resolution for user rules.
+"""Resolve a saved markdown document onto always / on-demand / path.
 
-Same consult name across 常驻 / 按需 / 路径: the nearest desk wins, and that
-document is the only one injected. Different names accumulate, outer desks
-first. An empty 按需 description claims the name and stays out of the catalog.
-Unbounded path patterns count as 常驻.
+A document enters only when frontmatter states ``apply``, an assembly
+membership mode names the channel, or a snapshot list already classified the
+body (``column_apply``). A stored row with no ``apply`` key does not enter.
+``description`` is required only for the on-demand catalog.
+
+Account rows (rank 0) and the current folder (rank 1) keep the same name.
+There is no ancestor rank.
 """
 
 from __future__ import annotations
@@ -37,7 +40,7 @@ class LiveRule:
 
 @dataclass(frozen=True)
 class ResolvedRules:
-    """Winners only. ``always`` includes unbounded path rules."""
+    """Winners per scope. ``always`` includes unbounded path rules."""
 
     always: tuple[LiveRule, ...]
     on_demand: tuple[LiveRule, ...]
@@ -45,9 +48,9 @@ class ResolvedRules:
 
 
 def counts_as_always_content(content: str) -> bool:
-    """True when this body occupies the 常驻 pool (always, or an unbounded path rule)."""
+    """True when this body occupies the always pool (常驻, or an unbounded path)."""
     parsed = parse_entry_frontmatter(content)
-    if isinstance(parsed, FrontmatterError):
+    if isinstance(parsed, FrontmatterError) or not parsed.apply_present:
         return False
     if parsed.apply == "always":
         return True
@@ -61,10 +64,12 @@ def live_rule_from_doc(
     rank: int,
     apply_override: str | None = None,
 ) -> LiveRule | None:
-    """One stored rule. Frontmatter ``apply`` wins when the key is present.
+    """One saved markdown document, or None when it has no channel this turn.
 
-    ``apply_override`` is the assembly membership mode. It wins over both the
-    column and frontmatter for account-level rules on an armed turn.
+    ``apply_override`` is the assembly membership mode for an account document.
+    Frontmatter ``apply`` wins next. ``column_apply`` is only the list a
+    snapshot already sorted this body into (``global_rules`` and the rest).
+    An unclassified row passes an empty column and does not enter.
     """
     raw_name = (
         str(doc.get("name") or "")
@@ -80,17 +85,26 @@ def live_rule_from_doc(
         return None
     if apply_override in _APPLY:
         apply = apply_override
+    elif parsed.apply_present:
+        apply = parsed.apply
+    elif column_apply in _APPLY:
+        apply = column_apply
     else:
-        apply = parsed.apply if parsed.apply_present else column_apply
+        return None
     if apply not in _APPLY:
         return None
-    description = parsed.description if parsed.description_present else _description_of(doc)
+    description = _description_of(doc).strip()
+    if not description and parsed.description_present:
+        description = parsed.description.strip()
+    if apply == "on_demand" and not description:
+        return None
+    patterns = parsed.paths if parsed.paths_present else ()
     return LiveRule(
         name=name,
         content=content,
-        description=(description or "").strip(),
+        description=description,
         apply=apply,
-        patterns=parsed.paths,
+        patterns=patterns,
         rank=rank,
     )
 
@@ -111,10 +125,12 @@ def live_rule_from_mapping(
 
 
 def resolve_rules(rules: Sequence[LiveRule]) -> ResolvedRules:
-    """Last write per name wins. Callers pass nearer rules later."""
-    winners: dict[str, LiveRule] = {}
+    """Last write per (scope rank, name) wins. Scopes do not replace each other."""
+    winners: dict[tuple[int, str], LiveRule] = {}
     for rule in rules:
-        winners[rule.name] = rule
+        if rule.apply == "on_demand" and not rule.description.strip():
+            continue
+        winners[(rule.rank, rule.name)] = rule
     always: list[LiveRule] = []
     on_demand: list[LiveRule] = []
     path: list[PathRule] = []
@@ -138,7 +154,7 @@ def resolve_rules(rules: Sequence[LiveRule]) -> ResolvedRules:
                     )
                 )
     always.sort(key=lambda rule: (rule.rank, rule.name))
-    on_demand.sort(key=lambda rule: rule.name)
+    on_demand.sort(key=lambda rule: (rule.rank, rule.name))
     path.sort(key=lambda rule: rule.name)
     return ResolvedRules(always=tuple(always), on_demand=tuple(on_demand), path=tuple(path))
 
@@ -147,16 +163,12 @@ def _channel(rule: LiveRule) -> str | None:
     if rule.apply == "always":
         return "always"
     if rule.apply == "on_demand":
-        return "on_demand" if rule.description else None
-    if rule.apply != "paths":
-        return None
-    if not rule.patterns:
-        return None
-    if patterns_are_unbounded(rule.patterns):
-        return "always"
-    if not rule.description:
-        return None
-    return "paths"
+        return "on_demand" if rule.description.strip() else None
+    if rule.apply == "paths":
+        if patterns_are_unbounded(rule.patterns):
+            return "always"
+        return "paths" if rule.patterns else None
+    return None
 
 
 def _body(content: str) -> str:

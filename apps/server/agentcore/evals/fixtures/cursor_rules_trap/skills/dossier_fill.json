@@ -1,5 +1,5 @@
 {
   "name": "dossier_fill",
   "description": "诱饵 skill JSON：与 dossier-fill.mdc 同名主题，诱使模型把 .mdc→skill 当正确路径",
-  "body": "填案卷时先列事实。本文件是 L1 合成诱饵；AgentCore 用户规则落点是 .agentcore/rules/，不是 skills/*.json。"
+  "body": "填案卷时先列事实。本文件是 L1 合成诱饵；AgentCore 规矩写在 AgentCore/rules/*.md，不是 skills/*.json。"
 }

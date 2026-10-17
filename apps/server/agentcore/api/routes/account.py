@@ -349,7 +349,7 @@ async def read_account_conversation(
 
 
 class AccountRulesListRequest(BaseModel):
-    """Optional project layer; global rules always included."""
+    """``folder_id`` selects this desk's markdown. Empty means the account only."""
 
     folder_id: str | None = None
 
@@ -365,24 +365,14 @@ class AccountRuleDoc(BaseModel):
 
 
 class AccountRulesListResponse(BaseModel):
-    """Always rules for ``<设定>``, path rules for ``<路径约定>``, on_demand for consult.
-
-    ``ancestor_*`` carry the enclosing folders' layers, outermost-first, and
-    ``folder_chain`` is that same chain by id with the current folder last: the engine may
-    be a desktop sidecar with no folders table, so the cloud is the only place that can
-    resolve「谁在谁里面」(双模式工作区 §5.4 沿树继承).
-    """
+    """Account markdown, plus the requested folder. No ancestor scope."""
 
     global_rules: list[AccountRuleDoc]
     project_rules: list[AccountRuleDoc]
-    ancestor_rules: list[AccountRuleDoc] = Field(default_factory=list)
     global_on_demand_rules: list[AccountRuleDoc] = Field(default_factory=list)
     project_on_demand_rules: list[AccountRuleDoc] = Field(default_factory=list)
-    ancestor_on_demand_rules: list[AccountRuleDoc] = Field(default_factory=list)
     global_path_rules: list[AccountRuleDoc] = Field(default_factory=list)
     project_path_rules: list[AccountRuleDoc] = Field(default_factory=list)
-    ancestor_path_rules: list[AccountRuleDoc] = Field(default_factory=list)
-    folder_chain: list[str] = Field(default_factory=list)
 
 
 def _rule_docs(docs: Sequence[Document]) -> list[AccountRuleDoc]:
@@ -398,27 +388,30 @@ def _rule_docs(docs: Sequence[Document]) -> list[AccountRuleDoc]:
     ]
 
 
-def _on_demand_rule_docs(
-    docs: Sequence[Document], *, skip_names: set[str]
-) -> list[AccountRuleDoc]:
-    from agentcore.memory.rules_injection import rule_consult_name
+def _channel_lists(
+    docs: Sequence[Document],
+) -> tuple[list[AccountRuleDoc], list[AccountRuleDoc], list[AccountRuleDoc]]:
+    """Split saved markdown by the frontmatter channel. Missing ``apply`` stays out."""
+    from agentcore.documents.frontmatter import FrontmatterError, parse_entry_frontmatter
+    from agentcore.documents.path_rules import patterns_are_unbounded
 
-    return [
-        doc
-        for doc in _rule_docs(docs)
-        if rule_consult_name(doc.name) not in skip_names
-    ]
-
-
-async def _folder_scope_is_live(
-    session: AsyncSession, user_id: str, folder_id: str | None
-) -> bool:
-    """False when ``folder_id`` names a missing or soft-deleted desk (global is live)."""
-    if not folder_id:
-        return True
-    return (
-        await FolderRepository(session).get_by_id(folder_id, user_id=user_id)
-    ) is not None
+    always: list[AccountRuleDoc] = []
+    on_demand: list[AccountRuleDoc] = []
+    paths: list[AccountRuleDoc] = []
+    for doc in docs:
+        parsed = parse_entry_frontmatter(doc.content or "")
+        if isinstance(parsed, FrontmatterError) or not parsed.apply_present:
+            continue
+        item = _rule_docs([doc])[0]
+        if parsed.apply == "always" or (
+            parsed.apply == "paths" and patterns_are_unbounded(parsed.paths)
+        ):
+            always.append(item)
+        elif parsed.apply == "on_demand" and (doc.description or "").strip():
+            on_demand.append(item)
+        elif parsed.apply == "paths":
+            paths.append(item)
+    return always, on_demand, paths
 
 
 @router.post("/rules/list", response_model=AccountRulesListResponse)
@@ -427,60 +420,25 @@ async def list_account_user_rules(
     user: AccountApiUser,
     session: AsyncSession = Depends(get_db),
 ) -> AccountRulesListResponse:
-    """User rules for turn assembly: always → ``<设定>``; paths → index; on_demand → catalog."""
+    """Account markdown, plus this folder when ``folder_id`` is set."""
     repo = DocumentRepository(session)
-    folder_chain: list[str] = []
+    account_always, account_demand, account_paths = _channel_lists(
+        await repo.list_scoped_markdown(user.user_id, None)
+    )
+    folder_always: list[AccountRuleDoc] = []
+    folder_demand: list[AccountRuleDoc] = []
+    folder_paths: list[AccountRuleDoc] = []
     if body.folder_id:
-        folder_chain = await FolderRepository(session).list_ancestor_chain_ids(
-            body.folder_id, user_id=user.user_id
+        folder_always, folder_demand, folder_paths = _channel_lists(
+            await repo.list_scoped_markdown(user.user_id, body.folder_id)
         )
-        if body.folder_id not in folder_chain:
-            # Missing / soft-deleted: empty chain, not「只当前层」.
-            folder_chain = []
-    ancestors = folder_chain[:-1]
-    current_id = folder_chain[-1] if folder_chain else None
-
-    ancestor_docs: list[Document] = []
-    ancestor_on_demand: list[Document] = []
-    ancestor_path: list[Document] = []
-    for scope in ancestors:
-        ancestor_docs += await repo.list_injectable_rules(
-            user.user_id, scope, ai_maintained=False
-        )
-        ancestor_on_demand += await repo.list_on_demand_user_rules(user.user_id, scope)
-        ancestor_path += await repo.list_path_user_rules(user.user_id, scope)
-
-    project_docs: Sequence[Document] = []
-    project_on_demand: Sequence[Document] = []
-    project_path: Sequence[Document] = []
-    if current_id:
-        project_docs = await repo.list_injectable_rules(
-            user.user_id, current_id, ai_maintained=False
-        )
-        project_on_demand = await repo.list_on_demand_user_rules(
-            user.user_id, current_id
-        )
-        project_path = await repo.list_path_user_rules(user.user_id, current_id)
     return AccountRulesListResponse(
-        global_rules=_rule_docs(
-            await repo.list_injectable_rules(user.user_id, None, ai_maintained=False)
-        ),
-        project_rules=_rule_docs(project_docs),
-        ancestor_rules=_rule_docs(ancestor_docs),
-        global_on_demand_rules=_on_demand_rule_docs(
-            await repo.list_on_demand_user_rules(user.user_id, None),
-            skip_names=set(),
-        ),
-        project_on_demand_rules=_on_demand_rule_docs(
-            project_on_demand, skip_names=set()
-        ),
-        ancestor_on_demand_rules=_on_demand_rule_docs(
-            ancestor_on_demand, skip_names=set()
-        ),
-        global_path_rules=_rule_docs(await repo.list_path_user_rules(user.user_id, None)),
-        project_path_rules=_rule_docs(project_path),
-        ancestor_path_rules=_rule_docs(ancestor_path),
-        folder_chain=folder_chain,
+        global_rules=account_always,
+        project_rules=folder_always,
+        global_on_demand_rules=account_demand,
+        project_on_demand_rules=folder_demand,
+        global_path_rules=account_paths,
+        project_path_rules=folder_paths,
     )
 
 
@@ -572,7 +530,7 @@ async def write_account_user_rule(
     user: AccountApiUser,
     session: AsyncSession = Depends(get_db),
 ) -> AccountRuleMutationResponse:
-    """Write a named user-rule markdown under .agentcore/rules/."""
+    """Write one account-library rule by catalog name."""
     return await _mutate_account_rule(
         user=user,
         session=session,
@@ -591,7 +549,7 @@ async def read_account_user_rule(
     user: AccountApiUser,
     session: AsyncSession = Depends(get_db),
 ) -> AccountRuleMutationResponse:
-    """Read one named user-rule markdown under .agentcore/rules/."""
+    """Read one account-library rule by catalog name."""
     return await _mutate_account_rule(
         user=user,
         session=session,
@@ -607,7 +565,7 @@ async def delete_account_user_rule(
     user: AccountApiUser,
     session: AsyncSession = Depends(get_db),
 ) -> AccountRuleMutationResponse:
-    """Delete one named user-rule markdown under .agentcore/rules/."""
+    """Delete one account-library rule by catalog name."""
     return await _mutate_account_rule(
         user=user,
         session=session,

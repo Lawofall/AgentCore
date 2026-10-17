@@ -114,6 +114,24 @@ async def test_generate_title_degrades_to_truncated_on_llm_failure():
     assert out.degraded_reason == "other"
 
 
+async def test_generate_title_reraise_insufficient_balance():
+    import pytest
+
+    from agentcore.core.errors import LLMInsufficientBalanceError
+
+    class _BalanceBoom:
+        async def complete(self, _request):
+            raise LLMInsufficientBalanceError(provider_name="platform")
+
+    with pytest.raises(LLMInsufficientBalanceError):
+        await generate_title(
+            provider=_BalanceBoom(),  # type: ignore[arg-type]
+            conversation_id="c1",
+            user_message="帮我设计登录",
+            assistant_reply="",
+        )
+
+
 async def test_generate_title_reraise_llm_auth_error():
     import pytest
 
@@ -267,7 +285,7 @@ async def test_mint_skips_write_and_does_not_emit_when_llm_fails(monkeypatch):
     monkeypatch.setattr(common, "async_session_factory", lambda: _FakeSessionCM())
     monkeypatch.setattr(common, "ConversationRepository", _ConvRepo)
 
-    async def _run_bg(user_id, *, purpose="title", runner):
+    async def _run_bg(user_id, *, purpose="title", runner, conversation_id=None):
         from agentcore.billing.gate import BackgroundLlmResult
         from agentcore.llm.credentials import LLMCredentials
 
@@ -353,7 +371,7 @@ async def test_mint_logs_the_degrade_when_the_title_model_fails(monkeypatch):
     writes: list[tuple[str, str]] = []
     _stub_mint_deps(monkeypatch, writes=writes)
 
-    async def _run_bg(user_id, *, purpose="title", runner):
+    async def _run_bg(user_id, *, purpose="title", runner, conversation_id=None):
         from agentcore.billing.gate import BackgroundLlmResult
         from agentcore.llm.credentials import LLMCredentials
 
@@ -390,7 +408,7 @@ async def test_mint_logs_a_gate_refusal_as_its_own_reason(monkeypatch):
     writes: list[tuple[str, str]] = []
     _stub_mint_deps(monkeypatch, writes=writes)
 
-    async def _run_bg(user_id, *, purpose="title", runner):
+    async def _run_bg(user_id, *, purpose="title", runner, conversation_id=None):
         return BackgroundLlmSkip(reason=BackgroundSkipReason.NO_CREDENTIALS)
 
     monkeypatch.setattr(common, "run_background_llm", _run_bg)
@@ -415,7 +433,7 @@ async def test_mint_stays_quiet_when_the_model_answers(monkeypatch):
     writes: list[tuple[str, str]] = []
     _stub_mint_deps(monkeypatch, writes=writes)
 
-    async def _run_bg(user_id, *, purpose="title", runner):
+    async def _run_bg(user_id, *, purpose="title", runner, conversation_id=None):
         from agentcore.billing.gate import BackgroundLlmResult
         from agentcore.llm.credentials import LLMCredentials
 
@@ -454,7 +472,7 @@ async def test_mint_emits_best_effort_when_sink_closed(monkeypatch):
     monkeypatch.setattr(common, "async_session_factory", lambda: _FakeSessionCM())
     monkeypatch.setattr(common, "ConversationRepository", _ConvRepo)
 
-    async def _run_bg(user_id, *, purpose="title", runner):
+    async def _run_bg(user_id, *, purpose="title", runner, conversation_id=None):
         from agentcore.billing.gate import BackgroundLlmResult
         from agentcore.llm.credentials import LLMCredentials
 
@@ -693,7 +711,7 @@ async def test_mint_title_if_empty_runs_core_when_untitled(monkeypatch):
     monkeypatch.setattr(common, "async_session_factory", lambda: _FakeSessionCM())
     monkeypatch.setattr(common, "ConversationRepository", _ConvRepo)
 
-    async def _run_bg(user_id, *, purpose="title", runner):
+    async def _run_bg(user_id, *, purpose="title", runner, conversation_id=None):
         from agentcore.billing.gate import BackgroundLlmResult
         from agentcore.llm.credentials import LLMCredentials
 

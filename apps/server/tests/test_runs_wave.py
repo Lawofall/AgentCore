@@ -137,14 +137,14 @@ async def test_retry_failure_cascades_skip_like_skip_policy():
     assert skipped == [("synth", "synth", "cascade")]
 
 
-async def test_multi_upstream_partial_failure_runs_synth():
-    """Lenient fan-in: ≥1 upstream COMPLETED → synth runs (not cascade-skip)."""
+async def test_multi_upstream_partial_failure_skips_synth():
+    """A hard failure among named upstreams cascade-skips the merge."""
     plan = RunPlan()
     for rid in ("legal", "business", "pr", "culture"):
         plan.add(_spec(rid, on_failure="retry"))
     plan.add(_spec("synth", ("legal", "business", "pr", "culture")))
 
-    async def ex(spec: RunSpec, completed) -> RunState:
+    async def ex(spec: RunSpec, _completed) -> RunState:
         if spec.run_id in ("legal", "business", "pr"):
             return RunState(
                 phase=RunPhase.FAILED,
@@ -154,18 +154,14 @@ async def test_multi_upstream_partial_failure_runs_synth():
             )
         if spec.run_id == "culture":
             return RunState(phase=RunPhase.COMPLETED, content="culture_ok")
-        # synth must see the successful upstream and may see failed absences
-        assert "culture" in completed
-        assert completed["culture"].phase is RunPhase.COMPLETED
-        return RunState(phase=RunPhase.COMPLETED, content="synth_ok")
+        return RunState(phase=RunPhase.COMPLETED, content="synth_must_not_run")
 
     skipped: list[tuple[str, str, str]] = []
     res = await WaveScheduler().run(
         plan, ex, on_skipped=lambda rid, aid, reason: skipped.append((rid, aid, reason))
     )
-    assert res["synth"].phase is RunPhase.COMPLETED
-    assert res["synth"].content == "synth_ok"
-    assert skipped == []
+    assert res["synth"].phase is RunPhase.SKIPPED
+    assert skipped == [("synth", "synth", "cascade")]
     assert res["culture"].phase is RunPhase.COMPLETED
     assert all(res[r].phase is RunPhase.FAILED for r in ("legal", "business", "pr"))
 
@@ -203,37 +199,40 @@ async def test_multi_upstream_require_upstream_still_cascade_skips():
     assert res["culture"].phase is RunPhase.COMPLETED
 
 
-async def test_multi_upstream_cancel_runs_synth_by_default():
-    """TRACE shape: one of N upstreams cancelled → summarizer still runs (≥1 success)."""
+async def test_multi_upstream_cancel_skips_synth():
+    """One cancelled upstream cascade-skips the summarizer; siblings still finish."""
     plan = RunPlan()
     for rid in ("a", "b", "c"):
         plan.add(_spec(rid))
     plan.add(_spec("synth", ("a", "b", "c")))
     cancel_targets: set[str] = set()
 
-    async def slow_ex(spec: RunSpec, completed) -> RunState:
+    async def slow_ex(spec: RunSpec, _completed) -> RunState:
         if spec.run_id == "a":
             await asyncio.sleep(0.1)
             return RunState(phase=RunPhase.COMPLETED, content="a_ok")
         if spec.run_id in ("b", "c"):
             await asyncio.sleep(0.01)
             return RunState(phase=RunPhase.COMPLETED, content=f"{spec.run_id}_ok")
-        assert completed["b"].phase is RunPhase.COMPLETED
-        return RunState(phase=RunPhase.COMPLETED, content="synth_ok")
+        return RunState(phase=RunPhase.COMPLETED, content="synth_must_not_run")
 
     async def _schedule_cancel():
         await asyncio.sleep(0.02)
         cancel_targets.add("a")
 
     asyncio.create_task(_schedule_cancel())
+    skipped: list[tuple[str, str, str]] = []
     res = await WaveScheduler().run(
-        plan, slow_ex, cancel_run_ids=lambda: frozenset(cancel_targets)
+        plan,
+        slow_ex,
+        cancel_run_ids=lambda: frozenset(cancel_targets),
+        on_skipped=lambda rid, aid, reason: skipped.append((rid, aid, reason)),
     )
     assert res["a"].phase is RunPhase.CANCELLED
     assert res["b"].phase is RunPhase.COMPLETED
     assert res["c"].phase is RunPhase.COMPLETED
-    assert res["synth"].phase is RunPhase.COMPLETED
-    assert res["synth"].content == "synth_ok"
+    assert res["synth"].phase is RunPhase.SKIPPED
+    assert skipped == [("synth", "synth", "cascade")]
 
 
 async def test_multi_upstream_cancel_require_upstream_cascade_skips():

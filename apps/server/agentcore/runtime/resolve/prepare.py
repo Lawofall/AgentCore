@@ -13,9 +13,6 @@ Attachment rendering lives beside this facade:
 from __future__ import annotations
 
 from agentcore.core.mentions import format_agent_mention_prompt
-from agentcore.memory import (
-    default_memory_store,  # noqa: F401 — monkeypatch seam (ceo_toolset imports it here)
-)
 from agentcore.runtime.resolve.attachment_context import (
     _build_attachment_context,  # noqa: F401 — public prepare / pipeline seam
     _build_attachment_prompt,  # noqa: F401

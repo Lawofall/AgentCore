@@ -80,3 +80,28 @@ async def test_account_rules_list_has_no_skill_replacements(client):
     assert doc["id"]
     assert "skill_mutes" not in payload
     assert "skill_homes" not in payload
+
+
+async def test_skill_catalog_admits_markdown_without_rule_role(client):
+    await register_and_login(client, "skgen")
+    enrolled = await client.post(
+        "/v1/documents",
+        json={
+            "name": "做法.md",
+            "role": "general",
+            "content": "---\napply: on_demand\ndescription: 写方案时翻\n---\n先列风险",
+        },
+    )
+    assert enrolled.status_code == 200, enrolled.text
+    enrolled_id = enrolled.json()["id"]
+    plain = await client.post(
+        "/v1/documents",
+        json={"name": "笔记.md", "role": "general", "content": "普通笔记"},
+    )
+    assert plain.status_code == 200, plain.text
+
+    listed = await client.get("/v1/skill-catalog")
+    assert listed.status_code == 200, listed.text
+    mine = {item["id"]: item for item in listed.json()["mine"]}
+    assert mine[enrolled_id]["description"] == "写方案时翻"
+    assert plain.json()["id"] not in mine

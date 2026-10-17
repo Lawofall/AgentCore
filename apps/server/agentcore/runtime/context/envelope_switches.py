@@ -1,10 +1,11 @@
 """Per-conversation envelope projections the model is not told.
 
-Empty list = every row present. Each row is one engine-rendered line (date,
-one ``<工作区>`` fact, or the CEO file index). Turning a row off drops that
-line only: the boundary, approvals, and fuses still run. Bodies are not
-editable. The turn entry binds the row; renderers read it. A change applies
-on the next turn entry, not the turn already running. No account copy.
+Empty list = every row present. Each row is one engine-rendered line (date
+or one ``<工作区>`` fact). Turning a row off drops that line only: the
+boundary, approvals, and fuses still run. Bodies are not editable. The turn
+entry binds the row; renderers read it. A change applies on the next turn
+entry, not the turn already running. No account copy. Folder-chat
+this-conversation writes are not a projection — they pin when present.
 """
 
 from __future__ import annotations
@@ -23,7 +24,6 @@ MOUNTS = "mounts"
 GAPS = "gaps"
 SANDBOX = "sandbox"
 INTERPRETERS = "interpreters"
-FILE_INDEX = "file_index"
 
 
 @dataclass(frozen=True)
@@ -90,11 +90,6 @@ PROJECTIONS: tuple[EnvelopeProjection, ...] = (
         "解释器",
         "本机解释器没配齐时，信封报缺哪些。",
     ),
-    EnvelopeProjection(
-        FILE_INDEX,
-        "文件索引",
-        "主管信封附上文件名单。队员不读这份名单。",
-    ),
 )
 
 _ALLOWED = tuple(row.id for row in PROJECTIONS)
@@ -137,7 +132,3 @@ def include_projection(projection_id: str) -> bool:
 
 def include_runtime_date() -> bool:
     return include_projection(RUNTIME_DATE)
-
-
-def include_file_index() -> bool:
-    return include_projection(FILE_INDEX)

@@ -57,6 +57,14 @@ FIELD_CONSUMER_BASELINE: tuple[FieldConsumerBaselineGroup, ...] = (
         leaves=frozenset({"signals", "layer"}),
     ),
     FieldConsumerBaselineGroup(
+        id="message_end.collab.audit_drops",
+        reason=(
+            "message_end.collab.audit_drops 是诊断模式的采集降级计数；"
+            "协作计数进助手页脚，audit_drops 产品不展示。"
+        ),
+        leaves=frozenset({"audit_drops"}),
+    ),
+    FieldConsumerBaselineGroup(
         id="message_end.team_batch.worker_count",
         reason=(
             "message_end.team_batch 整包入库且用户面不渲染编制人数；"

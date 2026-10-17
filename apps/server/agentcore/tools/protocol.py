@@ -429,10 +429,9 @@ class ToolContext:
     cost_sink: list[RunCost] | None = None
     # Current run's chat model accepts image parts (``model_accepts_images``).
     accepts_images: bool = False
-    # 项目共享工作区 (folder 绑定): True ⇒ CEO overview / worker manifest 用稀疏清单
-    # (附件 + 「另有 N 个」)；False ⇒ 裸聊 scratch，非附件文件照常列入。
-    # Set on the pipeline base context from ``folder_id``; inherited by workers via
-    # ``dataclasses.replace``. Defaults False for tests / evals / 裸聊.
+    # 项目共享工作区 (folder 绑定). Set from ``folder_id``; inherited by workers.
+    # Folder chats pin this-conversation writes on the CEO envelope; workers
+    # discover paths with glob / file_list. Defaults False for tests / evals / 裸聊.
     shared_workspace: bool = False
     # Turn attachment block (prepare bake). ``apply_target_desktop`` reuses it when
     # rebuilding a worker prompt for another desk. Empty on resume / tests.

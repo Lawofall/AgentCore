@@ -1,31 +1,14 @@
 import { FileTree } from "@/components/files/FileTree";
-import { EntriesSection } from "@/components/files/fileWorkbench/EntriesSection";
-import { createAndOpenScopeEntry } from "@/components/files/fileWorkbench/createScopeEntry";
-import { queryClient } from "@/lib/queryClient";
-import { AGENTCORE_ROOT } from "@/lib/stageDirs";
 import {
-  FILES_PREVIEW_PROJECT_FOLDER_ID,
   FILES_PREVIEW_SCENES,
-  type FilesPreviewSceneId,
-  entriesForScene,
   filesPreviewSource,
 } from "@/preview/filesScenes";
 import { FlaskConical } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 
-const PROJECT_FOLDER_ID = FILES_PREVIEW_PROJECT_FOLDER_ID;
-
-function seedFilesPreviewCaches(sceneId: FilesPreviewSceneId) {
-  const entries = entriesForScene(sceneId);
-  queryClient.setQueryData(
-    ["scope-entries", PROJECT_FOLDER_ID],
-    entries.project,
-  );
-}
-
 /**
- * Offline UI preview for the AgentCore folder entries rail (`#/preview/files`).
- * Seeds React Query caches — no backend. Deep-link: `#/preview/files?s=files-entries`.
+ * Offline UI preview for the files rail (`#/preview/files`).
+ * Deep-link: `#/preview/files?s=files-entries`.
  */
 export function FilesPreviewPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -33,7 +16,6 @@ export function FilesPreviewPage() {
   const requested = searchParams.get("s");
   const current = scenes.find((s) => s.id === requested) ?? scenes[0] ?? null;
   const selected = current?.id ?? null;
-  if (selected) seedFilesPreviewCaches(selected);
   const select = (id: string) => setSearchParams({ s: id }, { replace: true });
 
   return (
@@ -46,7 +28,7 @@ export function FilesPreviewPage() {
           <FlaskConical size={18} className="shrink-0 text-primary" />
           <div className="min-w-0 flex-1">
             <h1 className="truncate text-base font-semibold text-foreground">
-              文件 · 条目轨预览
+              文件预览
             </h1>
             <p className="text-xs text-muted-foreground">
               {scenes.length} 个场景 · 离线自检
@@ -87,30 +69,12 @@ export function FilesPreviewPage() {
           <div className="px-2 pb-1 text-xs font-medium text-muted-foreground">
             示例文件夹
           </div>
-          {/* 与生产同一挂法：左栏只有文件夹树；条目进 ``.agentcore``。账号提示词在工具箱。 */}
           <FileTree
             source={filesPreviewSource}
             chrome={false}
             indent={14}
             activePath={null}
             onOpenFile={() => undefined}
-            forceExpandPaths={[AGENTCORE_ROOT]}
-            onCreateWorkroomEntry={() =>
-              createAndOpenScopeEntry(
-                { kind: "folder", folderId: PROJECT_FOLDER_ID },
-                () => undefined,
-              )
-            }
-            renderWorkroomLead={(indent) => (
-              <EntriesSection
-                scope={{ kind: "folder", folderId: PROJECT_FOLDER_ID }}
-                documentActivePath={null}
-                onOpen={() => undefined}
-                onDeleted={() => undefined}
-                onRenamed={() => undefined}
-                indent={indent}
-              />
-            )}
           />
         </div>
       </div>

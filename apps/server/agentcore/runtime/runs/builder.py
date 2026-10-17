@@ -966,7 +966,7 @@ def _explicit_timeout_s(item: dict[str, Any]) -> int | None:
 
 def _dag_policy(item: dict[str, Any]) -> RunPolicy:
     """Map a DAG node's declarative knobs onto a RunPolicy (the WaveScheduler
-    reads on_failure; result_handling feeds the dep-context size).
+    reads on_failure; result_handling is leftover and does not size dep context).
 
     ``timeout_ms`` is CEO-explicit only: omit → ``None``（不回填默认墙钟）。
     """

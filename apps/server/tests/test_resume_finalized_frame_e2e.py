@@ -29,7 +29,6 @@ from pathlib import Path
 
 from agentcore.config import settings
 from agentcore.llm.provider.protocol import LLMChunk, LLMMessage, ToolCallDelta
-from agentcore.memory.store import FileMemoryStore
 from agentcore.runtime import pipeline
 from agentcore.runtime.checkpoints import CheckpointDecision
 from agentcore.runtime.engine import ReactLoopOut, react_loop
@@ -123,17 +122,15 @@ def _cold_claim(frame: TurnSuspension, journal_entries: list[dict]) -> TurnSuspe
     return restored
 
 
-def _patch_resume_seams(monkeypatch, provider: _ScriptedProvider, store: FileMemoryStore) -> None:
-    """Swap ONLY the LLM provider + the memory store; keep the REAL toolset assembly, settle,
+def _patch_resume_seams(monkeypatch, provider: _ScriptedProvider) -> None:
+    """Swap ONLY the LLM provider; keep the REAL toolset assembly, settle,
     window rebuild and CEO loop. ``resume_chat_pipeline`` reads ``build_turn_router``
-    off the package facade; the real assembly reads ``default_memory_store`` as a
-    module local."""
+    off the package facade."""
 
     async def _fake_build_turn_router(*_a, **_k):
         return provider
 
     monkeypatch.setattr(pipeline, "build_turn_router", _fake_build_turn_router)
-    monkeypatch.setattr("agentcore.runtime.resolve.prepare.default_memory_store", lambda: store)
     # No live client on a resume test → keep the resumed loop free of the approval gate.
     monkeypatch.setattr(settings, "approval_gate_enabled", False)
 
@@ -219,7 +216,7 @@ async def _finalize_ask_user() -> tuple[AskUserSuspension, list[dict]]:
 # --- the round-trip: a finalized frame resumes through the cold path to END_TURN ----
 
 
-async def test_finalized_ask_user_frame_resumes_to_completion(monkeypatch, tmp_path):
+async def test_finalized_ask_user_frame_resumes_to_completion(monkeypatch):
     # ② producer: a real ask_user pause finalized to PAUSED.
     frame, journal_entries = await _finalize_ask_user()
     restored = _cold_claim(frame, journal_entries)
@@ -227,7 +224,7 @@ async def test_finalized_ask_user_frame_resumes_to_completion(monkeypatch, tmp_p
 
     # The cold resume only needs the CEO to wrap up — one tool-free round → END_TURN.
     provider = _ScriptedProvider([[LLMChunk(delta_content="最终答复")]])
-    _patch_resume_seams(monkeypatch, provider, FileMemoryStore(tmp_path / "memory"))
+    _patch_resume_seams(monkeypatch, provider)
 
     result = await pipeline.resume_chat_pipeline(
         suspension=restored,

@@ -216,7 +216,8 @@ def _compact_key(entries: list[dict[str, Any]], run_id: str) -> tuple[str, int] 
         payload = entry.get("payload") or {}
         if payload.get("run_id") != run_id:
             continue
-        summary = payload.get("summary") if isinstance(payload.get("summary"), str) else ""
+        raw_summary = payload.get("summary")
+        summary = raw_summary if isinstance(raw_summary, str) else ""
         folded = payload.get("folded_rounds")
         rounds = folded if isinstance(folded, int) and not isinstance(folded, bool) else 0
         key = (summary, rounds)

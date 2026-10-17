@@ -141,6 +141,7 @@ async def test_refresh_reuse_detected_revokes_family(client, new_client, monkeyp
 async def test_login_lockout_after_repeated_failures(client):
     await register_and_login(client, "frank")
 
+    attempts = []
     for _ in range(5):
         r = await client.post(
             "/v1/auth/login",
@@ -148,14 +149,27 @@ async def test_login_lockout_after_repeated_failures(client):
             headers=_DESKTOP,
         )
         assert r.status_code == 401
+        attempts.append(r)
 
-    # Even the correct password is rejected while the account is locked.
+    assert attempts[3].json()["error"]["message"] == "用户名或密码错误"
+    assert "recovery_at" not in attempts[3].json()["error"]
+
+    locked = attempts[4].json()["error"]
+    assert locked["message"] == "账户已临时锁定，请稍后再试"
+    assert locked["recovery_at"].endswith("Z")
+    retry_after = int(attempts[4].headers["retry-after"])
+    assert 9 * 60 <= retry_after <= 10 * 60
+
+    # Even the correct password is rejected while the account is locked, and
+    # the wait is the time left — not a fresh window.
     r = await client.post(
         "/v1/auth/login",
         json={"username": "frank", "password": _PW},
         headers=_DESKTOP,
     )
     assert r.status_code == 401
+    assert r.json()["error"]["recovery_at"]
+    assert int(r.headers["retry-after"]) <= retry_after
 
 
 async def test_logout_clears_cookies(client):

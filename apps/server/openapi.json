@@ -304,7 +304,7 @@
         "type": "object"
       },
       "AccountRulesListRequest": {
-        "description": "Optional project layer; global rules always included.",
+        "description": "``folder_id`` selects this desk's markdown. Empty means the account only.",
         "properties": {
           "folder_id": {
             "anyOf": [
@@ -322,36 +322,8 @@
         "type": "object"
       },
       "AccountRulesListResponse": {
-        "description": "Always rules for ``<设定>``, path rules for ``<路径约定>``, on_demand for consult.\n\n``ancestor_*`` carry the enclosing folders' layers, outermost-first, and\n``folder_chain`` is that same chain by id with the current folder last: the engine may\nbe a desktop sidecar with no folders table, so the cloud is the only place that can\nresolve「谁在谁里面」(双模式工作区 §5.4 沿树继承).",
+        "description": "Account markdown, plus the requested folder. No ancestor scope.",
         "properties": {
-          "ancestor_on_demand_rules": {
-            "items": {
-              "$ref": "#/components/schemas/AccountRuleDoc"
-            },
-            "title": "Ancestor On Demand Rules",
-            "type": "array"
-          },
-          "ancestor_path_rules": {
-            "items": {
-              "$ref": "#/components/schemas/AccountRuleDoc"
-            },
-            "title": "Ancestor Path Rules",
-            "type": "array"
-          },
-          "ancestor_rules": {
-            "items": {
-              "$ref": "#/components/schemas/AccountRuleDoc"
-            },
-            "title": "Ancestor Rules",
-            "type": "array"
-          },
-          "folder_chain": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Folder Chain",
-            "type": "array"
-          },
           "global_on_demand_rules": {
             "items": {
               "$ref": "#/components/schemas/AccountRuleDoc"
@@ -4249,6 +4221,33 @@
         "title": "CloneRepoResponse",
         "type": "object"
       },
+      "ConnectCleverSeeRequest": {
+        "properties": {
+          "api_key": {
+            "default": "",
+            "title": "Api Key",
+            "type": "string"
+          }
+        },
+        "title": "ConnectCleverSeeRequest",
+        "type": "object"
+      },
+      "ConnectSearxngRequest": {
+        "properties": {
+          "api_key": {
+            "default": "",
+            "title": "Api Key",
+            "type": "string"
+          },
+          "base_url": {
+            "default": "",
+            "title": "Base Url",
+            "type": "string"
+          }
+        },
+        "title": "ConnectSearxngRequest",
+        "type": "object"
+      },
       "ContextCutCommitRequest": {
         "description": "Write the prose the user confirmed. Does not summarize again.\n\n``summary`` is editable prose. The server drops any identity-ledger fence\nin it and appends the ledger for this fold.",
         "properties": {
@@ -5520,38 +5519,6 @@
           "subscription_day"
         ],
         "title": "CreatePlatformCredentialRequest",
-        "type": "object"
-      },
-      "CreateSearchProviderRequest": {
-        "properties": {
-          "api_key": {
-            "default": "",
-            "title": "Api Key",
-            "type": "string"
-          },
-          "base_url": {
-            "default": "",
-            "title": "Base Url",
-            "type": "string"
-          },
-          "label": {
-            "default": "",
-            "title": "Label",
-            "type": "string"
-          },
-          "protocol": {
-            "enum": [
-              "searxng",
-              "cleversee"
-            ],
-            "title": "Protocol",
-            "type": "string"
-          }
-        },
-        "required": [
-          "protocol"
-        ],
-        "title": "CreateSearchProviderRequest",
         "type": "object"
       },
       "CreateShareRequest": {
@@ -12692,6 +12659,60 @@
         "title": "RunsPayload",
         "type": "object"
       },
+      "SearchConnectionFailureRequest": {
+        "properties": {
+          "message": {
+            "default": "",
+            "maxLength": 300,
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "title": "SearchConnectionFailureRequest",
+        "type": "object"
+      },
+      "SearchConnectionResponse": {
+        "properties": {
+          "cleversee": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SearchSlotResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "quota": {
+            "$ref": "#/components/schemas/SearchQuotaView"
+          },
+          "searxng": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SearchSlotResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "selected": {
+            "enum": [
+              "platform",
+              "cleversee",
+              "searxng"
+            ],
+            "title": "Selected",
+            "type": "string"
+          }
+        },
+        "required": [
+          "selected",
+          "quota"
+        ],
+        "title": "SearchConnectionResponse",
+        "type": "object"
+      },
       "SearchItem": {
         "description": "One hit in a section. Field meaning depends on the section ``type``:\n\n- conversation: ``id`` = conversation id, ``title`` = its title.\n- message: ``id`` = message id, ``conversation_id`` = where to jump,\n  ``title`` = the owning conversation's title (list-row context), ``role`` =\n  user/assistant, ``snippet`` = match window with ``match_start``/``match_end``\n  offsets into the snippet for client-side highlighting.\n- folder: ``id`` = folder id, ``title`` = its name.",
         "properties": {
@@ -12782,143 +12803,6 @@
           "id"
         ],
         "title": "SearchItem",
-        "type": "object"
-      },
-      "SearchProviderResponse": {
-        "properties": {
-          "base_url": {
-            "title": "Base Url",
-            "type": "string"
-          },
-          "created_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Created At"
-          },
-          "id": {
-            "title": "Id",
-            "type": "string"
-          },
-          "label": {
-            "title": "Label",
-            "type": "string"
-          },
-          "masked_key": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Masked Key"
-          },
-          "message": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Message"
-          },
-          "protocol": {
-            "enum": [
-              "searxng",
-              "cleversee"
-            ],
-            "title": "Protocol",
-            "type": "string"
-          },
-          "status": {
-            "enum": [
-              "unchecked",
-              "active",
-              "error"
-            ],
-            "title": "Status",
-            "type": "string"
-          },
-          "updated_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Updated At"
-          }
-        },
-        "required": [
-          "id",
-          "label",
-          "protocol",
-          "base_url",
-          "status"
-        ],
-        "title": "SearchProviderResponse",
-        "type": "object"
-      },
-      "SearchProviderSelectionRequest": {
-        "properties": {
-          "provider_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Provider Id"
-          }
-        },
-        "title": "SearchProviderSelectionRequest",
-        "type": "object"
-      },
-      "SearchProvidersResponse": {
-        "properties": {
-          "providers": {
-            "items": {
-              "$ref": "#/components/schemas/SearchProviderResponse"
-            },
-            "title": "Providers",
-            "type": "array"
-          },
-          "quota": {
-            "$ref": "#/components/schemas/SearchQuotaView"
-          },
-          "selected_provider_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Selected Provider Id"
-          }
-        },
-        "required": [
-          "selected_provider_id",
-          "quota",
-          "providers"
-        ],
-        "title": "SearchProvidersResponse",
         "type": "object"
       },
       "SearchQuotaView": {
@@ -13049,6 +12933,68 @@
           "items"
         ],
         "title": "SearchSection",
+        "type": "object"
+      },
+      "SearchSelectionRequest": {
+        "properties": {
+          "engine": {
+            "enum": [
+              "platform",
+              "cleversee",
+              "searxng"
+            ],
+            "title": "Engine",
+            "type": "string"
+          }
+        },
+        "required": [
+          "engine"
+        ],
+        "title": "SearchSelectionRequest",
+        "type": "object"
+      },
+      "SearchSlotResponse": {
+        "properties": {
+          "base_url": {
+            "title": "Base Url",
+            "type": "string"
+          },
+          "masked_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Masked Key"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "status": {
+            "enum": [
+              "connected",
+              "needs_reconnect"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "base_url"
+        ],
+        "title": "SearchSlotResponse",
         "type": "object"
       },
       "SendChatMessageRequest": {
@@ -16095,45 +16041,6 @@
         "title": "UpdateProfileRequest",
         "type": "object"
       },
-      "UpdateSearchProviderRequest": {
-        "properties": {
-          "api_key": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Api Key"
-          },
-          "base_url": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Base Url"
-          },
-          "label": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Label"
-          }
-        },
-        "title": "UpdateSearchProviderRequest",
-        "type": "object"
-      },
       "UpdateTableRequest": {
         "properties": {
           "title": {
@@ -16970,7 +16877,7 @@
   "info": {
     "description": "Multi-Agent AI Workspace API",
     "title": "AgentCore",
-    "version": "0.7.29"
+    "version": "1.0.0"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -17385,7 +17292,7 @@
     },
     "/v1/account/rules/delete": {
       "post": {
-        "description": "Delete one named user-rule markdown under .agentcore/rules/.",
+        "description": "Delete one account-library rule by catalog name.",
         "operationId": "delete_account_user_rule_v1_account_rules_delete_post",
         "parameters": [
           {
@@ -17461,7 +17368,7 @@
     },
     "/v1/account/rules/list": {
       "post": {
-        "description": "User rules for turn assembly: always → ``<设定>``; paths → index; on_demand → catalog.",
+        "description": "Account markdown, plus this folder when ``folder_id`` is set.",
         "operationId": "list_account_user_rules_v1_account_rules_list_post",
         "parameters": [
           {
@@ -17537,7 +17444,7 @@
     },
     "/v1/account/rules/read": {
       "post": {
-        "description": "Read one named user-rule markdown under .agentcore/rules/.",
+        "description": "Read one account-library rule by catalog name.",
         "operationId": "read_account_user_rule_v1_account_rules_read_post",
         "parameters": [
           {
@@ -17613,7 +17520,7 @@
     },
     "/v1/account/rules/write": {
       "post": {
-        "description": "Write a named user-rule markdown under .agentcore/rules/.",
+        "description": "Write one account-library rule by catalog name.",
         "operationId": "write_account_user_rule_v1_account_rules_write_post",
         "parameters": [
           {
@@ -34426,6 +34333,66 @@
         ]
       }
     },
+    "/v1/inference/search_connection/failure": {
+      "post": {
+        "description": "Sidecar report: the keyless SearXNG it called just failed.",
+        "operationId": "inference_search_connection_failure_v1_inference_search_connection_failure_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SearchConnectionFailureRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Inference Search Connection Failure",
+        "tags": [
+          "inference"
+        ]
+      }
+    },
     "/v1/inference/search_route": {
       "get": {
         "description": "Sidecar-visible search route (inference JWT). Never includes an API key.",
@@ -40463,9 +40430,9 @@
         ]
       }
     },
-    "/v1/users/me/search-providers": {
+    "/v1/users/me/search-connection": {
       "get": {
-        "operationId": "list_search_providers_v1_users_me_search_providers_get",
+        "operationId": "get_search_connection_v1_users_me_search_connection_get",
         "parameters": [
           {
             "in": "header",
@@ -40505,7 +40472,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SearchProvidersResponse"
+                  "$ref": "#/components/schemas/SearchConnectionResponse"
                 }
               }
             },
@@ -40522,173 +40489,16 @@
             "description": "Validation Error"
           }
         },
-        "summary": "List Search Providers",
+        "summary": "Get Search Connection",
         "tags": [
-          "search-providers"
-        ]
-      },
-      "post": {
-        "operationId": "create_search_provider_v1_users_me_search_providers_post",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "access_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Access Token"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateSearchProviderRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SearchProviderResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Create Search Provider",
-        "tags": [
-          "search-providers"
+          "search-connection"
         ]
       }
     },
-    "/v1/users/me/search-providers/selection": {
-      "put": {
-        "operationId": "select_search_provider_v1_users_me_search_providers_selection_put",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "access_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Access Token"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SearchProviderSelectionRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SearchProvidersResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Select Search Provider",
-        "tags": [
-          "search-providers"
-        ]
-      }
-    },
-    "/v1/users/me/search-providers/{provider_id}": {
+    "/v1/users/me/search-connection/cleversee": {
       "delete": {
-        "operationId": "delete_search_provider_v1_users_me_search_providers__provider_id__delete",
+        "operationId": "disconnect_cleversee_v1_users_me_search_connection_cleversee_delete",
         "parameters": [
-          {
-            "in": "path",
-            "name": "provider_id",
-            "required": true,
-            "schema": {
-              "title": "Provider Id",
-              "type": "string"
-            }
-          },
           {
             "in": "header",
             "name": "authorization",
@@ -40727,7 +40537,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/StatusResponse"
+                  "$ref": "#/components/schemas/SearchConnectionResponse"
                 }
               }
             },
@@ -40744,23 +40554,14 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Delete Search Provider",
+        "summary": "Disconnect Cleversee",
         "tags": [
-          "search-providers"
+          "search-connection"
         ]
       },
-      "patch": {
-        "operationId": "update_search_provider_v1_users_me_search_providers__provider_id__patch",
+      "post": {
+        "operationId": "connect_cleversee_v1_users_me_search_connection_cleversee_post",
         "parameters": [
-          {
-            "in": "path",
-            "name": "provider_id",
-            "required": true,
-            "schema": {
-              "title": "Provider Id",
-              "type": "string"
-            }
-          },
           {
             "in": "header",
             "name": "authorization",
@@ -40798,7 +40599,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/UpdateSearchProviderRequest"
+                "$ref": "#/components/schemas/ConnectCleverSeeRequest"
               }
             }
           },
@@ -40809,7 +40610,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SearchProviderResponse"
+                  "$ref": "#/components/schemas/SearchConnectionResponse"
                 }
               }
             },
@@ -40826,25 +40627,16 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Update Search Provider",
+        "summary": "Connect Cleversee",
         "tags": [
-          "search-providers"
+          "search-connection"
         ]
       }
     },
-    "/v1/users/me/search-providers/{provider_id}/test": {
-      "post": {
-        "operationId": "test_search_provider_v1_users_me_search_providers__provider_id__test_post",
+    "/v1/users/me/search-connection/searxng": {
+      "delete": {
+        "operationId": "disconnect_searxng_v1_users_me_search_connection_searxng_delete",
         "parameters": [
-          {
-            "in": "path",
-            "name": "provider_id",
-            "required": true,
-            "schema": {
-              "title": "Provider Id",
-              "type": "string"
-            }
-          },
           {
             "in": "header",
             "name": "authorization",
@@ -40883,7 +40675,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SearchProviderResponse"
+                  "$ref": "#/components/schemas/SearchConnectionResponse"
                 }
               }
             },
@@ -40900,9 +40692,157 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Test Search Provider",
+        "summary": "Disconnect Searxng",
         "tags": [
-          "search-providers"
+          "search-connection"
+        ]
+      },
+      "post": {
+        "operationId": "connect_searxng_v1_users_me_search_connection_searxng_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConnectSearxngRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchConnectionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Connect Searxng",
+        "tags": [
+          "search-connection"
+        ]
+      }
+    },
+    "/v1/users/me/search-connection/selection": {
+      "put": {
+        "operationId": "select_search_connection_v1_users_me_search_connection_selection_put",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SearchSelectionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchConnectionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Select Search Connection",
+        "tags": [
+          "search-connection"
         ]
       }
     },

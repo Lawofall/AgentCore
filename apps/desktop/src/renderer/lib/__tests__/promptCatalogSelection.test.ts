@@ -174,7 +174,7 @@ describe("flattenVisibleMineItems", () => {
     tools: [],
   };
 
-  it("根上是必带和散落按需；夹里的卡要点进夹才算可见", () => {
+  it("根上是常驻和散落按需；夹里的卡要点进夹才算可见", () => {
     expect(flattenVisibleMineItems(rail).map((i) => i.mineId)).toEqual([
       "pin",
       "z",

@@ -8,7 +8,7 @@ Spend is not in this snapshot (inference proxy). Wire ``prompt_tokens`` becomes
 from __future__ import annotations
 
 from collections.abc import Mapping, MutableMapping
-from typing import Any
+from typing import Any, Literal
 
 # Integer fields copied onto the outbox record / RecordTurnRequest.
 USAGE_SETTLE_WIRE_INT_KEYS: tuple[str, ...] = (
@@ -119,3 +119,64 @@ def apply_usage_settle_to_record_turn_body(
         if val is None or val == "":
             continue
         body[key] = val
+
+
+MessageStatusLane = Literal["cloud", "local_writeback", "outbox"]
+
+
+def project_message_status(
+    finish_value: str | None,
+    *,
+    lane: MessageStatusLane,
+    outcome: str | None = None,
+    has_reply: bool = False,
+    has_error: bool = False,
+) -> str:
+    """Map a turn finish onto ``Message.usage.status``.
+
+    The three callers disagree, and those disagreements stay here:
+
+    * ``cloud`` — a partial turn with a visible reply is complete; an error
+      fails; everything else is complete. A paused cloud turn is written
+      earlier and must not reach this lane.
+    * ``local_writeback`` — paused stays running; cancelled / interrupted are
+      incomplete; an error with a partial reply stays complete.
+    * ``outbox`` — the stamp before write-back. Cancelled is incomplete,
+      paused is running, error is failed. The partial-reply upgrade happens
+      on ``local_writeback``, not here.
+    """
+    from agentcore.core.message_merge import (
+        MESSAGE_STATUS_COMPLETE,
+        MESSAGE_STATUS_FAILED,
+        MESSAGE_STATUS_INCOMPLETE,
+        MESSAGE_STATUS_RUNNING,
+    )
+    from agentcore.runtime.events.types import FinishReason
+
+    finish = finish_value if isinstance(finish_value, str) else None
+    if lane == "outbox":
+        if finish == FinishReason.CANCELLED.value:
+            return MESSAGE_STATUS_INCOMPLETE
+        if finish == FinishReason.ERROR.value:
+            return MESSAGE_STATUS_FAILED
+        if finish == FinishReason.PAUSED.value:
+            return MESSAGE_STATUS_RUNNING
+        return MESSAGE_STATUS_COMPLETE
+    if lane == "local_writeback":
+        if finish == FinishReason.PAUSED.value:
+            return MESSAGE_STATUS_RUNNING
+        if finish in {
+            FinishReason.CANCELLED.value,
+            FinishReason.INTERRUPTED.value,
+        }:
+            return MESSAGE_STATUS_INCOMPLETE
+        if finish == FinishReason.ERROR.value:
+            if outcome == "partial" and has_reply:
+                return MESSAGE_STATUS_COMPLETE
+            return MESSAGE_STATUS_FAILED
+        return MESSAGE_STATUS_COMPLETE
+    if outcome == "partial" and has_reply:
+        return MESSAGE_STATUS_COMPLETE
+    if has_error or finish == FinishReason.ERROR.value:
+        return MESSAGE_STATUS_FAILED
+    return MESSAGE_STATUS_COMPLETE

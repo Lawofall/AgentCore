@@ -1633,7 +1633,7 @@ async def test_finalize_local_fills_journal_via_persist(monkeypatch):
     monkeypatch.setattr(cloud_mod, "TurnMetricsRepository", _NoopMetricsRepo)
     monkeypatch.setattr(cloud_mod, "schedule_compaction_if_due", AsyncMock(return_value=None))
 
-    async def _run_bg(user_id, *, purpose="title", runner):
+    async def _run_bg(user_id, *, purpose="title", runner, conversation_id=None):
         from agentcore.billing.gate import BackgroundLlmResult
         from agentcore.llm.credentials import LLMCredentials
 

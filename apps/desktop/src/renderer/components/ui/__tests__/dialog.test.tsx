@@ -40,5 +40,6 @@ describe("DialogContent size", () => {
       </Dialog>,
     );
     expect(screen.getByRole("dialog").className).toContain("max-w-2xl");
+    expect(screen.getByRole("dialog").className).not.toContain("1200px");
   });
 });

@@ -368,7 +368,7 @@ export const collaborationChapter: ManualChapterContent = {
       blocks: [
         {
           type: "lead",
-          text: "三层：当前这场对话；你写过的规矩（含你说「记住」记下的）；过往事情可查旧对话。系统不会自己总结一份关于你的简介。",
+          text: "三层：当前这场对话；你写下的规矩；过往事情可查旧对话。系统不会自己总结一份关于你的简介。",
         },
         {
           type: "paragraph",
@@ -379,8 +379,12 @@ export const collaborationChapter: ManualChapterContent = {
           type: "bullets",
           items: [
             {
-              title: "直接说",
-              desc: "「以后回答都用中文」「代码用 TypeScript」「别改公开 API」——说一次就够。",
+              title: "本桌文件",
+              desc: "写到工作区 AgentCore/rules 下的 markdown。开头标明常驻、按需或碰到文件。可以说「写成规矩」，也可以自己放这篇。",
+            },
+            {
+              title: "跨桌提示词",
+              desc: "工具箱 · 提示词里保存的是所有对话共用的那一份。",
             },
             {
               title: "查旧对话",
@@ -397,8 +401,8 @@ export const collaborationChapter: ManualChapterContent = {
           type: "bullets",
           items: [
             {
-              title: "口头改写",
-              desc: "直接说「忘掉上次说的……」或「改成……」即可。",
+              title: "改本桌文件",
+              desc: "改 AgentCore/rules 里那篇，或让 AI 改。删掉这篇即不再带。",
             },
             {
               title: "工具箱 · 提示词",
@@ -441,7 +445,7 @@ export const collaborationChapter: ManualChapterContent = {
               text: "工具箱",
               link: { kind: "go", to: APP_PATHS.toolbox.guidelines },
             },
-            " · 提示词（仅桌面；手机 / 窄屏无工具箱，口头改规矩即可）。规矩来自你说的「记住」和提示词页；过往事情查旧对话。与数据留存、导出等关系见 ",
+            " · 提示词（仅桌面；跨桌那一份）。本桌规矩在工作区 AgentCore/rules。过往事情查旧对话。与数据留存、导出等关系见 ",
             {
               text: "数据与隐私",
               link: {
@@ -548,7 +552,7 @@ export const collaborationChapter: ManualChapterContent = {
               text: "工具箱",
               link: { kind: "go", to: APP_PATHS.toolbox.guidelines },
             },
-            " · 提示词。手机 / 窄屏无工具箱，口头说规矩即可。市场装来的是同一类提示词，装完也靠这一句被翻开。",
+            " · 提示词（跨桌，仅桌面）。本桌规矩写在 AgentCore/rules。市场装来的是同一类提示词，装完也靠这一句被翻开。",
           ],
         },
       ],

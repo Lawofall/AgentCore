@@ -1,4 +1,4 @@
-"""Harness: real ``run_chat_pipeline`` + scripted LLM; memory / DB seams stubbed."""
+"""Harness: real ``run_chat_pipeline`` + scripted LLM; DB seams stubbed."""
 
 from __future__ import annotations
 
@@ -34,25 +34,6 @@ _SINGLE_TASK = [
         "deliverable": {"form": "prose"},
     }
 ]
-
-
-class EmptyMemoryStore:
-    """In-memory empty store so prepare never hits DocumentMemoryStore / Postgres."""
-
-    async def list(self, _user_id: str, scope: str | None = None) -> list:
-        return []
-
-    async def load(self, _user_id: str, _path: str, scope: str | None = None) -> str:
-        return ""
-
-    async def save(self, _user_id: str, _path: str, _markdown: str, scope: str | None = None) -> None:
-        return None
-
-    async def delete(self, _user_id: str, _path: str, scope: str | None = None) -> None:
-        return None
-
-    async def project_scopes(self, _user_id: str) -> list[str]:
-        return []
 
 
 class RoleScriptedProvider:
@@ -143,18 +124,12 @@ async def _fast_journal_drain(self: TurnJournalWriter) -> None:
 
 
 def patch_orchestration_seams(monkeypatch, provider: RoleScriptedProvider) -> None:
-    """LLM + memory + fail-fast DB; keep real ``_assemble_ceo_toolset`` (true DelegateTool)."""
+    """LLM + fail-fast DB; keep real ``_assemble_ceo_toolset`` (true DelegateTool)."""
 
     async def _fake_build_turn_router(*_a, **_k):
         return provider
 
     monkeypatch.setattr(pipeline, "build_turn_router", _fake_build_turn_router)
-
-    store = EmptyMemoryStore()
-    monkeypatch.setattr("agentcore.runtime.pipeline.run.default_memory_store", lambda: store)
-    monkeypatch.setattr(
-        "agentcore.runtime.resolve.prepare.default_memory_store", lambda: store
-    )
 
     real_assemble = pipeline._assemble_ceo_toolset
 

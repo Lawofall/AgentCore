@@ -1,35 +1,34 @@
-"""Account web-search providers (设置 · 通用).
+"""Account web-search connection (设置 · 通用).
 
-Platform SearXNG is the default (selected id null). Own CleverSee keys and own
-SearXNG URLs are rows here. The model still sees one ``web_search``.
+Platform SearXNG is the default. 开析 and SearXNG are one slot each. Connect
+probes and, only on success, saves the credential and selects that engine.
 """
 
-from datetime import datetime
 from typing import Literal
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agentcore.api.dependencies import AuthUser, get_db
-from agentcore.api.schemas import StatusResponse
 from agentcore.core.logging import get_logger
 from agentcore.tools.builtin.web.provider_service import (
-    SearchProviderService,
-    SearchProvidersView,
-    SearchProviderView,
+    SearchConnectionService,
+    SearchConnectionView,
+    SearchSlotView,
 )
+from agentcore.tools.builtin.web.search_choice import CLEVERSEE, SEARXNG
 from agentcore.tools.builtin.web.search_quota import SearchQuotaSnapshot
 
 logger = get_logger(__name__)
 
-router = APIRouter(prefix="/users/me/search-providers", tags=["search-providers"])
+router = APIRouter(prefix="/users/me/search-connection", tags=["search-connection"])
 
 
-def get_search_provider_service(
+def get_search_connection_service(
     session: AsyncSession = Depends(get_db),
-) -> SearchProviderService:
-    return SearchProviderService(session)
+) -> SearchConnectionService:
+    return SearchConnectionService(session)
 
 
 class SearchQuotaView(BaseModel):
@@ -39,39 +38,31 @@ class SearchQuotaView(BaseModel):
     monthly_limit: int
 
 
-class SearchProviderResponse(BaseModel):
-    id: str
-    label: str
-    protocol: Literal["searxng", "cleversee"]
+class SearchSlotResponse(BaseModel):
+    status: Literal["connected", "needs_reconnect"]
     base_url: str
-    status: Literal["unchecked", "active", "error"]
     masked_key: str | None = None
     message: str | None = None
-    created_at: datetime | None = None
-    updated_at: datetime | None = None
 
 
-class SearchProvidersResponse(BaseModel):
-    selected_provider_id: str | None
+class SearchConnectionResponse(BaseModel):
+    selected: Literal["platform", "cleversee", "searxng"]
     quota: SearchQuotaView
-    providers: list[SearchProviderResponse]
+    cleversee: SearchSlotResponse | None = None
+    searxng: SearchSlotResponse | None = None
 
 
-class CreateSearchProviderRequest(BaseModel):
-    protocol: Literal["searxng", "cleversee"]
-    label: str = ""
-    base_url: str = ""
+class SearchSelectionRequest(BaseModel):
+    engine: Literal["platform", "cleversee", "searxng"]
+
+
+class ConnectCleverSeeRequest(BaseModel):
     api_key: str = ""
 
 
-class UpdateSearchProviderRequest(BaseModel):
-    label: str | None = None
-    base_url: str | None = None
-    api_key: str | None = None
-
-
-class SearchProviderSelectionRequest(BaseModel):
-    provider_id: str | None = Field(default=None)
+class ConnectSearxngRequest(BaseModel):
+    base_url: str = ""
+    api_key: str = ""
 
 
 def _quota(snapshot: SearchQuotaSnapshot) -> SearchQuotaView:
@@ -83,117 +74,86 @@ def _quota(snapshot: SearchQuotaSnapshot) -> SearchQuotaView:
     )
 
 
-def _provider(view: SearchProviderView) -> SearchProviderResponse:
-    return SearchProviderResponse(
-        id=view.id,
-        label=view.label,
-        protocol=view.protocol,  # type: ignore[arg-type]
-        base_url=view.base_url,
+def _slot(view: SearchSlotView | None) -> SearchSlotResponse | None:
+    if view is None:
+        return None
+    return SearchSlotResponse(
         status=view.status,  # type: ignore[arg-type]
+        base_url=view.base_url,
         masked_key=view.masked_key,
         message=view.message,
-        created_at=view.created_at,
-        updated_at=view.updated_at,
     )
 
 
-def _collection(view: SearchProvidersView) -> SearchProvidersResponse:
-    return SearchProvidersResponse(
-        selected_provider_id=view.selected_provider_id,
+def _connection(view: SearchConnectionView) -> SearchConnectionResponse:
+    return SearchConnectionResponse(
+        selected=view.selected,  # type: ignore[arg-type]
         quota=_quota(view.quota),
-        providers=[_provider(row) for row in view.providers],
+        cleversee=_slot(view.cleversee),
+        searxng=_slot(view.searxng),
     )
 
 
-@router.get("", response_model=SearchProvidersResponse)
-async def list_search_providers(
+@router.get("", response_model=SearchConnectionResponse)
+async def get_search_connection(
     user: AuthUser,
-    service: SearchProviderService = Depends(get_search_provider_service),
-) -> SearchProvidersResponse:
-    return _collection(await service.list_providers(user.user_id))
+    service: SearchConnectionService = Depends(get_search_connection_service),
+) -> SearchConnectionResponse:
+    return _connection(await service.get_view(user.user_id))
 
 
-@router.post("", response_model=SearchProviderResponse, status_code=201)
-async def create_search_provider(
-    body: CreateSearchProviderRequest,
+@router.put("/selection", response_model=SearchConnectionResponse)
+async def select_search_connection(
+    body: SearchSelectionRequest,
     user: AuthUser,
-    service: SearchProviderService = Depends(get_search_provider_service),
-) -> SearchProviderResponse:
-    view = await service.create_provider(
-        user.user_id,
-        protocol=body.protocol,
-        label=body.label,
-        base_url=body.base_url,
-        api_key=body.api_key,
-    )
+    service: SearchConnectionService = Depends(get_search_connection_service),
+) -> SearchConnectionResponse:
+    view = await service.select(user.user_id, body.engine)
     logger.info(
-        "search_provider.created",
+        "search_connection.selected",
         user_id=user.user_id,
-        provider_id=view.id,
-        protocol=view.protocol,
+        engine=body.engine,
     )
-    return _provider(view)
+    return _connection(view)
 
 
-@router.put("/selection", response_model=SearchProvidersResponse)
-async def select_search_provider(
-    body: SearchProviderSelectionRequest,
+@router.post("/cleversee", response_model=SearchConnectionResponse)
+async def connect_cleversee(
+    body: ConnectCleverSeeRequest,
     user: AuthUser,
-    service: SearchProviderService = Depends(get_search_provider_service),
-) -> SearchProvidersResponse:
-    await service.select_provider(user.user_id, body.provider_id)
-    logger.info(
-        "search_provider.selected",
-        user_id=user.user_id,
-        provider_id=body.provider_id or "",
-    )
-    return _collection(await service.list_providers(user.user_id))
+    service: SearchConnectionService = Depends(get_search_connection_service),
+) -> SearchConnectionResponse:
+    view = await service.connect_cleversee(user.user_id, body.api_key)
+    logger.info("search_connection.connected", user_id=user.user_id, engine=CLEVERSEE)
+    return _connection(view)
 
 
-@router.patch("/{provider_id}", response_model=SearchProviderResponse)
-async def update_search_provider(
-    provider_id: str,
-    body: UpdateSearchProviderRequest,
+@router.post("/searxng", response_model=SearchConnectionResponse)
+async def connect_searxng(
+    body: ConnectSearxngRequest,
     user: AuthUser,
-    service: SearchProviderService = Depends(get_search_provider_service),
-) -> SearchProviderResponse:
-    view = await service.update_provider(
-        user.user_id,
-        provider_id,
-        label=body.label,
-        base_url=body.base_url,
-        api_key=body.api_key,
-        fields_set=set(body.model_fields_set),
-    )
-    return _provider(view)
+    service: SearchConnectionService = Depends(get_search_connection_service),
+) -> SearchConnectionResponse:
+    view = await service.connect_searxng(user.user_id, body.base_url, body.api_key)
+    logger.info("search_connection.connected", user_id=user.user_id, engine=SEARXNG)
+    return _connection(view)
 
 
-@router.delete("/{provider_id}", response_model=StatusResponse)
-async def delete_search_provider(
-    provider_id: str,
+@router.delete("/cleversee", response_model=SearchConnectionResponse)
+async def disconnect_cleversee(
     user: AuthUser,
-    service: SearchProviderService = Depends(get_search_provider_service),
-) -> StatusResponse:
-    await service.delete_provider(user.user_id, provider_id)
-    logger.info(
-        "search_provider.deleted",
-        user_id=user.user_id,
-        provider_id=provider_id,
-    )
-    return StatusResponse()
+    service: SearchConnectionService = Depends(get_search_connection_service),
+) -> SearchConnectionResponse:
+    view = await service.disconnect(user.user_id, CLEVERSEE)
+    logger.info("search_connection.disconnected", user_id=user.user_id, engine=CLEVERSEE)
+    return _connection(view)
 
 
-@router.post("/{provider_id}/test", response_model=SearchProviderResponse)
-async def test_search_provider(
-    provider_id: str,
+@router.delete("/searxng", response_model=SearchConnectionResponse)
+async def disconnect_searxng(
     user: AuthUser,
-    service: SearchProviderService = Depends(get_search_provider_service),
-) -> SearchProviderResponse:
-    view = await service.test_provider(user.user_id, provider_id)
-    logger.info(
-        "search_provider.tested",
-        user_id=user.user_id,
-        provider_id=provider_id,
-        status=view.status,
-    )
-    return _provider(view)
+    service: SearchConnectionService = Depends(get_search_connection_service),
+) -> SearchConnectionResponse:
+    view = await service.disconnect(user.user_id, SEARXNG)
+    logger.info("search_connection.disconnected", user_id=user.user_id, engine=SEARXNG)
+    return _connection(view)

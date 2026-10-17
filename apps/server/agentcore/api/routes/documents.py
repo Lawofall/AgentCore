@@ -192,10 +192,10 @@ def _detail(doc: Document, *, quota_warning: str | None = None) -> DocumentDetai
 
 
 def _resolve_create_apply_mode(*, role: str, kind: str, apply_mode: DocApplyMode) -> str:
-    """Only user-rule documents may be on_demand; everything else stays always."""
+    """Toolbox creates stamp ``apply``. Other documents keep the body as written."""
     if role == "rule" and kind == "document":
         return apply_mode
-    return "always"
+    return "on_demand"
 
 
 def _raise_quota_denied(message: str | None) -> None:
@@ -212,8 +212,12 @@ async def _preview_create_body(
     *, role: str, kind: str, apply_mode: DocApplyMode, content: str
 ) -> tuple[str, bool]:
     """Return (body_as_stored, is_always_rule) for quota projection before create."""
-    if kind != "document" or role != "rule":
+    if kind != "document":
         return content, False
+    if role != "rule":
+        from agentcore.memory.rule_resolve import counts_as_always_content
+
+        return content, counts_as_always_content(content)
     from agentcore.memory.rule_resolve import counts_as_always_content
 
     mode = _resolve_create_apply_mode(role=role, kind=kind, apply_mode=apply_mode)
@@ -350,7 +354,7 @@ async def update_document_content(
         )
 
     quota_warning: str | None = None
-    if doc.kind == "document" and doc.role == "rule" and not doc.ai_maintained:
+    if doc.kind == "document" and not doc.ai_maintained:
         from agentcore.memory.rule_resolve import counts_as_always_content
 
         new_is_always = counts_as_always_content(body.content)
@@ -420,10 +424,8 @@ async def patch_document(
             raise HTTPException(
                 status_code=400, detail="cannot change apply_mode of AI-maintained documents"
             )
-        if current.role != "rule" or current.kind != "document":
-            raise HTTPException(
-                status_code=400, detail="apply_mode only applies to rule documents"
-            )
+        if current.kind != "document":
+            raise HTTPException(status_code=400, detail="apply_mode only applies to documents")
         from agentcore.memory.rule_resolve import counts_as_always_content
 
         try:

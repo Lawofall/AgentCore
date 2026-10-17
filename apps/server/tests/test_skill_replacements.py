@@ -50,8 +50,13 @@ async def test_skill_still_gated_by_requires_tools():
 
 
 async def test_unbound_same_name_rule_still_shadowed(monkeypatch):
-    async def fake_load(_user_id: str, folder_id: str | None = None):
-        del folder_id
+    async def fake_load(
+        _user_id: str,
+        *,
+        folder_id: str | None = None,
+        reader: object | None = None,
+    ):
+        del folder_id, reader
         return [OnDemandUserRule(name="asking_the_user", summary="用户文件")]
 
     monkeypatch.setattr(
@@ -67,8 +72,13 @@ async def test_unbound_same_name_rule_still_shadowed(monkeypatch):
 
 
 async def test_rule_source_skips_bound_document_name(monkeypatch):
-    async def fake_load(_user_id: str, folder_id: str | None = None):
-        del folder_id
+    async def fake_load(
+        _user_id: str,
+        *,
+        folder_id: str | None = None,
+        reader: object | None = None,
+    ):
+        del folder_id, reader
         return [
             OnDemandUserRule(name="合同审查", summary="s"),
             OnDemandUserRule(name="其他附录", summary="t"),

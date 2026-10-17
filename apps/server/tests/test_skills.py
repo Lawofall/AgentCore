@@ -69,6 +69,7 @@ def test_registry_registers_the_system_skills():
     reg = build_system_skill_registry()
     names = {s.name for s in reg.list_all()}
     assert names == {
+        "prompts",
         "product_help",
         "data_file_landing",
         "page_ui",
@@ -96,6 +97,7 @@ def test_available_system_skills_are_ungated():
     """出厂系统 Skill 现无 requires_tools 门；有无 run 工具同一份目录。"""
     reg = build_system_skill_registry()
     expected = {
+        "prompts",
         "product_help",
         "data_file_landing",
         "page_ui",
@@ -108,11 +110,12 @@ def test_available_audience_hides_ceo_only_from_workers():
     """A：队员目录拿掉主管手册；不按任务猜。requires_tools 轴仍独立。"""
     reg = build_system_skill_registry()
     worker = {s.name for s in reg.available(set(), audience="worker")}
-    assert worker == {"data_file_landing", "page_ui"}
+    assert worker == {"prompts", "data_file_landing", "page_ui"}
     lead = {s.name for s in reg.available({"delegate"}, audience="worker")}
     assert lead == worker
     ceo = {s.name for s in reg.available(_FULL_TOOLS, audience="ceo")}
     assert ceo == {
+        "prompts",
         "product_help",
         "data_file_landing",
         "page_ui",
@@ -127,7 +130,7 @@ async def test_worker_consult_source_hides_ceo_only_listing_and_fetch():
         audience="worker",
     )
     names = {e.name for e in await source.list_directory("u")}
-    assert names == {"data_file_landing", "page_ui"}
+    assert names == {"prompts", "data_file_landing", "page_ui"}
     assert await source.fetch_by_name("u", "product_help") is None
     assert await source.fetch_by_name("u", "product_help:workspace") is None
     assert await source.fetch_by_name("u", "no_such_skill") is None
@@ -143,7 +146,7 @@ async def test_nested_lead_consult_source_matches_leaf_directory():
         audience="worker",
     )
     names = {e.name for e in await source.list_directory("u")}
-    assert names == {"data_file_landing", "page_ui"}
+    assert names == {"prompts", "data_file_landing", "page_ui"}
 
 
 async def test_expand_skill_tool_names_unlocks_gated_skill():
@@ -199,6 +202,7 @@ async def test_ceo_consult_source_keeps_product_help():
     )
     names = {e.name for e in await source.list_directory("u")}
     assert names == {
+        "prompts",
         "product_help",
         "data_file_landing",
         "page_ui",
@@ -229,6 +233,7 @@ def test_skill_directory_orders_by_decision_moment_without_subtitles():
     assert "能力指引：" not in ceo
     for heading in ("交付：", "产品：", "编排：", "工作区：", "工具："):
         assert heading not in ceo
+    assert ceo.index('consult("prompts")') < ceo.index('consult("data_file_landing")')
     assert ceo.index('consult("data_file_landing")') < ceo.index('consult("page_ui")')
     assert ceo.index('consult("page_ui")') < ceo.index('consult("product_help")')
     assert 'consult("page_ui")' in ceo
@@ -239,6 +244,7 @@ def test_skill_directory_orders_by_decision_moment_without_subtitles():
         )
     }
     assert worker_src_names == {
+        "prompts",
         "data_file_landing",
         "page_ui",
     }
@@ -372,7 +378,10 @@ def test_product_help_pins_section_ids_and_manual_paths():
     assert "https://fashitianxia.xyz/download" in help_body
     assert "https://app.fashitianxia.xyz" in help_body
     assert ".cursor/rules" in help_body
-    assert ".agentcore/rules" in help_body
+    assert "AgentCore/rules" in help_body
+    assert 'consult("prompts")' in help_body
+    assert "consult" in help_body
+    assert "工具箱" in help_body
     ids = list_product_help_section_ids()
     assert "workspace" in ids
     assert "what" in ids
@@ -384,10 +393,19 @@ def test_product_help_pins_section_ids_and_manual_paths():
         assert "action=" not in format_product_help_section(sec)
 
 
+def test_prompts_skill_pins_contract_keys():
+    body = _body("prompts")
+    assert "AgentCore/rules" in body
+    assert "apply:" in body
+    assert "on_demand" in body
+    assert "skills/*.json" in body
+
+
 def test_directory_on_autonomous_path_lists_ungated():
     reg = build_system_skill_registry()
     out = render_skill_directory(reg, _NO_LIVE_USER)
     assert "product_help" in out
+    assert "prompts" in out
     assert "page_ui" in out
     assert "data_file_landing" in out
 

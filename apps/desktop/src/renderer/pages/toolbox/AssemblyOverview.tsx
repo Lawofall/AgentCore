@@ -2,6 +2,7 @@ import { modelConfigApiErrorMessage } from "@/components/llm/ModelKeyForm";
 import { ConfirmDialog, IconButton } from "@/components/ui";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { foldedIntoPreset } from "@/lib/assemblyFold";
+import { PROMPT_ALWAYS_LABEL } from "@/lib/promptShelfTile";
 import { conversationKeys, llmModelProfileKeys } from "@/lib/queryKeys";
 import { notifySuccess } from "@/lib/toast";
 import { cn } from "@/lib/utils";
@@ -36,7 +37,7 @@ export function promptRosterLine(counts: {
   onDemand: number;
   paths: number;
 }): string {
-  const base = `必带 ${counts.always} · 按需 ${counts.onDemand}`;
+  const base = `${PROMPT_ALWAYS_LABEL} ${counts.always} · 按需 ${counts.onDemand}`;
   return counts.paths > 0 ? `${base} · 碰到文件 ${counts.paths}` : base;
 }
 

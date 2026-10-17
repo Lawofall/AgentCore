@@ -35,7 +35,6 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { useLlmModelProfiles } from "@/hooks/useLlmModelProfiles";
 import { useLlmProviders } from "@/hooks/useLlmProviders";
 import { useModels } from "@/hooks/useModels";
-import { PLATFORM_POINTER_ID } from "@/lib/llmDefaults";
 import { notifySuccess } from "@/lib/toast";
 import { ApiError } from "@/services/api";
 import type { LlmModelProfileListResponse } from "@/services/llmModelProfiles";
@@ -401,6 +400,16 @@ describe("ModelSettings (profiles)", () => {
     expect(screen.queryByText(/辩论仍用主模型/)).toBeNull();
     expect(screen.getByText(/标题等/)).toBeTruthy();
     expect(screen.queryByText(/主模型不能看图时再配/)).toBeNull();
+    expect(screen.queryByRole("button", { name: "恢复跟随" })).toBeNull();
+
+    fireEvent.click(document.getElementById("profile-worker") as HTMLElement);
+    const panel = screen.getByTestId("model-picker-panel");
+    expect(panel.className).not.toContain("w-96");
+    expect(
+      within(panel)
+        .getByRole("option", { name: "跟随主模型" })
+        .getAttribute("aria-selected"),
+    ).toBe("true");
   });
 
   it("greys off-protocol catalog rows and shows why they cannot be selected", () => {
@@ -649,7 +658,7 @@ describe("ModelSettings (profiles)", () => {
     expect(document.querySelector("datalist")).toBeNull();
   });
 
-  it("on 新建 when seedMain fails with platform_available shows retry/settings guide", () => {
+  it("on 新建 when seedMain fails with platform_available shows 接入服务商", () => {
     useModelsMock.mockReturnValue({
       data: {
         byok_configured: false,
@@ -671,9 +680,9 @@ describe("ModelSettings (profiles)", () => {
     renderPage();
     fireEvent.click(screen.getByRole("button", { name: "新建" }));
     expect(screen.queryByText("新建组合", { selector: "p" })).toBeNull();
-    expect(screen.getByText(/请稍后重试/)).toBeTruthy();
+    expect(screen.getByText(/请到/)).toBeTruthy();
     expect(
-      screen.getAllByRole("link", { name: "设置 · 服务商" }).length,
+      screen.getAllByRole("link", { name: "接入服务商" }).length,
     ).toBeGreaterThan(0);
   });
 
@@ -719,7 +728,7 @@ describe("ModelSettings (profiles)", () => {
     expect(document.getElementById("profile-vision")).toBeNull();
   });
 
-  it("when groups have no models with platform_available, editor shows retry/settings guide", () => {
+  it("when groups have no models with platform_available, 新建 guides to 接入服务商", () => {
     useModelsMock.mockReturnValue({
       data: {
         byok_configured: false,
@@ -744,13 +753,11 @@ describe("ModelSettings (profiles)", () => {
     mockProfiles(profilesResponse({ data: [] }));
     renderPage();
     fireEvent.click(screen.getByRole("button", { name: "新建" }));
-    expect(screen.getByText("新建组合", { selector: "p" })).toBeTruthy();
-    expect(screen.getByText(/请稍后重试/)).toBeTruthy();
+    expect(screen.queryByText("新建组合", { selector: "p" })).toBeNull();
     expect(
-      screen.getAllByRole("link", { name: "设置 · 服务商" }).length,
+      screen.getAllByRole("link", { name: "接入服务商" }).length,
     ).toBeGreaterThan(0);
-    expect(document.getElementById("profile-main")).toBeTruthy();
-    expect(document.getElementById("profile-main-provider")).toBeNull();
+    expect(document.getElementById("profile-main")).toBeNull();
     expect(screen.queryByText(/自定义 model id/)).toBeNull();
   });
 
@@ -875,7 +882,7 @@ describe("ModelSettings (profiles)", () => {
     expect(screen.queryByPlaceholderText(/model id/)).toBeNull();
   });
 
-  it("keeps platform SKUs under the platform group, not a BYOK channel", () => {
+  it("does not offer platform SKUs in the assembly picker", () => {
     useModelsMock.mockReturnValue({
       data: {
         byok_configured: true,
@@ -969,9 +976,8 @@ describe("ModelSettings (profiles)", () => {
       within(deepseek as HTMLElement).queryByText("deepseek-v4-flash-free"),
     ).toBeNull();
     expect(within(list).queryByText("Flash Free")).toBeNull();
-    clickChannelChip(PLATFORM_POINTER_ID);
-    expect(within(list).getByText("Flash Free")).toBeTruthy();
-    expect(within(list).queryByText("DeepSeek V4 Flash")).toBeNull();
+    expect(screen.queryByRole("button", { name: "平台额度" })).toBeNull();
+    expect(within(list).queryByText("DeepSeek V4 Flash")).toBeTruthy();
   });
 
   it("picking a row from another channel updates both channel and model", async () => {
@@ -1330,7 +1336,6 @@ describe("ModelSettings (profiles)", () => {
             providers={providersResponse().providers}
             catalog={catalog as never}
             catalogModels={catalog.models as never}
-            platformAvailable={false}
             initial={{
               name: "办公",
               main: {
@@ -1390,6 +1395,87 @@ describe("ModelSettings (profiles)", () => {
     await waitFor(() =>
       expect(onSave).toHaveBeenCalledWith(
         expect.objectContaining({ context_budget: 128_000 }),
+      ),
+    );
+  });
+
+  it("shelf short slots open a 24rem menu and 跟随主模型 clears the worker", async () => {
+    const onSave = vi.fn(async () => undefined);
+    const catalog = defaultCatalog();
+    render(
+      <MemoryRouter>
+        <TooltipProvider>
+          <ProfileEditor
+            surface="shelf"
+            title=""
+            showTitle={false}
+            showCancel={false}
+            framed={false}
+            providers={providersResponse().providers}
+            catalog={catalog as never}
+            catalogModels={catalog.models as never}
+            initial={{
+              name: "办公",
+              main: {
+                origin: "byok",
+                provider_id: "p1",
+                model: "deepseek-v4-pro",
+              },
+              worker: { origin: "byok", provider_id: "p2", model: "gpt-4o" },
+              background: null,
+              vision: null,
+              reasoning_effort: null,
+              context_budget: null,
+            }}
+            pending={false}
+            onCancel={() => undefined}
+            onSave={onSave}
+          />
+        </TooltipProvider>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(
+      document.getElementById("profile-background") as HTMLElement,
+    );
+    const backgroundPanel = screen.getByTestId("model-picker-panel");
+    expect(backgroundPanel.className).toContain("w-96");
+    expect(backgroundPanel.className).toContain("right-0");
+    expect(
+      within(backgroundPanel)
+        .getByRole("option", { name: "跟随主模型" })
+        .getAttribute("aria-selected"),
+    ).toBe("true");
+    fireEvent.click(
+      document.getElementById("profile-background") as HTMLElement,
+    );
+
+    fireEvent.click(document.getElementById("profile-worker") as HTMLElement);
+    const workerPanel = screen.getByTestId("model-picker-panel");
+    expect(workerPanel.className).toContain("w-96");
+    const follow = within(workerPanel).getByRole("option", {
+      name: "跟随主模型",
+    });
+    expect(follow.getAttribute("aria-selected")).toBe("false");
+    fireEvent.change(within(workerPanel).getByLabelText("筛选模型"), {
+      target: { value: "没有这个模型" },
+    });
+    expect(
+      within(workerPanel).queryByRole("option", { name: /GPT-4o/ }),
+    ).toBeNull();
+    fireEvent.click(
+      within(workerPanel).getByRole("option", { name: "跟随主模型" }),
+    );
+    await waitFor(() =>
+      expect(onSave).toHaveBeenCalledWith(
+        expect.objectContaining({
+          worker: null,
+          main: {
+            origin: "byok",
+            provider_id: "p1",
+            model: "deepseek-v4-pro",
+          },
+        }),
       ),
     );
   });

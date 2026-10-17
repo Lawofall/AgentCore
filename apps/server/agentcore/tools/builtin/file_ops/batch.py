@@ -212,16 +212,6 @@ class FileBatchTool:
         搬家 / 复制不是派生（源不是中间稿），一律不填 ``derived_from``。
         mkdir 建的是目录、delete 是删除，都没有产物；skip / fail 更没有。
         """
-        from .user_rules import batch_op_rule_block, classify_rule_path
-
-        blocked = batch_op_rule_block(op, item)
-        if blocked is not None:
-            return "fail", blocked, []
-        if op == "mkdir":
-            kind, _name = classify_rule_path(str(item.get("path") or ""))
-            if kind in ("agentcore_root", "rules_dir"):
-                return "ok", f"mkdir {item.get('path')}（用户规则目录已就绪）", []
-
         if op == "mkdir":
             requested = str(item.get("path", "")).strip()
             if not requested:

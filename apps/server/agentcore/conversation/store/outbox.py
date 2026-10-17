@@ -22,16 +22,13 @@ from pathlib import Path
 from typing import Any, Literal
 
 from agentcore.conversation.store.merge import (
-    MESSAGE_STATUS_COMPLETE,
-    MESSAGE_STATUS_FAILED,
-    MESSAGE_STATUS_INCOMPLETE,
-    MESSAGE_STATUS_RUNNING,
     pick_merged_content,
     pick_monotonic_content,
 )
 from agentcore.conversation.store.usage_settle import (
     apply_usage_settle_to_record_turn_body,
     copy_usage_settle_into_record,
+    project_message_status,
 )
 from agentcore.core.logging import get_logger
 from agentcore.db.repositories.stream_state import resolve_stream_upsert
@@ -673,15 +670,10 @@ class OutboxStore:
             content = kwargs.get("assistant_content")
             if content is not None:
                 finish = kwargs.get("finish_reason")
-                if finish == "cancelled":
-                    status = MESSAGE_STATUS_INCOMPLETE
-                elif finish == "error":
-                    status = MESSAGE_STATUS_FAILED
-                elif finish == "paused":
-                    status = MESSAGE_STATUS_RUNNING
-                else:
-                    # Happy-path / missing finish_reason: treat as complete delivery.
-                    status = MESSAGE_STATUS_COMPLETE
+                status = project_message_status(
+                    finish if isinstance(finish, str) else None,
+                    lane="outbox",
+                )
                 record["content"] = pick_merged_content(
                     record.get("content"),
                     content,

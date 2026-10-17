@@ -169,7 +169,10 @@ async function main() {
       // Composer is contentEditable + aria-label, not an input placeholder.
       const userBox = page.getByPlaceholder("邮箱或用户名");
       const composer = page.getByTestId("composer-body");
-      const outage = page.getByText("服务暂时不可用");
+      // exact: the outage reason ("AgentCore 服务暂时不可用…") also contains this
+      // phrase; a substring match is a strict-mode violation and the race resolves
+      // before the gate is visible.
+      const outage = page.getByText("服务暂时不可用", { exact: true });
       await Promise.race([
         userBox.waitFor({ state: "visible", timeout: 20_000 }).catch(() => {}),
         composer.waitFor({ state: "visible", timeout: 20_000 }).catch(() => {}),

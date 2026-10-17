@@ -8,11 +8,13 @@ import pytest
 from agentcore.auth import AuthService
 from agentcore.config import settings
 from agentcore.core.errors import (
+    AccountLockedError,
     AuthenticationError,
     AuthorizationError,
     EmailNotVerifiedError,
     NotFoundError,
     ValidationError,
+    wire_moments,
 )
 from agentcore.core.types import new_id
 from agentcore.security import (
@@ -380,14 +382,26 @@ async def test_login_failure_increments_are_additive():
 async def test_login_locks_after_max_attempts():
     svc, _u, creds, _t = _make()
     user = await svc.register(username="heidi", password=_PW)
+    raised: list[AuthenticationError] = []
     for _ in range(5):
-        with pytest.raises(AuthenticationError):
+        with pytest.raises(AuthenticationError) as caught:
             await svc.login(username="heidi", password="wrong-pw")
+        raised.append(caught.value)
+    # The locking attempt is the first one that says so — not a sixth guess.
+    assert all(not isinstance(err, AccountLockedError) for err in raised[:4])
+    assert all(err.message == "用户名或密码错误" for err in raised[:4])
+    locked = raised[4]
+    assert isinstance(locked, AccountLockedError)
+    assert locked.message == "账户已临时锁定，请稍后再试"
+    assert locked.retry_after == 10 * 60
+    assert wire_moments(locked)["recovery_at"].endswith("Z")
     cred = await creds.get_by_user_id(user.user_id)
     assert cred.locked_until is not None
-    # correct password is still rejected while locked
-    with pytest.raises(AuthenticationError):
+    # A later try, even with the right password, does not start a new 15 minutes.
+    cred.locked_until = datetime.now(UTC) + timedelta(seconds=20)
+    with pytest.raises(AccountLockedError) as again:
         await svc.login(username="heidi", password=_PW)
+    assert again.value.retry_after <= 21
 
 
 async def test_login_unknown_user_raises():

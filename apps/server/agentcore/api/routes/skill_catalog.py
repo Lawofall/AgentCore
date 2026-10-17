@@ -46,7 +46,6 @@ class SkillCatalogView(BaseModel):
 def _eligible_mine_doc(doc: Document) -> bool:
     return (
         doc.kind == "document"
-        and doc.role == "rule"
         and doc.apply_mode == "on_demand"
         and not doc.ai_maintained
         and doc.folder_id is None

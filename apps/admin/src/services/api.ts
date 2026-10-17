@@ -20,6 +20,9 @@ export class ApiError extends Error {
   readonly code?: string;
   /** Backend user-facing message (often a ready-to-show zh string). */
   readonly serverMessage?: string;
+  /** ISO-8601 UTC instant a lockout (or other cooldown) ends. The sentence stays
+   * free of a clock time; the login form counts down from this. */
+  readonly recoveryAt?: string;
 
   constructor(
     public status: number,
@@ -29,10 +32,12 @@ export class ApiError extends Error {
     this.name = "ApiError";
     try {
       const parsed = JSON.parse(body) as {
-        error?: { code?: string; message?: string };
+        error?: { code?: string; message?: string; recovery_at?: string };
       };
       this.code = parsed.error?.code;
       this.serverMessage = parsed.error?.message;
+      const at = parsed.error?.recovery_at;
+      if (typeof at === "string" && at) this.recoveryAt = at;
     } catch {
       /* non-JSON body — keep the raw text only */
     }

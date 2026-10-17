@@ -128,15 +128,48 @@ async def aclose_cleversee_backend() -> None:
         await backend.aclose()
 
 
+_CLEVERSEE_CODE_MESSAGES = {
+    "Retrieval.InvalidAPIKey": "API Key 不正确。到开析控制台核对或新建",
+    "Retrieval.NotActivate": "开析尚未开通",
+    "Retrieval.Arrears": "开析账户欠费",
+    "Retrieval.NotAuthorised": "当前账号没有开析权限",
+    "Retrieval.TestUserPeriodExpired": "开析试用已到期",
+    "Retrieval.Throttling.User": "超出限额，稍后再试",
+    "Retrieval.TestUserQueryExceeded": "超出限额，稍后再试",
+    "InvalidAccessKeyId.NotFound": (
+        "这不是开析 API Key。到开析控制台创建 API Key，不是阿里云 AccessKey"
+    ),
+}
+
+
+def cleversee_failure_message(status_code: int, error_code: str = "") -> str:
+    """User-facing reason for a failed CleverSee call. Never includes the body or the key."""
+    mapped = _CLEVERSEE_CODE_MESSAGES.get(error_code)
+    if mapped:
+        return mapped
+    if status_code == 429:
+        return "超出限额，稍后再试"
+    if status_code in (401, 403):
+        return "开析搜索未授权或未开通"
+    if status_code >= 500:
+        return "开析搜索暂时不可用"
+    return f"开析搜索失败（HTTP {status_code}）"
+
+
+def _cleversee_error_code(resp: httpx.Response) -> str:
+    try:
+        data = resp.json()
+    except ValueError:
+        return ""
+    if not isinstance(data, dict):
+        return ""
+    code = data.get("errorCode") or data.get("code") or ""
+    return code if isinstance(code, str) else ""
+
+
 def _cleversee_http_message(resp: httpx.Response) -> str:
     """Honest model-facing reason. Never include the response body or the key."""
-    if resp.status_code == 429:
-        return "开析搜索超出限额，请稍后再试"
-    if resp.status_code in (401, 403):
-        return "开析搜索未授权或未开通"
-    if resp.status_code >= 500:
-        return "开析搜索暂时不可用"
-    return f"开析搜索失败（HTTP {resp.status_code}）"
+    return cleversee_failure_message(resp.status_code, _cleversee_error_code(resp))
 
 
 def _parse_page_items(data: dict[str, Any], max_results: int) -> list[SearchResult]:

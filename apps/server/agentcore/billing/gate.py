@@ -281,8 +281,12 @@ async def resolve_and_gate_background(
     user_id: str,
     *,
     purpose: ModelPurpose = "title",
+    conversation_id: str | None = None,
 ) -> BackgroundGateResolve:
-    """Resolve background credentials (own-key slot, else platform-first) and gate spend.
+    """Resolve background credentials and gate spend.
+
+    Title: empty slot follows the conversation assembly's main model. An explicit
+    BYOK background slot wins. An explicit platform slot stays platform-first.
 
     Returns credentials to pass to ``build_provider``, or a skip with
     ``quota_skipped_at_admission`` when platform quota blocked admission. Never raises
@@ -297,7 +301,9 @@ async def resolve_and_gate_background(
     adds the single platform-``LLMAuthError`` / ``LLMInsufficientBalanceError``
     → user BYOK retry.
     """
-    cfg = await resolve_model_config(session, user_id, purpose)
+    cfg = await resolve_model_config(
+        session, user_id, purpose, conversation_id=conversation_id
+    )
     if cfg is None:
         return BackgroundGateResolve()
 
@@ -497,11 +503,14 @@ async def run_background_llm[T](
     *,
     purpose: ModelPurpose = "title",
     runner: Callable[[LLMCredentials], Awaitable[T]],
+    conversation_id: str | None = None,
 ) -> BackgroundLlmOutcome[T]:
-    """Platform-first background LLM with one BYOK retry on platform ``LLMAuthError``.
+    """Background LLM with one BYOK retry when the platform payer is rejected.
 
     Flow:
-    1. ``resolve_and_gate_background`` (platform-first + quota when platform).
+    1. ``resolve_and_gate_background`` (title: empty slot follows this
+       conversation's main; explicit BYOK slot wins; explicit platform slot
+       stays platform-first; platform source still passes quota).
     2. Run ``runner(credentials)``.
     3. On ``LLMAuthError`` / ``LLMInsufficientBalanceError`` **and**
        ``credentials.source == "platform"``: resolve user BYOK once via
@@ -521,18 +530,21 @@ async def run_background_llm[T](
     instead of re-deriving a cooldown the refusal already stated.
 
     No process-local auth circuit breaker — each call re-resolves. Call sites must
-    re-raise ``LLMAuthError`` from their generators so this entry can see it.
+    re-raise ``LLMAuthError`` and ``LLMInsufficientBalanceError`` from their
+    generators so this entry can see them.
 
     Turn-scoped exception: when **this call's** payer is latched dead
     (``llm.turn_auth_dead``), skip immediately — that is per-turn short-circuit
     for that ``credential_source`` only, not a process TTL cache. Checked after
-    resolve so the skip uses the actual source (platform-first chrome vs an
+    resolve so the skip uses the actual source (this call's payer vs an
     own-key background slot), not an assumed payer. Does not widen
     platform→BYOK fallback: a dead platform resolve still returns here instead
     of taking the auth-fallback path.
     """
     async with async_session_factory() as session:
-        resolved = await resolve_and_gate_background(session, user_id, purpose=purpose)
+        resolved = await resolve_and_gate_background(
+            session, user_id, purpose=purpose, conversation_id=conversation_id
+        )
     return await _invoke_background_runner(
         user_id, purpose=purpose, runner=runner, resolved=resolved
     )

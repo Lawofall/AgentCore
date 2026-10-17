@@ -39,7 +39,7 @@ export interface ContentDeltaPayload {
 
 /** Why a `content_reset` / `run_output_reset` fired. Every reason clears
  * the streamed draft and leaves no process trace:
- * `finish_guard`（交付前结构核验回炉）· `retry`（LLM 流式透明重试）·
+ * `finish_guard`（交付前核验回炉；对话气泡当前无命中项）· `retry`（LLM 流式透明重试）·
  * `soft_gate`（captain 软门控打回）· `narration`（worker 旁白回滚）·
  * `ask_user`（blocking ask_user 吸收）. */
 export type ResetReason =

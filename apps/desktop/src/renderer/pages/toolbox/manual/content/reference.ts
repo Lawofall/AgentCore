@@ -385,7 +385,7 @@ export const referenceChapter: ManualChapterContent = {
               a: [
                 {
                   type: "text",
-                  text: "不是。Cursor 的 .cursor/rules 不是本产品的用户规矩。本产品的规矩来自你说的「记住」和提示词页；技能包也不是把 Cursor 规则搬过来的地方。",
+                  text: "接近。Cursor 的 .cursor/rules 对应本产品工作区 AgentCore/rules（文件开头标明常驻、按需、碰到文件）。账号工具箱里的提示词是跨桌的。skills/*.json 不是规矩。",
                 },
               ],
             },
@@ -626,7 +626,7 @@ export const referenceChapter: ManualChapterContent = {
             },
             {
               title: "规矩与旧对话",
-              desc: "你写下的规矩会跨对话生效；过往事情查旧对话。想改规矩直接说即可，或在工具箱的提示词页查看、调整。",
+              desc: "跨桌规矩在工具箱提示词页；本桌规矩在工作区 AgentCore/rules。过往事情查旧对话。",
             },
           ],
         },

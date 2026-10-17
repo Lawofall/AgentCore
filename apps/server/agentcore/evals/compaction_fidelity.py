@@ -497,7 +497,7 @@ def check_prompt_contract() -> list[str]:
         gaps.append("chat_missing_facts_heading")
     if "## 未决问题 / 待办" not in chat:
         gaps.append("chat_missing_open_heading")
-    if "路径账、磁盘索引和近端原文" not in chat:
+    if "路径账、本对话写/改/导出和近端原文" not in chat:
         gaps.append("chat_missing_lifetime")
     if "路径与工具标识不是过程" in chat:
         gaps.append("chat_copied_worker_path_rule")

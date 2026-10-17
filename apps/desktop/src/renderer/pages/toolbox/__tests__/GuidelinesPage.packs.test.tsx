@@ -179,20 +179,20 @@ function renderPage(path = "/toolbox/mine/skills") {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
-  return render(
+  const view = render(
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={[path]}>
         <GuidelinesPage />
       </MemoryRouter>
     </QueryClientProvider>,
   );
+  return view;
 }
 
 describe("GuidelinesPage 提示词阅读器", () => {
   it("默认打开概览，点目录才换正文", async () => {
     vi.mocked(getCapabilities).mockResolvedValue(base);
     renderPage();
-
     await waitFor(() => {
       expect(screen.getByTestId("prompt-overview")).toBeTruthy();
     });
@@ -200,7 +200,7 @@ describe("GuidelinesPage 提示词阅读器", () => {
 
     expect(screen.queryByText("角色身份")).toBeNull();
     expect(screen.getByRole("button", { name: "全员共享准则" })).toBeTruthy();
-    expect(screen.queryByRole("heading", { name: "必带" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "常驻" })).toBeNull();
     expect(screen.queryByRole("heading", { name: "按需" })).toBeNull();
   });
 
@@ -227,7 +227,6 @@ describe("GuidelinesPage 提示词阅读器", () => {
       },
     });
     renderPage();
-
     await waitFor(() => {
       expect(screen.getByTestId("prompt-overview")).toBeTruthy();
     });
@@ -266,7 +265,6 @@ describe("GuidelinesPage 提示词阅读器", () => {
       writable: true,
     });
     renderPage();
-
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "合同审查" })).toBeTruthy();
     });
@@ -297,7 +295,6 @@ describe("GuidelinesPage 提示词阅读器", () => {
   it("没有范围选择器；官方栏打开准则读卡", async () => {
     vi.mocked(getCapabilities).mockResolvedValue(base);
     renderPage("/toolbox/official");
-
     await waitFor(() => {
       expect(screen.getByTestId("prompt-overview")).toBeTruthy();
     });
@@ -315,7 +312,7 @@ describe("GuidelinesPage 提示词阅读器", () => {
     expect(screen.queryByText("自带")).toBeNull();
     expect(screen.queryByTestId("prompt-rail-official")).toBeNull();
     expect(within(dialog).getByText("官方")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "关闭" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "关闭" }));
     expect(screen.queryByText("偏好")).toBeNull();
     expect(screen.queryByText("画像")).toBeNull();
     expect(screen.queryByText("AI 可能改")).toBeNull();

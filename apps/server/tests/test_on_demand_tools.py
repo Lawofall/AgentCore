@@ -346,7 +346,6 @@ async def test_consult_cache_does_not_return_stale_tool_handbook():
             source=build_merged_consult_source(
                 skill_registry=None,
                 tool_names=set(reg.names),
-                memory_store=None,
                 folder_id=None,
                 include_rules=False,
                 tool_registry=reg,
@@ -685,7 +684,6 @@ async def test_consult_tool_promotes_mcp_and_skips_stale_cache():
             source=build_merged_consult_source(
                 skill_registry=None,
                 tool_names=set(reg.names),
-                memory_store=None,
                 folder_id=None,
                 include_rules=False,
                 tool_registry=reg,

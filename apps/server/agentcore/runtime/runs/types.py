@@ -149,7 +149,7 @@ class RunPolicy:
 
     实际生效的：``on_failure``（Wave 只读它做级联：skip/abort/degrade/
     retry 的「失败后怎么对待下游」——retry 不整节点重跑）；``timeout_s``；
-    ``result_handling``（执行器拼装下游上下文）。
+    ``result_handling``（旧：散文沿链全文或摘要；依赖注入已不读它）。
     """
 
     # on_failure (Wave enacts cascade only; a transient does not remount):
@@ -231,17 +231,16 @@ class RunSpec:
     # takes over. Graph shows「接手」/「接替」; ``RunPlan.add`` also rewrites other
     # nodes' ``depends_on`` that named the old id so downstream waits on this run.
     replaces_run_id: str | None = None
-    # CEO explicit force-continue: when True, this node may run even with
-    # ZERO successful upstreams (e.g. sole upstream CANCELLED). Orthogonal to
-    # the default lenient fan-in (≥1 success → run) and to ``require_upstream``.
+    # CEO explicit force-continue: when True, this node may run even when an
+    # upstream failed, was cancelled, or was skipped. Internal only — not a
+    # CEO-facing switch. The default is that every named upstream must succeed.
     force_continue: bool = False
     # Wave3 B：开局从工作区注入这些相对路径的截断正文（契约/设计摘要），
     # 减少分区 worker 对同文件的反复 read。空 = 不注入。
     context_inject_files: list[str] = field(default_factory=list)
-    # Strict fan-in: when True, every upstream must succeed (FAILED with
-    # on_failure∈{skip, retry} or CANCELLED without force_continue → cascade-skip),
-    # restoring the pre-lenient cascade. Default False = ≥1 upstream COMPLETED
-    # is enough; absent upstreams are annotated in the worker's dependency input.
+    # Leftover strict flag. Default fan-in already cascade-skips on any hard
+    # absence (fail / cancel / skip), so this no longer selects a stricter rule.
+    # Not in the CEO schema. ``force_continue`` still runs with a hole.
     require_upstream: bool = False
     # 同人续派：目标 run 的现场根（RunSession 键）。设了则执行走 continue_run 而非冷开局；
     # wire 的 continues_run_id 恒等于该值（星型）。校验与闸在驱动层，调度器不读。

@@ -188,7 +188,7 @@ function renderOverview(
 }
 
 describe("PromptOverview", () => {
-  it("必带叶子铺成矮卡，右上角标必带，点开对应条目", () => {
+  it("常驻叶子铺成矮卡，右上角标常驻，点开对应条目", () => {
     const onOpenItem = vi.fn();
     renderOverview({ onOpenItem });
     const shelf = screen.getByTestId("prompt-rail-shelf");
@@ -196,14 +196,14 @@ describe("PromptOverview", () => {
     expect(onOpenItem.mock.calls.map((call) => call[0])).toEqual([
       mineCatalogId("rule"),
     ]);
-    expect(within(shelf).getByText("必带")).toBeTruthy();
+    expect(within(shelf).getByText("常驻")).toBeTruthy();
     expect(
       within(screen.getByTestId("prompt-rail-constitution")).queryByRole(
         "button",
         { name: "短约束" },
       ),
     ).toBeNull();
-    expect(screen.queryByRole("heading", { name: "必带" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "常驻" })).toBeNull();
     expect(screen.queryByRole("heading", { name: "按需" })).toBeNull();
     expect(screen.queryByRole("button", { name: "读工作区文件" })).toBeNull();
     expect(screen.queryByTestId("prompt-tile-tool:read")).toBeNull();
@@ -211,11 +211,11 @@ describe("PromptOverview", () => {
     expect(screen.getByTestId("prompt-overview").textContent).not.toMatch(/%/);
   });
 
-  it("不拖的时候不留必带虚线，拖过才出现落点", () => {
+  it("不拖的时候不留常驻虚线，拖过才出现落点", () => {
     renderOverview({
       rail: emptyRail(),
     });
-    expect(screen.queryByRole("heading", { name: "必带" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "常驻" })).toBeNull();
     expect(screen.queryByRole("heading", { name: "按需" })).toBeNull();
     expect(screen.queryByText("0 条")).toBeNull();
     expect(screen.queryByText("拖一条进来，下一回合就会带上。")).toBeNull();
@@ -255,7 +255,7 @@ describe("PromptOverview", () => {
     expect(screen.getByTestId("prompt-overview").textContent).not.toMatch(/%/);
   });
 
-  it("出厂卡和必带、散落按需在同一张货架", () => {
+  it("出厂卡和常驻、散落按需在同一张货架", () => {
     renderOverview();
     const shelf = screen.getByTestId("prompt-rail-shelf");
     const factory = screen.getByTestId("prompt-rail-factory");
@@ -273,14 +273,14 @@ describe("PromptOverview", () => {
     expect(within(factory).queryByText("合同审查")).toBeNull();
     expect(within(factory).queryByText("短约束")).toBeNull();
     expect(factory.querySelector("[draggable='true']")).toBeNull();
-    expect(within(shelf).getByText("必带")).toBeTruthy();
+    expect(within(shelf).getByText("常驻")).toBeTruthy();
     expect(within(shelf).queryByText("按需")).toBeNull();
     expect(screen.queryByRole("heading", { name: "工具" })).toBeNull();
     expect(screen.queryByRole("heading", { name: "文件" })).toBeNull();
     expect(screen.queryByRole("heading", { name: "出厂" })).toBeNull();
     expect(screen.queryByRole("heading", { name: "出厂项" })).toBeNull();
     expect(screen.queryByRole("heading", { name: "官方" })).toBeNull();
-    expect(screen.queryByRole("heading", { name: "必带" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "常驻" })).toBeNull();
     expect(screen.queryByRole("heading", { name: "按需" })).toBeNull();
     expect(screen.queryByRole("button", { name: "薄技能" })).toBeNull();
     expect(screen.queryByRole("button", { name: "读工作区文件" })).toBeNull();
@@ -467,7 +467,7 @@ describe("PromptOverview", () => {
     expect(screen.queryByText("0 条")).toBeNull();
   });
 
-  it("必带矮卡不塞准则正文", () => {
+  it("常驻矮卡不塞准则正文", () => {
     renderOverview();
     expect(screen.queryByText("aaaa")).toBeNull();
     expect(
@@ -490,7 +490,7 @@ describe("PromptOverview", () => {
     const constitution = screen.getByTestId("prompt-rail-constitution");
     expect(within(constitution).getByText("每回合都在的工作宪法")).toBeTruthy();
     expect(screen.getByRole("heading", { name: "准则" })).toBeTruthy();
-    expect(screen.queryByRole("heading", { name: "必带" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "常驻" })).toBeNull();
     expect(screen.queryByRole("heading", { name: "按需" })).toBeNull();
     expect(screen.queryByRole("heading", { name: "提示词" })).toBeNull();
     expect(screen.queryByTestId("prompt-rail-tools")).toBeNull();

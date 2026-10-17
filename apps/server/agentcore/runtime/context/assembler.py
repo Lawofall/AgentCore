@@ -91,7 +91,7 @@ class ContextAssembler:
         render up as ONE section of the layer above, so without this the outer ``observe``
         can only say "the whole CEO prompt changed". Registering every layer lets
         ``observability.prefix_cache`` splice them back into leaves and name the section that
-        actually broke the byte prefix (文件索引 / 项目清单 / 变尾段). Silent by design —
+        actually broke the byte prefix (本对话写改针 / 项目清单 / 变尾段). Silent by design —
         ``observe`` already owns the one log line per assembly.
 
         Zero behavior change, same contract as ``observe``: reads the kept contributors,

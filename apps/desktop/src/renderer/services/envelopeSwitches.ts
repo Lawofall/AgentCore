@@ -170,12 +170,6 @@ export function draftEnvelopeBoard(): EnvelopeSwitchboard {
         summary: "本机解释器没配齐时，信封报缺哪些。",
         off: false,
       },
-      {
-        id: "file_index",
-        label: "文件索引",
-        summary: "主管信封附上文件名单。队员不读这份名单。",
-        off: false,
-      },
     ],
   };
 }
