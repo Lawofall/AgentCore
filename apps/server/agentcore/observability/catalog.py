@@ -1823,7 +1823,6 @@ EVENTS: list[EventSpec] = [
             'user_id': FieldType('str'),
         },
     ),
-    EventSpec(name='md_export.exported'),
     EventSpec(name='memory.always_quota_card'),
     EventSpec(name='memory.always_quota_card_failed'),
     EventSpec(name='memory.always_quota_card_suppressed'),

@@ -9,6 +9,10 @@ function stub(overrides: Partial<FileSource> = {}): FileSource {
     caps: { watch: false, transfer: true, edit: true, snapshots: true },
     listDir: async () => [],
     read: async () => ({ kind: "text", text: "", truncated: false }),
+    createFile: async () => {},
+    mkdir: async () => {},
+    move: async () => {},
+    delete: async () => {},
     ...overrides,
   };
 }
