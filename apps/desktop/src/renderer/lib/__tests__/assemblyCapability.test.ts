@@ -1,4 +1,7 @@
-import { capabilityFromProfile, testAssemblyProfile } from "@/lib/assemblyCapability";
+import {
+  capabilityFromProfile,
+  testAssemblyProfile,
+} from "@/lib/assemblyCapability";
 import { describe, expect, it } from "vitest";
 
 describe("capabilityFromProfile", () => {

@@ -308,9 +308,7 @@ describe("装配胶囊", () => {
     expect(screen.queryByRole("button", { name: "空白" })).toBeNull();
     expect(screen.queryByRole("button", { name: "从完整复制" })).toBeNull();
     expect(screen.queryByRole("button", { name: "极简" })).toBeNull();
-    expect(
-      screen.getByText("标准不能改。要自己关工具，点新建。"),
-    ).toBeTruthy();
+    expect(screen.getByText("标准不能改。要自己关工具，点新建。")).toBeTruthy();
   });
 
   it("这场用极简时胶囊不选中，说明只聊天", () => {

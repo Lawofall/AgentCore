@@ -9,7 +9,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { SimpleTooltip } from "@/components/ui/tooltip";
-import type { DocLayout, FileSource, MarkdownExportFormat } from "@/lib/fileSource";
+import type {
+  DocLayout,
+  FileSource,
+  MarkdownExportFormat,
+} from "@/lib/fileSource";
 import {
   canExportMarkdown,
   exportWorkspaceMarkdown,
@@ -122,10 +126,7 @@ export function MarkdownExportControl({
   return (
     <>
       <SimpleTooltip label="导出 Word / PDF">
-        <IconButton
-          onClick={() => setOpen(true)}
-          aria-label="导出 Word / PDF"
-        >
+        <IconButton onClick={() => setOpen(true)} aria-label="导出 Word / PDF">
           <FileType size={14} />
         </IconButton>
       </SimpleTooltip>

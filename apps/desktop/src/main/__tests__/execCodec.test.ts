@@ -288,9 +288,9 @@ describe("resolveRunShell", () => {
   });
 
   it("labels Git Bash vs other bash, and PowerShell editions", () => {
-    expect(
-      bashShellLabel(String.raw`C:\Program Files\Git\bin\bash.exe`),
-    ).toBe("Git Bash");
+    expect(bashShellLabel(String.raw`C:\Program Files\Git\bin\bash.exe`)).toBe(
+      "Git Bash",
+    );
     expect(bashShellLabel("/usr/bin/bash")).toBe("bash");
     expect(
       powershellShellLabel(
@@ -320,8 +320,11 @@ describe("resolveRunShell", () => {
       kind: "bash",
       file: git,
     });
-    expect(runShellArgv(spec!, "pnpm test")).toEqual(["-lc", "pnpm test"]);
-    expect(runShellArgv(spec!, "pnpm test")).not.toContain("/c");
+    if (spec == null) {
+      throw new Error("expected Git Bash spec");
+    }
+    expect(runShellArgv(spec, "pnpm test")).toEqual(["-lc", "pnpm test"]);
+    expect(runShellArgv(spec, "pnpm test")).not.toContain("/c");
   });
 
   it("falls back to PowerShell 5.1 when no Git Bash, never cmd.exe", () => {
@@ -341,7 +344,10 @@ describe("resolveRunShell", () => {
     expect(spec?.shell).toBe("PowerShell 5.1");
     expect(spec?.kind).toBe("powershell");
     expect(spec?.file.toLowerCase()).not.toContain("cmd.exe");
-    expect(runShellArgv(spec!, "Get-ChildItem")).toEqual([
+    if (spec == null) {
+      throw new Error("expected PowerShell spec");
+    }
+    expect(runShellArgv(spec, "Get-ChildItem")).toEqual([
       "-NoProfile",
       "-NonInteractive",
       "-Command",

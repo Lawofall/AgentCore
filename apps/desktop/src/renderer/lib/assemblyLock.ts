@@ -1,7 +1,6 @@
 /** Official recipes are catalogs, not editors. 极简 is picked in the composer. */
 
-export const OFFICIAL_STANDARD_READONLY =
-  "标准不能改。要自己关工具，点新建。";
+export const OFFICIAL_STANDARD_READONLY = "标准不能改。要自己关工具，点新建。";
 export const OFFICIAL_FULL_READONLY = "完整不能改。要自己关工具，点新建。";
 export const OFFICIAL_CHAT_READONLY =
   "这场只聊天，不能改。要自己关工具，点新建。";

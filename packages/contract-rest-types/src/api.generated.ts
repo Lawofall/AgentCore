@@ -13621,8 +13621,9 @@ export interface components {
          *     ``read`` — look only. ``folder`` — change this folder and run inside it.
          *     ``computer`` — folder plus the local Host face (factory default; web /
          *     no local engine clamp to folder). ``full`` — skip remaining confirmation
-         *     cards (push / install / attach / MCP); Host only on a local engine.
-         *     Stored as ``permission_axes.boundary``. Breaker DENY / FORCE stay orthogonal.
+         *     cards (push / install / attach / MCP) and git-protection DENY; Host only
+         *     on a local engine. Stored as ``permission_axes.boundary``. Fuse / private-key
+         *     / password DENY stay.
          * @enum {string}
          */
         WorkspaceBoundary: "read" | "folder" | "computer" | "full";

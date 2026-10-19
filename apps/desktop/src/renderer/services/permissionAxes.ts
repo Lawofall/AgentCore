@@ -27,7 +27,8 @@ export const BOUNDARY_LABELS: Record<
   },
   folder: {
     short: "本文件夹",
-    description: "这个文件夹里可以改文件、跑命令、用浏览器。装软件、推远程仍会问。",
+    description:
+      "这个文件夹里可以改文件、跑命令、用浏览器。装软件、推远程仍会问。",
   },
   computer: {
     short: "这台电脑",

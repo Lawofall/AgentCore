@@ -80,7 +80,10 @@ class LlmModelProfileView(BaseModel):
     )
     omit_desk_rules: bool | None = Field(
         default=None,
-        description="True when this turn does not read folder AgentCore/rules. Null/omitted = false.",
+        description=(
+            "True when this turn does not read folder AgentCore/rules. "
+            "Null/omitted = false."
+        ),
     )
     skill_membership: dict[str, str] | None = Field(
         default=None,

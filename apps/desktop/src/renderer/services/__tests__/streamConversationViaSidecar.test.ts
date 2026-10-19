@@ -67,10 +67,10 @@ vi.mock("@/services/chatContext", () => ({
 }));
 
 import { getConversations } from "@/hooks/useConversations";
+import { getFolders } from "@/hooks/useFolders";
 import { testAssemblyProfile } from "@/lib/assemblyCapability";
 import { queryClient } from "@/lib/queryClient";
 import { llmModelProfileKeys } from "@/lib/queryKeys";
-import { getFolders } from "@/hooks/useFolders";
 import { notifyWarning } from "@/lib/toast";
 import {
   looksLikeAccountTokenFailure,

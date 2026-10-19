@@ -69,9 +69,7 @@ def arm_assembly_bind(
         recipe=None,
     )
     skills = getattr(bind, "skill_membership", None)
-    if skills is None:
-        skills = {}
-    elif not isinstance(skills, dict):
+    if skills is None or not isinstance(skills, dict):
         skills = {}
     plugs = frozenset(str(item) for item in (getattr(bind, "enabled_mcp_server_ids", ()) or ()))
     return _bound(surface, skills=skills, plugs=plugs)

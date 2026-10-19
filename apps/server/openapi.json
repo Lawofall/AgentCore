@@ -16959,7 +16959,7 @@
         "type": "object"
       },
       "WorkspaceBoundary": {
-        "description": "What this conversation may do. One value, not three axes.\n\n``read`` — look only. ``folder`` — change this folder and run inside it.\n``computer`` — folder plus the local Host face (factory default; web /\nno local engine clamp to folder). ``full`` — skip remaining confirmation\ncards (push / install / attach / MCP); Host only on a local engine.\nStored as ``permission_axes.boundary``. Breaker DENY / FORCE stay orthogonal.",
+        "description": "What this conversation may do. One value, not three axes.\n\n``read`` — look only. ``folder`` — change this folder and run inside it.\n``computer`` — folder plus the local Host face (factory default; web /\nno local engine clamp to folder). ``full`` — skip remaining confirmation\ncards (push / install / attach / MCP) and git-protection DENY; Host only\non a local engine. Stored as ``permission_axes.boundary``. Fuse / private-key\n/ password DENY stay.",
         "enum": [
           "read",
           "folder",
