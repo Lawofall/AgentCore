@@ -131,7 +131,8 @@ async def test_create_provider_masks_and_seeds_profile(client, byok):
 
     assemblies = (await client.get("/v1/users/me/assemblies")).json()
     default = next(p for p in assemblies["data"] if p["id"] == listed["default_assembly_id"])
-    assert default["name"] == "完整"
+    assert default["name"] == "完整 副本"
+    assert default["kind"] == "user"
     assert default["main"]["provider_id"] == body["id"]
     assert default["main"]["model"] == "gpt-4o"
 

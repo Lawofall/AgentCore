@@ -90,7 +90,7 @@ async def test_create_provider_first_seeds_current_config_profile(service):
     with (
         patch.object(service, "_encryptor", return_value=_enc()),
         patch(
-            "agentcore.llm.model_profiles.LlmModelProfileService.snapshot_default_profile_id",
+            "agentcore.llm.model_profiles.LlmModelProfileService.ensure_writable_star",
             new=AsyncMock(return_value="asm-1"),
         ) as snapshot,
         patch(
@@ -123,9 +123,9 @@ async def test_create_provider_custom_url_does_not_seed_profile(service):
     with (
         patch.object(service, "_encryptor", return_value=_enc()),
         patch(
-            "agentcore.llm.model_profiles.LlmModelProfileService.snapshot_default_profile_id",
+            "agentcore.llm.model_profiles.LlmModelProfileService.ensure_writable_star",
             new=AsyncMock(),
-        ) as create_profile,
+        ) as star,
     ):
         await service.create_provider(
             "u1",
@@ -134,7 +134,7 @@ async def test_create_provider_custom_url_does_not_seed_profile(service):
             vendor_id="custom",
             base_url="https://my-proxy.example/v1",
         )
-    create_profile.assert_not_awaited()
+    star.assert_not_awaited()
 
 
 async def test_create_provider_second_does_not_seed_profile(service):
@@ -142,14 +142,14 @@ async def test_create_provider_second_does_not_seed_profile(service):
     with (
         patch.object(service, "_encryptor", return_value=_enc()),
         patch(
-            "agentcore.llm.model_profiles.LlmModelProfileService.snapshot_default_profile_id",
+            "agentcore.llm.model_profiles.LlmModelProfileService.ensure_writable_star",
             new=AsyncMock(),
-        ) as create_profile,
+        ) as star,
     ):
         await service.create_provider(
             "u1", label="Kimi", api_key="sk-second-key", vendor_id="moonshot"
         )
-    create_profile.assert_not_awaited()
+    star.assert_not_awaited()
 
 
 async def test_create_provider_rejects_empty_key(service):

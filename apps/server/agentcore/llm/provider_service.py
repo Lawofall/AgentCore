@@ -236,7 +236,8 @@ class LlmProviderService:
     ) -> LlmProviderView:
         """Add a provider.
 
-        First provider + matching vendor preset writes the starred assembly's main.
+        First provider + matching vendor preset copies official 完整 then
+        writes that copy's main. Official recipes stay read-only.
         """
         api_key = (api_key or "").strip()
         if not api_key:
@@ -274,7 +275,7 @@ class LlmProviderService:
             from agentcore.llm.model_profiles import LlmModelProfileService
 
             profiles = LlmModelProfileService(self._session)
-            assembly_id = await profiles.snapshot_default_profile_id(user_id)
+            assembly_id = await profiles.ensure_writable_star(user_id)
             if assembly_id:
                 await profiles.update_profile(
                     user_id,

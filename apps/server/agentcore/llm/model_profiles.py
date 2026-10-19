@@ -377,6 +377,24 @@ class LlmModelProfileService:
             return rows[0].id
         return system_profile_default_id()
 
+    async def ensure_writable_star(self, user_id: str) -> str | None:
+        """Owned starred assembly. Official 完整 is copied first (点新建)."""
+        pin = await self.snapshot_default_profile_id(user_id)
+        if pin and not is_system_profile_id(pin):
+            return pin
+        from agentcore.assembly.recipes import (
+            FULL,
+            capability_preset_id,
+            capability_recipe_for_id,
+        )
+
+        recipe = capability_recipe_for_id(capability_preset_id(FULL))
+        name = f"{recipe.name} 副本" if recipe is not None else "完整 副本"
+        view = await self.create_profile(
+            user_id, name=name, origin="full", set_as_default=True
+        )
+        return view.id
+
     def _preferred_visible_preset_ids(self) -> list[str]:
         from agentcore.assembly.recipes import FULL, capability_preset_id
 

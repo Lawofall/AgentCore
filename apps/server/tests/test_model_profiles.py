@@ -335,6 +335,31 @@ async def test_snapshot_default_returns_virtual_full():
 
 
 @pytest.mark.asyncio
+async def test_ensure_writable_star_copies_official():
+    svc = LlmModelProfileService(MagicMock())
+    svc.snapshot_default_profile_id = AsyncMock(  # type: ignore[method-assign]
+        return_value=capability_preset_id(FULL)
+    )
+    created = SimpleNamespace(id="asm-copy")
+    svc.create_profile = AsyncMock(return_value=created)  # type: ignore[method-assign]
+    assert await svc.ensure_writable_star("u1") == "asm-copy"
+    svc.create_profile.assert_awaited_once_with(
+        "u1", name="完整 副本", origin="full", set_as_default=True
+    )
+
+
+@pytest.mark.asyncio
+async def test_ensure_writable_star_keeps_owned_pin():
+    svc = LlmModelProfileService(MagicMock())
+    svc.snapshot_default_profile_id = AsyncMock(  # type: ignore[method-assign]
+        return_value="asm-owned"
+    )
+    svc.create_profile = AsyncMock()  # type: ignore[method-assign]
+    assert await svc.ensure_writable_star("u1") == "asm-owned"
+    svc.create_profile.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_list_marks_user_default_when_system_pin_dormant(monkeypatch):
     """A leftover per-model pin is not an assembly. Recipes stay listed; 完整 is the star."""
     from types import SimpleNamespace
