@@ -30,7 +30,7 @@ vi.mock("../auth-client", () => ({
 
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { SIDECAR_CHANNELS } from "@shared/sidecar-contract";
+import { SIDECAR_CHANNELS, bareSidecarSession } from "@shared/sidecar-contract";
 import {
   outboxDir,
   resetOccupiedConversationIdsProviderForTests,
@@ -48,13 +48,7 @@ const START_REQ = {
   userMessageId: "11111111-1111-4111-8111-111111111111",
   messageId: "22222222-2222-4222-8222-222222222222",
   userMessage: "hello",
-  session: {
-    permissionAxes: { boundary: "folder" as const },
-    delegateMode: false,
-    folderId: null as string | null,
-    localRootId: null as string | null,
-    localSubpath: null as string | null,
-  },
+  session: bareSidecarSession(),
 };
 
 function capturingTransport(opts?: { startTurnError?: string }) {

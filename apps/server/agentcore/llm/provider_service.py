@@ -236,7 +236,7 @@ class LlmProviderService:
     ) -> LlmProviderView:
         """Add a provider.
 
-        First provider + matching vendor preset copies official 完整 then
+        First provider + matching vendor preset copies official 标准 then
         writes that copy's main. Official recipes stay read-only.
         """
         api_key = (api_key or "").strip()

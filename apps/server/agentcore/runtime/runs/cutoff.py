@@ -54,9 +54,6 @@ DEFAULT_TOKEN_WIND_DOWN_RESERVE = 200_000
 # read 不在此基础集：仅交付类（钉路径 artifacts，工具面仍含
 # write）经 :func:`wind_down_allowed_tools` 叠加——回读自己产物属于写作，
 # 不是继续调查；web_search / web_fetch / grep 等检索类不放回。
-# md_export：把已成篇 .md 确定性导出为同目录同名 Word / PDF——用户要
-# PDF / Word / 可分享文件时的成文主路径末步（见 research_quality.MD_EXPORT_DISCIPLINE），
-# 属收口落盘而非新战线：不检索、不出网、回执只有一行 manifest。
 WIND_DOWN_ALLOWED_TOOLS = frozenset(
     {
         "handoff",
@@ -64,7 +61,6 @@ WIND_DOWN_ALLOWED_TOOLS = frozenset(
         "edit",
         "file_batch",
         "file_list",
-        "md_export",
     }
 )
 

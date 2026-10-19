@@ -1,5 +1,6 @@
+import { testAssemblyProfile } from "@/lib/assemblyCapability";
 import { queryClient } from "@/lib/queryClient";
-import { conversationKeys } from "@/lib/queryKeys";
+import { conversationKeys, llmModelProfileKeys } from "@/lib/queryKeys";
 import * as accountToken from "@/services/accountToken";
 import * as foldersToken from "@/services/foldersToken";
 import * as inferenceToken from "@/services/inferenceToken";
@@ -41,6 +42,11 @@ beforeEach(() => {
     "resolveConversationPermissionAxes",
   ).mockResolvedValue({ boundary: "folder" });
   queryClient.removeQueries({ queryKey: conversationKeys.grouped });
+  const profile = testAssemblyProfile();
+  queryClient.setQueryData(llmModelProfileKeys.list, {
+    data: [profile],
+    default_assembly_id: profile.id,
+  });
   useConversationStore.setState({ currentConversationId: null, byId: {} });
   useConversationStore.getState().switchConversation(CID);
   useConversationStore.getState().setTurnPhase("completed", CID);
@@ -101,6 +107,7 @@ afterEach(() => {
   resetQueuedSidecarStartsForTests();
   resetSidecarEventPumpForTests();
   resetStreamOwnershipForTests();
+  queryClient.removeQueries({ queryKey: llmModelProfileKeys.list });
   useConversationStore.setState({ currentConversationId: null, byId: {} });
   vi.unstubAllGlobals();
   vi.restoreAllMocks();

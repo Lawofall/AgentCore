@@ -336,7 +336,7 @@ describe("ModelSettings (profiles)", () => {
       expect(createLlmModelProfile).toHaveBeenCalledWith({
         name: "GLM-5.2 副本",
         set_as_default: false,
-        origin: "full",
+        origin: "standard",
       }),
     );
     expect(updateLlmModelProfile).toHaveBeenCalledWith(

@@ -34,7 +34,6 @@ export const FILE_OP_TOOLS: ReadonlySet<string> = new Set([
   "edit",
   "file_delete",
   "file_batch",
-  "md_export",
   "git",
 ]);
 

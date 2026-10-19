@@ -71,7 +71,7 @@ export function EnvelopeSwitchList({
   heading?: string;
   /** 组装页是矮卡。输入区仍是行。 */
   layout?: "rows" | "cards";
-  /** Official 完整: switches are the catalog, not an editor. */
+  /** Official recipe: switches are the catalog, not an editor. */
   locked?: boolean;
 }) {
   const queryClient = useQueryClient();

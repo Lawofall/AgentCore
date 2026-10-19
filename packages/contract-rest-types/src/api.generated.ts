@@ -3334,6 +3334,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/conversations/{conversation_id}/workspace/export-pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Export Conversation Workspace Pdf
+         * @description Export a conversation-workspace Markdown file to a sibling ``.pdf``.
+         */
+        post: operations["export_conversation_workspace_pdf_v1_conversations__conversation_id__workspace_export_pdf_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/conversations/{conversation_id}/workspace/external-grants": {
         parameters: {
             query?: never;
@@ -5718,7 +5738,7 @@ export interface paths {
         put?: never;
         /**
          * Convert Md To Docx
-         * @description Stateless Markdown → Word (shared converter; used by local desktop「导出 Word」).
+         * @description Stateless Markdown → Word (shared converter; used by local desktop「导出」).
          *
          *     Does not touch a workspace. Images are optional base64 payloads keyed by the
          *     raw Markdown ``src``. Auth required so the surface is not a public converter.
@@ -5741,7 +5761,7 @@ export interface paths {
         put?: never;
         /**
          * Convert Md To Pdf
-         * @description Stateless Markdown → PDF (shared converter; used by local desktop「导出 PDF」).
+         * @description Stateless Markdown → PDF (shared converter; used by local desktop「导出」).
          *
          *     Does not touch a workspace. Auth required so the surface is not a public converter.
          */
@@ -8499,18 +8519,18 @@ export interface components {
         };
         /**
          * CreateLlmModelProfileRequest
-         * @description New user assembly. Always a snapshot of official 完整, not a locked recipe.
+         * @description New user assembly. Always a snapshot of official 标准, not a locked recipe.
          */
         CreateLlmModelProfileRequest: {
             /** Name */
             name: string;
             /**
              * Origin
-             * @description Snapshot of official 完整 (tools, envelope, factory catalog on).
-             * @default full
+             * @description Snapshot of official 标准 (daily tools on; debate / chats / folders off).
+             * @default standard
              * @constant
              */
-            origin: "full";
+            origin: "standard";
             /**
              * Set As Default
              * @default false
@@ -10029,6 +10049,11 @@ export interface components {
             /** Created At */
             created_at?: string | null;
             /**
+             * Disabled Tools
+             * @description Whole-tool switch ids this assembly turns off. Empty = all on.
+             */
+            disabled_tools?: string[];
+            /**
              * Enabled Mcp Server Ids
              * @description Local MCP server ids this assembly enables. Empty = none.
              */
@@ -10049,17 +10074,34 @@ export interface components {
             /** Name */
             name: string;
             /**
+             * Omit Desk Rules
+             * @description True when this turn does not read folder AgentCore/rules. Null/omitted = false.
+             */
+            omit_desk_rules?: boolean | null;
+            /**
              * Omitted Factory Skills
              * @description Official HOW names this assembly leaves off the consult directory. Empty = every factory row stays. A name on the list is missing from the directory and consult. New skills default on once the recipe is released.
              */
             omitted_factory_skills?: string[];
+            /**
+             * Omitted Projections
+             * @description Envelope rows this assembly does not write. Empty = every row.
+             */
+            omitted_projections?: string[];
             /** Reasoning Effort */
             reasoning_effort?: string | null;
             /**
              * Recipe
-             * @description Official recipe still locked on this assembly. Null on user snapshots. Official 完整 / 极简 themselves are virtual ids.
+             * @description Official recipe still locked on this assembly. Null on user snapshots. Official 标准 / 完整 / 极简 themselves are virtual ids.
              */
-            recipe?: ("chat" | "full") | null;
+            recipe?: ("chat" | "full" | "standard") | null;
+            /**
+             * Skill Membership
+             * @description Account 交代 document id → apply mode. Null = follow the documents (official recipes). Empty object = this assembly names none.
+             */
+            skill_membership?: {
+                [key: string]: string;
+            } | null;
             /** Updated At */
             updated_at?: string | null;
             /**
@@ -19611,6 +19653,45 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ExportDocxResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_conversation_workspace_pdf_v1_conversations__conversation_id__workspace_export_pdf_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                conversation_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExportPdfRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExportPdfResponse"];
                 };
             };
             /** @description Validation Error */

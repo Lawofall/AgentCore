@@ -68,7 +68,7 @@ class ApprovalDecision(StrEnum):
     APPROVE = "approve"  # allow this one call
     APPROVE_ALWAYS = "approve_always"  # allow this tool for the rest of the turn
     # allow the whole file-mutation class (write / edit / file_delete /
-    # file_batch / md_export) for the rest of the turn — one click for a multi-file or mixed-op
+    # file_batch) for the rest of the turn — one click for a multi-file or mixed-op
     # task instead of granting each tool name separately. code_execute is NOT in the
     # class (a higher-risk side effect) and keeps its own per-tool gate (安全权限与
     # 治理 §三 边界2: 信任"这类操作", 不是"随便干").
@@ -164,7 +164,7 @@ class ApprovalGate:
     # Per-tool approval wait ceilings; unset tools use timeout_seconds.
     timeout_overrides: dict[str, float] = field(default_factory=dict)
     # The file-mutation tool class an APPROVE_ALWAYS_FILES grant covers
-    # (write / edit / file_delete / file_batch / md_export, PLUS git write
+    # (write / edit / file_delete / file_batch, PLUS git write
     # subcommands). Injected at construction via approval_class_tool_names()
     # (GRANTABLE ∩ FILESYSTEM + git) — see run.py / resume/pipeline.py wiring — so
     # one file-class grant also clears git writes; single source of truth.

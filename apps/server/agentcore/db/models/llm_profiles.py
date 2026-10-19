@@ -85,8 +85,9 @@ class LlmModelProfile(Base):
         default=list,
         server_default=text("'[]'::jsonb"),
     )
-    # 'full' only while a leftover owned row still carries the live recipe.
-    # Null = the stored deny lists are the record. Official 完整 is virtual.
+    # Owned rows never persist recipe=standard. 'full'/'chat' remain only while
+    # a leftover owned row still carries a live recipe. Null = stored lists.
+    # Official 标准 / 完整 / 极简 are virtual ids, not this column.
     recipe: Mapped[str | None] = mapped_column(String(16), nullable=True)
     omit_desk_rules: Mapped[bool] = mapped_column(
         Boolean,

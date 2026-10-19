@@ -327,10 +327,34 @@ def _missing_tool_feedback(
         execution_class_tool_names,
         worker_only_tool_names,
     )
+    from agentcore.tools.retired import USER_SIDE_EXPORT_MESSAGE, USER_SIDE_EXPORT_NAMES
 
     worker_only = worker_only_tool_names()
     execution = execution_class_tool_names()
     declared = declared_tool_names()
+
+    if missing in USER_SIDE_EXPORT_NAMES or (
+        raw_name is not None and raw_name in USER_SIDE_EXPORT_NAMES
+    ):
+        return USER_SIDE_EXPORT_MESSAGE, "not_found", True
+
+    from agentcore.assembly.recipes import STANDARD_TOOLS
+    from agentcore.tools.switchboard import all_switch_ids, switch_blocks, withheld_names
+
+    # Off on factory 标准. 极简 missing `run` still uses the generic path.
+    if missing in withheld_names(
+        s for s in all_switch_ids() if s not in STANDARD_TOOLS
+    ) and switch_blocks(missing):
+        return (
+            (
+                f"工具 '{missing}' 这场能力没开。"
+                "需要辩论、翻旧对话或列云文件夹时，请用户在输入区把能力换到「完整」。"
+                "翻某一场旧对话也可以让用户 @ 那场。"
+                "不要假装已经做了，不要重试本工具。"
+            ),
+            "not_assembled",
+            True,
+        )
 
     if missing in execution:
         return (

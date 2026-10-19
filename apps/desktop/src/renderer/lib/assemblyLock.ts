@@ -1,11 +1,14 @@
 /** Official recipes are catalogs, not editors. 极简 is picked in the composer. */
 
+export const OFFICIAL_STANDARD_READONLY =
+  "标准不能改。要自己关工具，点新建。";
 export const OFFICIAL_FULL_READONLY = "完整不能改。要自己关工具，点新建。";
 export const OFFICIAL_CHAT_READONLY =
   "这场只聊天，不能改。要自己关工具，点新建。";
 
 const PICKER_BLURB: Record<string, string> = {
-  full: "能改文件、跑命令、上网。",
+  standard: "能改文件、跑命令、上网。",
+  full: "含辩论、搜旧对话。",
   chat: "这场只聊天。",
 };
 
@@ -26,9 +29,9 @@ export function officialHint(
     | undefined,
 ): string | null {
   if (profile?.kind !== "system") return null;
-  return profile.recipe === "chat"
-    ? OFFICIAL_CHAT_READONLY
-    : OFFICIAL_FULL_READONLY;
+  if (profile.recipe === "chat") return OFFICIAL_CHAT_READONLY;
+  if (profile.recipe === "full") return OFFICIAL_FULL_READONLY;
+  return OFFICIAL_STANDARD_READONLY;
 }
 
 export function isToolboxCapsule(row: {

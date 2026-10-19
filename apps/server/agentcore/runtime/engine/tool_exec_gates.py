@@ -204,9 +204,15 @@ async def _check_safety_and_approval_gates(
     Returns a deny outcome, or ``None`` when the call may proceed to execute.
     """
     # P3 safety circuit breaker — last-line heuristic (not a security boundary).
-    # full_trust / delegation / turn grants never override FORCE_APPROVAL or DENY.
-    from agentcore.runtime.safety_breaker import BreakerVerdict, evaluate_tool_call
+    # ``full`` skips FORCE and git-protection DENY; remaining DENY stays.
+    # Delegation / turn grants never override remaining DENY.
+    from agentcore.runtime.safety_breaker import (
+        BreakerVerdict,
+        apply_boundary_to_breaker,
+        evaluate_tool_call,
+    )
 
+    axes = approval_gate.permission_axes if approval_gate is not None else None
     breaker = evaluate_tool_call(name, args)
     # P0a/b: Local destructive_fs without usable zip → FORCE_APPROVAL (分轨).
     # Runs after sync evaluate so P2 top-tree / fuse DENY stay single-card;
@@ -218,6 +224,7 @@ async def _check_safety_and_approval_gates(
             context=context,
             existing=breaker,
         )
+    breaker = apply_boundary_to_breaker(breaker, axes)
     if breaker is not None and breaker.verdict is BreakerVerdict.DENY:
         from agentcore.runtime.audit.hooks import on_circuit_breaker
 
@@ -318,8 +325,7 @@ async def _check_safety_and_approval_gates(
     # pre-authorize skip below — because it used to be private to
     # ``ApprovalGate.authorize`` and anything short-circuiting earlier silently
     # published to the remote. ``full`` is the one boundary that drops these
-    # cards (and leftover GRANTABLE / MCP). DENY / FORCE still bind.
-    axes = approval_gate.permission_axes if approval_gate is not None else None
+    # cards (and leftover GRANTABLE / MCP). Remaining DENY still bind.
     always_confirm = isinstance(args, dict) and requires_always_confirm(name, args)
     if always_confirm and axes is not None and axes.skips_confirm:
         always_confirm = False

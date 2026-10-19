@@ -63,11 +63,9 @@ def _assert_how_identifiers_not_in_facts(ctx: str) -> None:
 
 
 class _FakeBackend:
-    def __init__(self, location: str, root_label: str = "workspace", *, channel=None) -> None:
+    def __init__(self, location: str, root_label: str = "workspace") -> None:
         self.location = location
         self.root_label = root_label
-        if channel is not None:
-            self._channel = channel
 
 
 def test_desktop_client_can_bind_fail_closed():
@@ -264,15 +262,46 @@ def test_cloud_system_line_omits_guest_surface_when_run_off():
 
 def test_local_system_line_does_not_paste_cloud_guest_surface():
     from agentcore.tools.sandbox.guest_rootfs import format_cloud_guest_surface
+    from agentcore.tools.sandbox.run_shell import RunShellFact
 
     out = build_workspace_context(
         _FakeBackend("local"),
         desktop_online=True,
         run_enabled=True,
+        run_shell=RunShellFact("Windows", "Git Bash"),
     )
     system = _system_line(out)
     assert format_cloud_guest_surface() not in system
     assert "python3" not in system
+    assert system == "系统：Windows · 壳：Git Bash"
+
+
+def test_local_system_line_uses_run_shell_not_interpreter_langs():
+    """解释器清单有 bash ≠ ``run`` 的壳。OS 跟壳都来自启动器探测。"""
+    from agentcore.tools.sandbox.run_shell import RunShellFact
+
+    out = build_workspace_context(
+        _FakeBackend("local"),
+        desktop_online=True,
+        run_enabled=True,
+        exec_languages=("python", "javascript", "bash"),
+        run_shell=RunShellFact("Windows", "PowerShell 5.1"),
+    )
+    system = _system_line(out)
+    assert system == "系统：Windows · 壳：PowerShell 5.1"
+    assert "壳：bash" not in out
+    assert "系统：壳：" not in out
+
+
+def test_local_system_line_omits_when_run_shell_unprobed():
+    out = build_workspace_context(
+        _FakeBackend("local"),
+        desktop_online=True,
+        run_enabled=True,
+        exec_languages=("python", "javascript", "bash"),
+    )
+    assert _system_line(out) == ""
+    assert "壳：" not in out
 
 
 def test_empty_desk_adds_operational_root_fact():
@@ -389,9 +418,9 @@ def test_no_desktop_host_unassembled():
     _assert_no_capability_restatements(out)
 
 
-def test_local_remote_channel_facts():
+def test_local_facts_are_user_machine():
     out = build_workspace_context(
-        _FakeBackend("local", root_label="MyProject", channel=object()),
+        _FakeBackend("local", root_label="MyProject"),
         desktop_online=True,
         run_enabled=True,
         browser_enabled=False,
@@ -774,7 +803,7 @@ def test_git_unassembled_states_channel_without_enable_steps():
     from agentcore.runtime.context.workspace_context import WorkspaceGitFact
 
     out = build_workspace_context(
-        _FakeBackend("local", channel=object()),
+        _FakeBackend("local"),
         desktop_online=False,
         run_enabled=False,
         git_tool_enabled=False,
@@ -790,7 +819,7 @@ def test_git_unassembled_states_channel_without_enable_steps():
 def test_local_run_omits_registry_egress_from_facts():
     """本机执行开着时，事实层不写包装源门禁。"""
     out = build_workspace_context(
-        _FakeBackend("local", root_label="MyProject", channel=object()),
+        _FakeBackend("local", root_label="MyProject"),
         desktop_online=True,
         run_enabled=True,
         browser_enabled=False,
@@ -831,7 +860,6 @@ def test_workspace_omits_artifact_format_catalog():
     )
     assert "产物格式：" not in out
     assert ".xlsx=" not in out
-    assert "md_export" not in out
     assert "run" in _gaps(out)
 
 
@@ -840,23 +868,23 @@ def test_artifact_formats_follow_real_assembly_not_constants(monkeypatch):
     from dataclasses import replace
 
     from agentcore.runtime.context.artifact_formats import build_artifact_format_line
-    from agentcore.tools.builtin.md_export import MdExportTool
+    from agentcore.tools.builtin.run import RunTool
 
-    exporters_only = build_artifact_format_line({"md_export"})
-    with_exec = build_artifact_format_line({"md_export", "run"})
-    assert ".xlsx=不可产" in exporters_only
+    without_exec = build_artifact_format_line(set())
+    with_exec = build_artifact_format_line({"run"})
+    assert ".xlsx=不可产" in without_exec
     assert ".xlsx=可产" in with_exec
-    assert exporters_only != with_exec
+    assert without_exec != with_exec
 
     monkeypatch.setattr(
-        MdExportTool,
+        RunTool,
         "registration",
-        replace(MdExportTool.registration, produces_formats=(".docx", ".odt")),
+        replace(RunTool.registration, produces_formats=(".xlsx", ".odt")),
     )
-    mutated = build_artifact_format_line({"md_export"})
+    mutated = build_artifact_format_line({"run"})
     assert ".odt=可产" in mutated
-    assert "md_export" in mutated
-    assert ".odt=" not in exporters_only
+    assert "run" in mutated
+    assert ".odt=" not in without_exec
 
 
 def test_env_examples_gvisor_timeout_does_not_clamp_outer_verify():

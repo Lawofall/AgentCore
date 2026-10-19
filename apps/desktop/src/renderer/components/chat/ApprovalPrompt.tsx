@@ -748,7 +748,7 @@ export function ApprovalCard({
             )}
             {sensitivePathReadAsk && (
               <p className="mt-1 whitespace-pre-line text-xs text-muted-foreground">
-                敏感路径读升格审批
+                读取凭据文件需确认
                 {escalationHint ? `：${escalationHint}` : ""}
               </p>
             )}

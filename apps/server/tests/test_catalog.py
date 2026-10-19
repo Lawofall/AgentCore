@@ -38,7 +38,6 @@ _CEO_AND_WORKER_MUTATION = {
     "edit",
     "file_delete",
     "file_batch",
-    "md_export",
     "run",
 }
 
@@ -99,7 +98,6 @@ def test_factory_tools_are_opening_resident():
         "host",
         "browser",
         "debate",
-        "md_export",
         "file_batch",
     ):
         assert by_name[name].resident is True, name

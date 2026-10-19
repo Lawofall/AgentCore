@@ -274,7 +274,7 @@ class ConversationRepository:
     async def _writable_assembly(
         self, conv: Conversation, *, user_id: str
     ) -> LlmModelProfile | None:
-        """Owned row this conversation can write. Official 完整 is not writable."""
+        """Owned row this conversation can write. Official recipes are not writable."""
         row = await self._assembly_for_conversation(conv)
         if row is not None:
             return row

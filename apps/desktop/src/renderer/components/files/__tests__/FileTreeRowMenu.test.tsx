@@ -103,7 +103,9 @@ describe("FileTreeRowMenu 目录下载", () => {
       { path: "a.md", name: "a.md", isDir: false },
       stubSource({ download }),
     );
-    fireEvent.click(await screen.findByText("下载"));
+    expect(await screen.findByText("下载")).toBeTruthy();
+    expect(screen.queryByText(/^导出$/)).toBeNull();
+    fireEvent.click(screen.getByText("下载"));
     expect(download).toHaveBeenCalledWith("a.md", "a.md", { isDir: false });
   });
 
@@ -134,33 +136,54 @@ describe("FileTreeRowMenu 系统集成", () => {
   });
 });
 
-describe("FileTreeRowMenu 导出 Word", () => {
-  it("Markdown 可写源只出现一行，点开后选正式文书传 official", async () => {
-    const exportMdToDocx = vi
+describe("FileTreeRowMenu 导出", () => {
+  it("Markdown 可写源只出现一行，点开后选正式文书传 Word + official", async () => {
+    const exportMarkdown = vi
       .fn()
       .mockResolvedValue({ path: "a.docx", warnings: [] });
     openMenu(
       { path: "a.md", name: "a.md", isDir: false },
-      stubSource({ exportMdToDocx }),
+      stubSource({ exportMarkdown }),
     );
-    expect(await screen.findByText(/^导出 Word$/)).toBeTruthy();
-    expect(screen.queryByText("导出 Word（正式文书）")).toBeNull();
-    fireEvent.click(screen.getByText(/^导出 Word$/));
-    expect(exportMdToDocx).not.toHaveBeenCalled();
+    expect(await screen.findByText(/^导出$/)).toBeTruthy();
+    fireEvent.click(screen.getByText(/^导出$/));
+    expect(exportMarkdown).not.toHaveBeenCalled();
     fireEvent.click(await screen.findByRole("button", { name: /正式文书/ }));
-    expect(exportMdToDocx).toHaveBeenCalledWith("a.md", "official");
+    expect(exportMarkdown).toHaveBeenCalledWith("a.md", "docx", "official");
   });
 
-  it("弹窗选技术报告传 standard", async () => {
-    const exportMdToDocx = vi
+  it("弹窗切 PDF 再选技术报告", async () => {
+    const exportMarkdown = vi
       .fn()
-      .mockResolvedValue({ path: "note.docx", warnings: [] });
+      .mockResolvedValue({ path: "note.pdf", warnings: [] });
     openMenu(
       { path: "note.md", name: "note.md", isDir: false },
-      stubSource({ exportMdToDocx }),
+      stubSource({ exportMarkdown }),
     );
-    fireEvent.click(await screen.findByText(/^导出 Word$/));
+    fireEvent.click(await screen.findByText(/^导出$/));
+    fireEvent.click(await screen.findByRole("button", { name: "PDF" }));
     fireEvent.click(await screen.findByRole("button", { name: /技术报告/ }));
-    expect(exportMdToDocx).toHaveBeenCalledWith("note.md", "standard");
+    expect(exportMarkdown).toHaveBeenCalledWith("note.md", "pdf", "standard");
+  });
+
+  it("非 Markdown 不出现导出", async () => {
+    openMenu(
+      { path: "a.txt", name: "a.txt", isDir: false },
+      stubSource({ exportMarkdown: vi.fn() }),
+    );
+    expect(await screen.findByText("打开")).toBeTruthy();
+    expect(screen.queryByText(/^导出$/)).toBeNull();
+  });
+
+  it("只读源不出现导出", async () => {
+    openMenu(
+      { path: "a.md", name: "a.md", isDir: false },
+      stubSource({
+        caps: { watch: false, transfer: true, edit: false, snapshots: false },
+        exportMarkdown: vi.fn(),
+      }),
+    );
+    expect(await screen.findByText("打开")).toBeTruthy();
+    expect(screen.queryByText(/^导出$/)).toBeNull();
   });
 });

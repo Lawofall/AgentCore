@@ -110,6 +110,8 @@ def test_resolve_exec_languages_cloud_keeps_full_surface():
 
 
 def test_resolve_exec_languages_sidecar_probes_host(monkeypatch):
+    from agentcore.tools.sandbox.run_shell import RunShellFact
+
     class _Sidecar:
         location = "local"
 
@@ -117,10 +119,16 @@ def test_resolve_exec_languages_sidecar_probes_host(monkeypatch):
         "agentcore.tools.sandbox.exec_languages.probe_host_languages",
         lambda: ("python",),
     )
+    fact = RunShellFact("Windows", "PowerShell 5.1")
+    monkeypatch.setattr(
+        "agentcore.tools.sandbox.run_shell.probe_host_run_shell",
+        lambda: fact,
+    )
     backend = _Sidecar()
     langs = asyncio.run(resolve_exec_languages(backend))
     assert langs == ("python",)
     assert backend._exec_languages == ("python",)
+    assert backend._run_shell_fact == fact
 
 
 def test_resolve_exec_languages_desktop_channel():
@@ -135,9 +143,34 @@ def test_resolve_exec_languages_desktop_channel():
         def __init__(self) -> None:
             self._channel = _Channel()
 
-    langs = asyncio.run(resolve_exec_languages(_Local()))
+    backend = _Local()
+    langs = asyncio.run(resolve_exec_languages(backend))
     assert langs == ("python", "javascript")
     assert "bash" not in langs
+    assert backend._run_shell_fact is None
+
+
+def test_resolve_exec_languages_desktop_channel_run_shell():
+    class _Channel:
+        async def request(self, op, args, *, timeout=None):
+            return {
+                "languages": ["python", "javascript", "bash"],
+                "os": "Windows",
+                "shell": "Git Bash",
+            }
+
+    class _Local:
+        location = "local"
+
+        def __init__(self) -> None:
+            self._channel = _Channel()
+
+    backend = _Local()
+    langs = asyncio.run(resolve_exec_languages(backend))
+    assert langs == ("python", "javascript", "bash")
+    assert backend._run_shell_fact is not None
+    assert backend._run_shell_fact.os_label == "Windows"
+    assert backend._run_shell_fact.shell_label == "Git Bash"
 
 
 def test_resolve_exec_languages_probe_timeout_fail_closed_advertise():

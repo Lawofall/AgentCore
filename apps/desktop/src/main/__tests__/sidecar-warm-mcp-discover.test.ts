@@ -33,6 +33,7 @@ vi.mock("../mcp-service", () => ({
 }));
 
 import { rmSync } from "node:fs";
+import { bareSidecarSession } from "@shared/sidecar-contract";
 import { SidecarManager } from "../sidecar/manager";
 import type { Transport } from "../sidecar/transport";
 
@@ -168,13 +169,7 @@ describe("SidecarManager warmMcpDiscover", () => {
         messageId: "m-asst",
         userMessage: "hi",
         userId: ACCOUNT_USER,
-        session: {
-          permissionAxes: { boundary: "folder" as const },
-          delegateMode: false,
-          folderId: null,
-          localRootId: null,
-          localSubpath: null,
-        },
+        session: bareSidecarSession(),
       },
       "/tmp/ws-await",
     );

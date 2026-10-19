@@ -2,7 +2,7 @@
 
 Empty list = every factory skill stays in ``<按需目录>`` and ``consult``.
 A name on the list leaves both the directory row and fetch. New skills
-default on once the recipe key is gone. Official 完整 omits none.
+default on once the recipe key is gone. Official 标准 / 完整 omit none.
 """
 
 from __future__ import annotations

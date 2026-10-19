@@ -355,7 +355,7 @@ function ModelProfilesSection({
       const created = await createLlmModelProfile({
         name: `${profile.name} 副本`,
         set_as_default: false,
-        origin: "full",
+        origin: "standard",
       });
       const updated = profile.main
         ? await updateLlmModelProfile(created.id, {
@@ -393,7 +393,7 @@ function ModelProfilesSection({
       const created = await createLlmModelProfile({
         name: draft.name.trim() || "未命名组合",
         set_as_default: false,
-        origin: "full",
+        origin: "standard",
       });
       const updated = await updateLlmModelProfile(created.id, {
         name: draft.name.trim() || "未命名组合",

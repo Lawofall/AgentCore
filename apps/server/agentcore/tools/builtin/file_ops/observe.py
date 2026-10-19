@@ -38,7 +38,7 @@ def ole_next() -> str:
 
 def scan_next() -> str:
     return (
-        "按文件名归类。offset/limit / start_page 变不出文本层。"
+        "按文件名归类。offset/limit 变不出文本层。"
     )
 
 

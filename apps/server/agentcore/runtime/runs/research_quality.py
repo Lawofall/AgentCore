@@ -26,16 +26,6 @@ PAPER_PARALLEL_MERGE_DISCIPLINE = (
     "调研透镜 / 代码 / 建站等多产物场景不受本条约束。"
 )
 
-# 出行/报告成文：主交付永远是 .md；用户要 PDF/Word/可分享时才 md→md_export→handoff。
-# 导出器是确定性 FILESYSTEM 工具、与执行沙箱正交，无 code_execute 也能交。
-MD_EXPORT_DISCIPLINE = (
-    "【成文交付·MD 为主】主交付永远是 `.md`。"
-    "用户要 PDF / Word / 可分享文件时：顺序 = 成篇 `.md` → 调用 `md_export`"
-    "（`format=pdf` 或 `format=docx`，对主文件）→ handoff；确定性导出、不依赖执行沙箱。"
-    "【禁止】用多份 HTML 顶替 PDF；【禁止】把 code_execute + reportlab / python-docx 当主路径"
-    "（确定性 `md_export` 才是主路径）。"
-)
-
 # 成篇主文件：手写 ``output_path`` / ``artifacts`` 钉路径；引擎不发明默认柜。
 
 # 本地改文件 / 广度摸底 / 成篇意图 / 字数承诺：用户·task 文 RE 猜意图腿已撤；

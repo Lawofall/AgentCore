@@ -72,18 +72,23 @@ export async function uploadWorkspaceFile(
   });
 }
 
-/** Export a conversation-workspace Markdown file to a sibling ``.docx``. */
-export async function exportWorkspaceMdToDocx(
+/** Export a conversation-workspace Markdown file to a sibling Word / PDF. */
+export async function exportConversationMarkdown(
   conversationId: string,
   path: string,
+  format: "docx" | "pdf",
   layout: "standard" | "official" = "standard",
 ): Promise<{ path: string; warnings: string[] }> {
+  const route =
+    format === "pdf"
+      ? `/v1/conversations/${conversationId}/workspace/export-pdf`
+      : `/v1/conversations/${conversationId}/workspace/export-docx`;
   const res = await api.post<{
     path: string;
     source_path: string;
     size_bytes: number;
     warnings: string[];
-  }>(`/v1/conversations/${conversationId}/workspace/export-docx`, {
+  }>(route, {
     path,
     layout,
   });

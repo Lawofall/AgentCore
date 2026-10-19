@@ -90,6 +90,8 @@ describe("workspace boundary", () => {
     }
     expect(axesEqual({ boundary: "read" }, { boundary: "folder" })).toBe(false);
     expect(BOUNDARY_LABELS.computer.description).toContain("这台电脑上的文件");
+    expect(BOUNDARY_LABELS.full.description).toContain("不再询问");
+    expect(BOUNDARY_LABELS.full.description).toContain("格式化磁盘");
   });
 });
 

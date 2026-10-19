@@ -68,12 +68,12 @@ export function countPromptModes(documents: readonly { applyMode: string }[]): {
 }
 
 /**
- * 完整 and owned names on one row. 极简 is not a capsule here; pick it in
- * the composer. Another name switches which assembly is in use. Official
- * chips stay recipes: click pins them, click again does nothing. An owned
- * chip, clicked again, renames in place. New copies 完整. Delete is an
- * icon on that same row. Picking a name switches this conversation, or the
- * next new chat when none is open. Model lives in the composer.
+ * 标准, 完整, and owned names on one row. 极简 is not a capsule here; pick
+ * it in the composer. Another name switches which assembly is in use.
+ * Official chips stay recipes: click pins them, click again does nothing.
+ * An owned chip, clicked again, renames in place. New copies 标准. Delete
+ * is an icon on that same row. Picking a name switches this conversation,
+ * or the next new chat when none is open. Model lives in the composer.
  */
 export function AssemblyOverview({
   renderNames,

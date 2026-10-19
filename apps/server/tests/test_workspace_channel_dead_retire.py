@@ -198,9 +198,7 @@ def test_backend_write_tools_retire_with_the_file_family():
         )
         is True
     )
-    for name in (
-        "md_export",
-    ):
+    for name in ("write", "edit", "file_batch"):
         assert name in WORKSPACE_CHANNEL_DEAD_RETIRE_TOOLS
         assert name in disabled
 

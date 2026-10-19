@@ -113,18 +113,23 @@ export async function wsUploadFile(
   });
 }
 
-/** Export a workspace Markdown file to a sibling ``.docx`` (server converter). */
-export async function wsExportMdToDocx(
+/** Export a workspace Markdown file to a sibling Word / PDF (server converter). */
+export async function wsExportMarkdown(
   wsId: string,
   path: string,
+  format: "docx" | "pdf",
   layout: "standard" | "official" = "standard",
 ): Promise<{ path: string; warnings: string[] }> {
+  const route =
+    format === "pdf"
+      ? `${wsPath(wsId)}/export-pdf`
+      : `${wsPath(wsId)}/export-docx`;
   const res = await api.post<{
     path: string;
     source_path: string;
     size_bytes: number;
     warnings: string[];
-  }>(`${wsPath(wsId)}/export-docx`, { path, layout });
+  }>(route, { path, layout });
   return { path: res.path, warnings: res.warnings ?? [] };
 }
 
@@ -151,6 +156,32 @@ export async function convertMdToDocx(input: {
   });
   return {
     docxBase64: res.docx_base64,
+    warnings: res.warnings ?? [],
+    suggestedFilename: res.suggested_filename,
+  };
+}
+
+/** Stateless Markdown → PDF (local desktop path). */
+export async function convertMdToPdf(input: {
+  markdown: string;
+  sourceName: string;
+  layout?: "standard" | "official";
+}): Promise<{
+  pdfBase64: string;
+  warnings: string[];
+  suggestedFilename: string;
+}> {
+  const res = await api.post<{
+    pdf_base64: string;
+    warnings: string[];
+    suggested_filename: string;
+  }>("/v1/workspaces/convert/md-to-pdf", {
+    markdown: input.markdown,
+    source_name: input.sourceName,
+    layout: input.layout ?? "standard",
+  });
+  return {
+    pdfBase64: res.pdf_base64,
     warnings: res.warnings ?? [],
     suggestedFilename: res.suggested_filename,
   };

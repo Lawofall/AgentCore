@@ -600,6 +600,9 @@ class TurnExecutionMixin:
             )
             started = time.monotonic()
             _, latency_token = bind_turn_latency(started)
+            from agentcore.assembly.bind import arm_assembly_bind, disarm_conversation_assembly
+
+            assembly_token = arm_assembly_bind(snapshot.assembly)
             try:
                 # Bind the turn's trace_id here (the cloud binds it in stream_chat; the engine
                 # itself doesn't) so the engine's message_start carries it and the live bubble
@@ -693,6 +696,7 @@ class TurnExecutionMixin:
                         await await_live_detached_drive(conversation_id)
                         refresh_result_journal_from_host(result, sink=sink)
             finally:
+                disarm_conversation_assembly(assembly_token)
                 # Cancel confirmation while the probe is still bound so live
                 # message_end carries the same whole-turn clock as persist.
                 _emit_cancel_end_if_cancelling(sink)
@@ -1091,6 +1095,9 @@ class TurnExecutionMixin:
             first_stream_done=meter.first_stream_done,
         )
         meter_token = bind_active_meter(meter)
+        from agentcore.assembly.bind import arm_assembly_bind, disarm_conversation_assembly
+
+        assembly_token = None
         try:
             try:
                 # Bind this continuation's trace_id (same rationale as _run_turn) so the
@@ -1125,6 +1132,7 @@ class TurnExecutionMixin:
                             raise RuntimeError(
                                 "sidecar resume missing session snapshot"
                             )
+                        assembly_token = arm_assembly_bind(resume_snapshot.assembly)
                         result = await sidecar_server.resume_chat_pipeline(
                             suspension=suspension,
                             decision=decision,
@@ -1156,6 +1164,7 @@ class TurnExecutionMixin:
                         await await_live_detached_drive(conversation_id)
                         refresh_result_journal_from_host(result, sink=sink)
             finally:
+                disarm_conversation_assembly(assembly_token)
                 _emit_cancel_end_if_cancelling(sink)
                 _emit_hot_orphans_if_cancelling(sink, conversation_id)
                 reset_turn_latency(latency_token)

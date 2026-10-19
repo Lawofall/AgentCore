@@ -279,7 +279,6 @@ async def test_approve_always_files_grants_whole_class():
             "edit",
             "file_delete",
             "file_batch",
-            "md_export",
         }
     )
     gate = ApprovalGate(
@@ -312,15 +311,15 @@ async def test_approve_always_files_grants_whole_class():
     assert reg.resolve("x", ApprovalDecision.DENY, conversation_id="conv-1")
     assert await x is ApprovalDecision.DENY
 
-    # A LATER file_delete / md_export (also in the class) is now auto-approved, no new prompt.
+    # A LATER file_delete / file_batch (also in the class) is now auto-approved, no new prompt.
     _drain(sink)
     later = await gate.authorize(tool_name="file_delete", tool_call_id="d", arguments={})
     assert later is ApprovalDecision.APPROVE
     assert _drain(sink) == []
-    later_export = await gate.authorize(
-        tool_name="md_export", tool_call_id="e", arguments={}
+    later_batch = await gate.authorize(
+        tool_name="file_batch", tool_call_id="e", arguments={}
     )
-    assert later_export is ApprovalDecision.APPROVE
+    assert later_batch is ApprovalDecision.APPROVE
     assert _drain(sink) == []
     # A LATER run after the earlier deny short-circuits — no second card.
     later_exec = await gate.authorize(tool_name="run", tool_call_id="x2", arguments={})

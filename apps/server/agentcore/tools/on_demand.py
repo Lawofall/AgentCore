@@ -15,10 +15,7 @@ from functools import lru_cache
 # Retired model-facing names → current on-demand tool. Did-you-mean for unknown
 # *calls* lives in ``registry._KNOWN_TOOL_ALIASES`` (never auto-execute). Keep
 # these two maps in lockstep when retiring a name.
-RETIRED_ON_DEMAND_NAMES: dict[str, str] = {
-    "md_to_docx": "md_export",
-    "md_to_pdf": "md_export",
-}
+RETIRED_ON_DEMAND_NAMES: dict[str, str] = {}
 
 # Consulting any member lists every assembled sibling in the same family.
 _FAMILIES: tuple[frozenset[str], ...] = ()

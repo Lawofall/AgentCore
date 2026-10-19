@@ -13,7 +13,6 @@ HOW → ``product_help`` / 工具 description / consult。
 
 from __future__ import annotations
 
-import sys
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -32,6 +31,7 @@ from agentcore.runtime.context.envelope_switches import (
     SYSTEM,
     include_projection,
 )
+from agentcore.tools.sandbox.run_shell import RunShellFact
 from agentcore.workspace.desk_empty import EMPTY_DESK_FACT
 from agentcore.workspace.layout import CONV_SEGMENT, INTERNAL_SEGMENT, TREE_SEGMENT
 
@@ -118,9 +118,6 @@ async def detect_workspace_git(backend: WorkspaceBackend | None) -> WorkspaceGit
         except Exception:
             branch = None
     return WorkspaceGitFact(present=True, branch=branch)
-
-
-_OS_LABEL = {"win32": "Windows", "darwin": "macOS", "linux": "Linux"}
 
 
 def format_workspace_git_line(
@@ -226,14 +223,14 @@ def _is_cloud_folder_desk(backend: WorkspaceBackend) -> bool:
 def _system_line(
     *,
     is_local: bool,
-    is_remote_local: bool,
-    langs: Sequence[str] | None,
+    run_shell: RunShellFact | None,
     exec_on: bool = False,
 ) -> str:
-    """OS · shell. Cloud is the guest; remote-local does not use the API host OS.
+    """OS · the ``run`` command shell. Cloud is the guest.
 
+    Local uses the probed user-machine fact. Interpreter inventory is not a
+    shell. Missing probe → omit the line.
     When cloud ``run`` is assembled, append the declared guest PATH inventory.
-    Local stays the user's machine — do not paste the cloud menu there.
     """
     if not is_local:
         line = "系统：Linux · 壳：bash"
@@ -244,22 +241,9 @@ def _system_line(
             if surface:
                 line = f"{line} · {surface}"
         return line
-    os_name = None if is_remote_local else _OS_LABEL.get(sys.platform)
-    if langs is not None:
-        shell = "bash" if "bash" in langs else "PowerShell"
-    elif os_name == "Windows":
-        shell = "PowerShell"
-    elif os_name in ("Linux", "macOS"):
-        shell = "bash"
-    else:
-        shell = None
-    if os_name and shell:
-        return f"系统：{os_name} · 壳：{shell}"
-    if shell:
-        return f"系统：壳：{shell}"
-    if os_name:
-        return f"系统：{os_name}"
-    return ""
+    if run_shell is None:
+        return ""
+    return f"系统：{run_shell.os_label} · 壳：{run_shell.shell_label}"
 
 
 def _desk_line(
@@ -327,6 +311,7 @@ def build_workspace_context(
     browser_enabled: bool | None = None,
     git_tool_enabled: bool | None = None,
     exec_languages: list[str] | tuple[str, ...] | None = None,
+    run_shell: RunShellFact | None = None,
     permission_axes: WorkspaceBoundary | None = None,
     git_fact: WorkspaceGitFact | None = None,
     desk_folder_id: str | None = None,
@@ -358,6 +343,10 @@ def build_workspace_context(
     lists ``CLOUD_GUEST_SURFACE`` on the system line (commands present on the
     guest, not a closed PATH).
 
+    ``run_shell`` is the ``run`` command dialect on the user's machine.
+    Local desktop/sidecar probes cache it on ``backend._run_shell_fact``.
+    It is not host's OS shell and not the interpreter enum.
+
     ``git_fact`` is the root-``.git`` probe. Unassembled git is a gap, not a
     Git line. Repo-policy lives in git tool receipts.
 
@@ -382,8 +371,6 @@ def build_workspace_context(
     location: Literal["server", "local"] = backend.location
     root_label = (getattr(backend, "root_label", None) or "workspace").strip() or "workspace"
     is_local = location == "local"
-    channel = getattr(backend, "_channel", None)
-    is_remote_local = is_local and channel is not None
 
     location_line = (
         "执行：用户本机 · 出站：这台电脑 · 原件：能改"
@@ -451,6 +438,8 @@ def build_workspace_context(
     langs = exec_languages
     if langs is None:
         langs = getattr(backend, "_exec_languages", None)
+    if run_shell is None:
+        run_shell = getattr(backend, "_run_shell_fact", None)
     interpreters_line = ""
     if exec_on and langs is not None:
         from agentcore.tools.sandbox.exec_languages import format_interpreters_line
@@ -488,8 +477,7 @@ def build_workspace_context(
             SYSTEM,
             _system_line(
                 is_local=is_local,
-                is_remote_local=is_remote_local,
-                langs=tuple(langs) if langs is not None else None,
+                run_shell=run_shell,
                 exec_on=exec_on,
             ),
         ),

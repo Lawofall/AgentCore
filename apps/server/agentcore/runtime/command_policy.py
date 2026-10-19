@@ -78,29 +78,30 @@ class GitCommandDeny:
 
 _FORCE_PROTECTED_REASON = (
     "检测到向 main/master 强制推送的命令（按参数判定；不展开 powershell -c / bash -c，"
-    "并非完整拦截）。已硬拒，不可由权限模式或本轮放行放开；"
-    "请改用功能分支或在本机终端手动处理。"
+    "并非完整拦截）。非完全权限下已硬拒，不可由本轮放行放开；"
+    "请改用功能分支、升到完全权限，或在本机终端手动处理。"
 )
 _FORCE_REASON = (
     "检测到 git push --force（含 --force-with-lease）的命令"
     "（按参数判定；不展开 powershell -c / bash -c，并非完整拦截）。"
-    "已硬拒，不可由权限模式或本轮放行放开。"
+    "非完全权限下已硬拒，不可由本轮放行放开。"
 )
 _PROTECTED_REASON = (
     "检测到把 main/master 作为 git push 目标的命令"
     "（按参数判定；不展开 powershell -c / bash -c，并非完整拦截）。"
-    "已硬拒，不可由权限模式或本轮放行放开。"
+    "非完全权限下已硬拒，不可由本轮放行放开。"
 )
 _RESET_REASON = (
     "检测到 git reset / git clean 的命令"
     "（按参数判定；不展开 powershell -c / bash -c，并非完整拦截）。"
-    "已硬拒，不可由权限模式或本轮放行放开。"
+    "非完全权限下已硬拒，不可由本轮放行放开。"
 )
 
 
 def git_command_deny(command: str) -> GitCommandDeny | None:
     """DENY force-push, protected-branch push, ``reset``, and ``clean``.
 
+    Scanner only — ``full`` lifts these at the tool-exec chokepoint.
     ``git -C`` / ``git.exe`` are visible. A wrapper's inner string is not.
     """
     for argv in iter_command_argvs(command):

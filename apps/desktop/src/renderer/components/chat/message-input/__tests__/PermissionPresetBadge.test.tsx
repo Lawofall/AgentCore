@@ -94,6 +94,9 @@ describe("PermissionAxesBadge", () => {
     expect(screen.getByText("只看")).toBeTruthy();
     expect(screen.getByText("本文件夹 · 荐")).toBeTruthy();
     expect(screen.getByText("完全权限")).toBeTruthy();
+    expect(
+      screen.getByText("只能看和搜索。不能改文件、跑命令、用浏览器。"),
+    ).toBeTruthy();
     expect(screen.queryByText("这台电脑")).toBeNull();
     expect(screen.queryByText("改某一条")).toBeNull();
     expect(screen.queryByText("谨慎")).toBeNull();

@@ -172,8 +172,8 @@ export type FsWriteResult =
  *（``AgentCore/baselines/{message_id}.zip``）：探测非空 zip，缺则落盘；首次改文件
  * / 写性 git / 破坏性删时才打，问候不留底。服务端无用户盘 Path.root，破坏形闸问
  * ready 而非 backend 有无 Path。
- * ``probe_exec`` 同样不是 backend 方法——回合准备时探测本机 code_execute 可用解释器，
- * 供服务端裁剪工具 schema（坏 WSL bash 等不进 enum）。
+ * ``probe_exec`` 同样不是 backend 方法——回合准备时探测本机 code_execute 可用解释器
+ *（裁剪 schema；坏 WSL bash 等不进 enum）以及 ``run`` 命令壳（``os`` / ``shell``）。
  * ``git_repo_status`` / ``git_scm`` 同样不是 backend 方法——桌面 U1–U3 用户 SCM
  *（只读摘要 + stage/commit/push/pull）；渲染层经 ``workspaceOp`` 直调，服务端/Agent 不发此 op。
  * cwd = 当前文件夹相对授权根的 subpath（与 file_* / git_run 同基准）；仅该文件夹下 `.git`。

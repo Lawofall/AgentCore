@@ -1,9 +1,7 @@
 """导出件台账：自报 ``derived_from`` → 用户面「文件位置」主推导出件，源 md 降为中间稿。
 
-真实事故（用户要 Word，最终答复却把 `…起诉状.md` 报成「文件位置」）横跨两段：导出工具
-不自报产物（.docx 从不进台账），且没有任何消费方读 ``derived_from``（补了自报也会 md +
-docx 并列）。两段语义是一根的，故用同一条端到端断言钉死：真跑导出工具 → 引擎盖章 →
-台账 → 路径验收 → 用户可见文案。
+历史 journal 仍可能带模型面 ``md_export`` 的自报产物；折叠只认 ``derived_from``，
+不认工具名。本文件钉死消费方：写 md + 导出件自报 → 用户看到的「文件位置」只主推导出件。
 """
 
 from __future__ import annotations
@@ -22,8 +20,7 @@ from agentcore.runtime.runs.serialize import (
 )
 from agentcore.runtime.runs.types import RunPhase
 from agentcore.tools.builtin.file_ops import FileWriteTool
-from agentcore.tools.builtin.md_export import MdExportTool
-from agentcore.tools.file_products import with_file_products_marker
+from agentcore.tools.file_products import file_product, with_file_products_marker
 from agentcore.tools.protocol import ToolContext, ToolResult
 from agentcore.tools.sandbox import SubprocessSandbox
 from agentcore.workspace.server import ServerWorkspace
@@ -57,46 +54,20 @@ def _accepted_row(path: str, *, kind: str = "", derived_from: str = "") -> dict:
     return row
 
 
-async def test_export_tools_self_report_product_with_source_lineage(tmp_path: Path):
-    """导出工具必须自报它真正落的盘 + 源文件（``write`` 那套自报契约）。"""
-    (tmp_path / "报告.md").write_text("# 标题\n\n正文\n", encoding="utf-8")
-
-    docx = await MdExportTool().execute(
-        {"path": "报告.md", "format": "docx"}, _ctx(tmp_path)
-    )
-    assert docx.success is True
-    assert [(p.path, p.kind, p.derived_from) for p in docx.file_products] == [
-        ("报告.docx", "docx", "报告.md")
-    ]
-
-    pdf = await MdExportTool().execute(
-        {"path": "报告.md", "format": "pdf"}, _ctx(tmp_path)
-    )
-    assert pdf.success is True
-    assert [(p.path, p.kind, p.derived_from) for p in pdf.file_products] == [
-        ("报告.pdf", "pdf", "报告.md")
-    ]
-
-
-async def test_failed_export_reports_no_product(tmp_path: Path):
-    """没导出成功就没有产物可自报（失败调用天然不入账）。"""
-    result = await MdExportTool().execute(
-        {"path": "缺失.md", "format": "docx"}, _ctx(tmp_path)
-    )
-    assert result.success is False
-    assert result.file_products == []
-
-
 async def test_word_request_user_facing_location_points_at_docx(tmp_path: Path):
-    """事故复现面：写 md → 导出 docx，用户看到的「文件位置」只主推 .docx。"""
+    """事故复现面：写 md + 导出件自报 derived_from，用户看到的「文件位置」只主推 .docx。"""
     ctx = _ctx(tmp_path)
     md = "抚养费起诉状-昝雯.md"
     written = await FileWriteTool().execute(
         {"file_path": md, "content": "# 民事起诉状\n\n正文\n"}, ctx
     )
     assert written.success is True
-    exported = await MdExportTool().execute({"path": md, "format": "docx"}, ctx)
-    assert exported.success is True
+    exported = ToolResult(
+        tool_call_id="",
+        success=True,
+        output="已导出 Word",
+        file_products=[file_product("抚养费起诉状-昝雯.docx", derived_from=md)],
+    )
 
     transcript = [_stamped("c1", written), _stamped("c2", exported)]
     products = file_products_from_transcript(transcript)

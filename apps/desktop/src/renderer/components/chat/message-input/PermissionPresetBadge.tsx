@@ -117,27 +117,28 @@ export function PermissionAxesBadge({
           const selected = axes.boundary === id;
           const meta = BOUNDARY_LABELS[id];
           return (
-            <SimpleTooltip key={id} label={meta.description}>
-              <button
-                type="button"
-                aria-current={selected ? "true" : undefined}
-                onClick={() => void apply({ boundary: id })}
-                className={cn(
-                  "flex w-full items-baseline gap-1.5 rounded-lg px-2.5 py-1.5 text-left",
-                  selected ? "bg-primary/10" : "hover:bg-accent/50",
-                )}
-              >
-                <span className="shrink-0 text-sm font-medium text-foreground">
+            <button
+              key={id}
+              type="button"
+              aria-current={selected ? "true" : undefined}
+              onClick={() => void apply({ boundary: id })}
+              className={cn(
+                "flex w-full items-start rounded-lg px-2.5 py-2 text-left",
+                selected ? "bg-primary/10" : "hover:bg-accent/50",
+              )}
+            >
+              <span className="flex min-w-0 flex-col gap-0.5">
+                <span className="text-sm font-medium text-foreground">
                   {meta.short}
                   {id === (hasLocalEngine() ? "computer" : "folder")
                     ? " · 荐"
                     : ""}
                 </span>
-                <span className="min-w-0 truncate text-xs text-muted-foreground">
+                <span className="text-xs text-muted-foreground">
                   {meta.description}
                 </span>
-              </button>
-            </SimpleTooltip>
+              </span>
+            </button>
           );
         })}
       </div>

@@ -135,6 +135,11 @@ def test_on_demand_faces_point_how_to_consult():
     assert capability_how_suffix({"browser"}) == ""
     host_cmd = HostTool().schema.parameters["properties"]["command"]["description"]
     assert "PowerShell" not in host_cmd
+    host_desc = HostTool().schema.description
+    assert "PowerShell 5.1" in host_desc
+    assert "登录壳" in host_desc
+    assert "&&" not in host_desc
+    assert "不要" not in host_desc
     assert set(HostTool().schema.parameters["properties"]) == {
         "action",
         "command",

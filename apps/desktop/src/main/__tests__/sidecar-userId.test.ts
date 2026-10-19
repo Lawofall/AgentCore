@@ -27,6 +27,7 @@ vi.mock("../outbox/projection", () => ({
 }));
 
 import { rmSync } from "node:fs";
+import { bareSidecarSession } from "@shared/sidecar-contract";
 import { SidecarManager } from "../sidecar/manager";
 import type { Transport } from "../sidecar/transport";
 
@@ -90,13 +91,11 @@ function session(
     localSubpath?: string | null;
   } = {},
 ) {
-  return {
-    permissionAxes: { boundary: "folder" as const },
-    delegateMode: false,
+  return bareSidecarSession({
     folderId: overrides.folderId ?? null,
     localRootId: overrides.localRootId ?? null,
     localSubpath: overrides.localSubpath ?? null,
-  };
+  });
 }
 
 describe("SidecarManager userId passthrough", () => {

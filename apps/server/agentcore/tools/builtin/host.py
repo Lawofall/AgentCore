@@ -84,6 +84,11 @@ _SHELL_SILENT_INSTALL_REASON = (
 
 _ACTION_ENUM = sorted(GUI_ACTIONS | {"shell"})
 
+HOST_TOOL_DESCRIPTION = (
+    "这台电脑上的短命令（Windows：PowerShell 5.1；macOS/Linux：登录壳）；"
+    "或附着一扇窗后读控件并按 ref 点按/键入。"
+)
+
 HOST_TOOL_PARAMETERS: dict[str, Any] = {
     "type": "object",
     "properties": {
@@ -376,7 +381,7 @@ class HostTool:
     def schema(self) -> ToolSchema:
         return ToolSchema(
             name="host",
-            description="这台电脑上的短命令；或附着一扇窗后读控件并按 ref 点按/键入。",
+            description=HOST_TOOL_DESCRIPTION,
             parameters=HOST_TOOL_PARAMETERS,
             face=ToolFace.HOST_BROWSER,
             approval=ToolApproval.NEVER,

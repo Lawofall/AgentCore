@@ -35,17 +35,12 @@ vi.mock("../outbox/projection", () => ({
 }));
 
 import { rmSync } from "node:fs";
+import { bareSidecarSession } from "@shared/sidecar-contract";
 import { abortLocalTurnPlaceholder } from "../outbox/projection";
 import { SidecarManager } from "../sidecar/manager";
 import type { Transport } from "../sidecar/transport";
 
-const BARE_SESSION = {
-  permissionAxes: { boundary: "folder" as const },
-  delegateMode: false,
-  folderId: null as string | null,
-  localRootId: null as string | null,
-  localSubpath: null as string | null,
-};
+const BARE_SESSION = bareSidecarSession();
 
 const TURN_RESULT = {
   messageId: "m1",

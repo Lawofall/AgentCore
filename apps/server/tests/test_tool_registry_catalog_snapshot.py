@@ -36,7 +36,6 @@ _BUILTIN_ORDER = [
     "glob",
     "file_delete",
     "file_batch",
-    "md_export",
     "grep",
     "run",
 ]
@@ -89,7 +88,6 @@ _CATALOG_AVAILABLE_TO: dict[str, tuple[str, ...]] = {
     "edit": (AVAILABLE_TO_CEO, AVAILABLE_TO_WORKER),
     "file_delete": (AVAILABLE_TO_CEO, AVAILABLE_TO_WORKER),
     "file_batch": (AVAILABLE_TO_CEO, AVAILABLE_TO_WORKER),
-    "md_export": (AVAILABLE_TO_CEO, AVAILABLE_TO_WORKER),
     "run": (AVAILABLE_TO_CEO, AVAILABLE_TO_WORKER),
     "host": (AVAILABLE_TO_CEO, AVAILABLE_TO_WORKER),
     "escalate": (AVAILABLE_TO_WORKER,),
@@ -175,7 +173,6 @@ def test_tool_registry_grant_sets_snapshot():
             "edit",
             "file_delete",
             "file_batch",
-            "md_export",
         }
     )
     assert approval_class_tool_names() == file_mutation_tool_names()

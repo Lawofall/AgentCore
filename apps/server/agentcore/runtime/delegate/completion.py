@@ -65,9 +65,8 @@ _VERIFY_TASK_HINTS = re.compile(
     re.IGNORECASE,
 )
 
-# ``.docx`` / ``.pdf`` are deliberately absent: ``md_export`` is a
-# deterministic FILESYSTEM exporter registered unconditionally, so a Word / PDF
-# target still lands with the execution sandbox withheld.
+# ``.docx`` / ``.pdf`` are deliberately absent: they are user-side exports of
+# a landed ``.md``, so a Word / PDF target still lands with the sandbox withheld.
 _BINARY_ARTIFACT_HINTS = re.compile(
     r"(python-pptx|openpyxl|ffmpeg|可播放|可直接播放|二进制|可执行文件|"
     r"\.pptx|\.xlsx|\.exe|\.apk|\.mp4|\.mp3|\.wav|\.avi|\.mov)",
@@ -148,8 +147,8 @@ def _path_looks_exec_office(path: str) -> bool:
 def plan_suggests_exec_office_deliverable(plan: RunPlan) -> bool:
     """True when any worker task/artifacts read like an Office target needing execution.
 
-    ``.docx`` / ``.pdf`` are excluded on purpose — ``md_export``
-    produces them deterministically without a sandbox.
+    ``.docx`` / ``.pdf`` are excluded on purpose — they are user-side
+    exports of a landed ``.md``, not sandbox products.
     """
     for node in plan.nodes:
         text = (node.task or "").strip()

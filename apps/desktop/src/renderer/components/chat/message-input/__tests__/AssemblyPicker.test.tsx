@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * 输入区装配菜单：完整、极简、自建。官方两行各一行说明。不标「默认」。
+ * 输入区装配菜单：标准、完整、极简、自建。官方三行各一行说明。不标「默认」。
  */
 
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -75,6 +75,12 @@ function renderPicker() {
 describe("AssemblyPicker", () => {
   beforeEach(() => {
     profiles.data = [
+      row({
+        id: "sys-standard",
+        name: "标准",
+        kind: "system",
+        recipe: "standard",
+      }),
       row({ id: "sys-full", name: "完整", kind: "system", recipe: "full" }),
       row({ id: "sys-chat", name: "极简", kind: "system", recipe: "chat" }),
       row({
@@ -101,7 +107,7 @@ describe("AssemblyPicker", () => {
     cleanup();
   });
 
-  it("完整极简在前，官方带一行说明，不标默认", () => {
+  it("标准完整极简在前，官方带一行说明，不标默认", () => {
     renderPicker();
     expect(screen.getByRole("button", { name: "能力：写稿" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: /预置/ })).toBeNull();
@@ -114,8 +120,9 @@ describe("AssemblyPicker", () => {
     const names = [...(list?.querySelectorAll("button") ?? [])].map(
       (button) => button.getAttribute("aria-label") ?? "",
     );
-    expect(names).toEqual(["完整", "极简", "写稿", "官方DS"]);
+    expect(names).toEqual(["标准", "完整", "极简", "写稿", "官方DS"]);
     expect(list?.textContent).toContain("能改文件、跑命令、上网。");
+    expect(list?.textContent).toContain("含辩论、搜旧对话。");
     expect(list?.textContent).toContain("这场只聊天。");
     expect(list?.textContent).not.toContain("默认");
     expect(list?.textContent).not.toContain("预置");

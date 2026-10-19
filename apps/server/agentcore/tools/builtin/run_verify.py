@@ -440,8 +440,9 @@ def _python_argv_runner(
 def _shell_command_runner(command: str, *, chdir: str | None = None) -> str:
     """Run the raw command string in bash -lc, or PowerShell when bash is absent.
 
-    Launcher policy matches ``resolve_bash_launcher`` (Git Bash, skip WSL trampoline).
-    Never ``cmd`` / never ``list2cmdline`` + ``shell=True`` on the whole string.
+    Launcher policy matches ``resolve_run_shell`` / desktop ``resolveRunShell``
+    (Git Bash, skip WSL trampoline; else powershell then pwsh). Never ``cmd`` /
+    never ``list2cmdline`` + ``shell=True`` on the whole string.
     """
     chdir_block = f"os.chdir({chdir!r})\n" if chdir else ""
     return (

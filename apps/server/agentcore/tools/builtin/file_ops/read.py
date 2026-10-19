@@ -57,6 +57,7 @@ from .listing import (
     empty_list_message,
     format_ls_lines,
     is_bare_external_directory,
+    leftover_fields,
     ls_leftover_error,
     map_listing_failure,
     visible_list_entries,
@@ -187,10 +188,18 @@ def _effective_line_limit(limit: object) -> int:
     return max(1, min(_as_int(limit), FILE_READ_SAFETY_LINE_CAP))
 
 
-def _effective_start_page(start_page: object) -> int:
-    if start_page is None:
-        return 1
-    return max(1, _as_int(start_page))
+READ_REMOVED_FIELDS: tuple[str, ...] = ("start_page",)
+_READ_START_PAGE_LEFTOVER_MSG = (
+    "read 只抽第一窗。不要传 start_page。"
+    "后面的页按文件名归类或先写已读部分。"
+)
+
+
+def read_leftover_error(arguments: dict[str, Any], start: float) -> ToolResult | None:
+    fields = leftover_fields(arguments, READ_REMOVED_FIELDS)
+    if not fields:
+        return None
+    return _error(_READ_START_PAGE_LEFTOVER_MSG, start, contract_failure=True)
 
 
 def _trim_to_char_cap(lines: list[str]) -> tuple[list[str], bool]:
@@ -390,7 +399,7 @@ def _append_pdf_page_footer(
     page_end: int | None,
     page_total: int | None,
 ) -> str:
-    """Tell the model this extract was a page window, not the whole PDF."""
+    """Tell the model this extract was the first page window, not the whole PDF."""
     if page_start is None or page_end is None:
         return output
     from agentcore.workspace.limits import OFFICE_EXTRACT_PDF_MAX_PAGES
@@ -398,15 +407,12 @@ def _append_pdf_page_footer(
     if page_total is not None:
         line = f"抽取第 {page_start}–{page_end} 页，共 {page_total} 页"
         if page_end < page_total:
-            line += (
-                f"。后面的页请用 start_page={page_end + 1} 再读"
-                "（offset/limit 仍是本窗文本行号）"
-            )
+            line += "。本工具只交第一窗；后面的页按文件名归类或先写已读部分"
         return f"{output.rstrip()}\n\n{line}。"
     line = (
         f"抽取第 {page_start}–{page_end} 页"
         f"（每窗最多 {OFFICE_EXTRACT_PDF_MAX_PAGES} 页）。"
-        f"若后面还有内容，用 start_page={page_end + 1} 再读"
+        "本工具只交第一窗"
     )
     return f"{output.rstrip()}\n\n{line}。"
 
@@ -463,22 +469,20 @@ class FileReadTool:
                     },
                     "offset": {
                         "type": "integer",
-                        "description": "起始行号（1-based，含）。",
+                        "description": (
+                            "起始行号（1-based，含）。"
+                            "仅当上次页脚写已达安全顶或已有行号时再填。"
+                        ),
                         "minimum": 1,
                     },
                     "limit": {
                         "type": "integer",
-                        "description": "最多读取行数。省略则尽量整读，超安全顶截断。",
-                        "minimum": 1,
-                        "maximum": FILE_READ_SAFETY_LINE_CAP,
-                    },
-                    "start_page": {
-                        "type": "integer",
                         "description": (
-                            "PDF 抽取起始页（1-based）；其它格式忽略。"
-                            "offset/limit 仍是本窗行号。"
+                            "最多读取行数。省略则整读至安全顶。"
+                            "仅当页脚要开窗时再填。"
                         ),
                         "minimum": 1,
+                        "maximum": FILE_READ_SAFETY_LINE_CAP,
                     },
                 },
                 "required": ["file_path"],
@@ -503,10 +507,13 @@ class FileReadTool:
         rel_path = arguments.get("file_path", "")
         offset = arguments.get("offset")
         limit = arguments.get("limit")
-        start_page_arg = arguments.get("start_page")
 
         if looks_like_http_url(str(rel_path or "")):
             return _url_not_workspace_path_error(str(rel_path).strip(), start)
+
+        leftover = read_leftover_error(arguments, start)
+        if leftover is not None:
+            return leftover
 
         from .prepare_path import prepare_tool_path
 
@@ -517,7 +524,6 @@ class FileReadTool:
 
         path_key = (rel_path or "").strip().replace("\\", "/")
         ext = extension_of(path_key or rel_path)
-        pdf_start = _effective_start_page(start_page_arg)
 
         from agentcore.workspace.image_files import is_raster_image_path
 
@@ -552,7 +558,6 @@ class FileReadTool:
                 path_key=path_key,
                 offset=offset,
                 limit=limit,
-                start_page=pdf_start,
                 start=start,
                 context=context,
             )
@@ -583,7 +588,6 @@ class FileReadTool:
                     path_key=path_key,
                     offset=offset,
                     limit=limit,
-                    start_page=pdf_start,
                     start=start,
                     context=context,
                 )
@@ -606,7 +610,6 @@ class FileReadTool:
                 path_key=path_key,
                 offset=offset,
                 limit=limit,
-                start_page=pdf_start,
                 start=start,
                 context=context,
             )
@@ -626,7 +629,6 @@ class FileReadTool:
         path_key: str,
         offset: object,
         limit: object,
-        start_page: int = 1,
         start: float,
         context: ToolContext,
         extract_ext: str | None = None,
@@ -637,32 +639,30 @@ class FileReadTool:
         page_start: int | None = None
         page_end: int | None = None
         page_total: int | None = None
-        use_sidecar = start_page <= 1
 
-        if use_sidecar:
-            try:
-                sidecar_text = await context.backend.read(sidecar)
-                if (sidecar_text or "").strip():
-                    if _sidecar_is_scan_notice(sidecar_text):
-                        return _observe_ok(
-                            kind="scan",
-                            path=path_key or rel_path,
-                            type_label="pdf-scan",
-                            next_actions=scan_next(),
-                            start=start,
-                            text=SCAN_NOTICE,
-                        )
-                    text = sidecar_text
-            except PathNotFound:
-                pass
-            except OutsideWorkspace as e:
-                return _outside_workspace_error(
-                    rel_path, start, location=context.backend.location, reason=str(e)
-                )
-            except NotAFile:
-                pass
-            except WorkspaceError:
-                pass
+        try:
+            sidecar_text = await context.backend.read(sidecar)
+            if (sidecar_text or "").strip():
+                if _sidecar_is_scan_notice(sidecar_text):
+                    return _observe_ok(
+                        kind="scan",
+                        path=path_key or rel_path,
+                        type_label="pdf-scan",
+                        next_actions=scan_next(),
+                        start=start,
+                        text=SCAN_NOTICE,
+                    )
+                text = sidecar_text
+        except PathNotFound:
+            pass
+        except OutsideWorkspace as e:
+            return _outside_workspace_error(
+                rel_path, start, location=context.backend.location, reason=str(e)
+            )
+        except NotAFile:
+            pass
+        except WorkspaceError:
+            pass
 
         if text is None:
             try:
@@ -670,7 +670,6 @@ class FileReadTool:
                     context.backend,
                     rel_path,
                     ext=extract_ext or extension_of(path_key or rel_path),
-                    start_page=start_page,
                 )
             except OutsideWorkspace as e:
                 return _outside_workspace_error(
@@ -801,7 +800,6 @@ class FileReadTool:
         path_key: str,
         offset: object,
         limit: object,
-        start_page: int = 1,
         start: float,
         context: ToolContext,
     ) -> ToolResult:
@@ -827,7 +825,6 @@ class FileReadTool:
                 path_key=path_key,
                 offset=offset,
                 limit=limit,
-                start_page=start_page,
                 start=start,
                 context=context,
                 extract_ext=".pdf",

@@ -455,7 +455,6 @@ def test_token_wind_down_threshold_and_tool_narrowing():
             "edit",
             "file_batch",
             "file_list",
-            "md_export",
         }
     ) == WIND_DOWN_ALLOWED_TOOLS
     available = {
@@ -481,32 +480,26 @@ def test_token_wind_down_threshold_and_tool_narrowing():
     assert set(narrowed) <= (WIND_DOWN_ALLOWED_TOOLS | {"handoff"})
 
 
-def test_wind_down_allows_deterministic_md_export():
-    """收尾窗口放行 md_export：导出已成篇 .md 是收口末步，不是新战线。
-
-    长文写手最容易撞收尾窗；把钦定交付主路径判成越界会触发 nudge + handoff-only，
-    交付卡在最后一步。
-    """
+def test_wind_down_allows_write_and_handoff():
+    """收尾窗口放行写盘 + handoff：成篇 `.md` 是收口末步。"""
     from agentcore.runtime.runs.cutoff import wind_down_breach_tool_names
 
-    assert "md_export" in WIND_DOWN_ALLOWED_TOOLS
+    assert "write" in WIND_DOWN_ALLOWED_TOOLS
 
     available = {
         "web_search",
         "handoff",
         "read",
         "write",
-        "md_export",
         "code_execute",
     }
     narrowed = narrow_tools_for_wind_down(available, allowed=sorted(available))
-    assert "md_export" in narrowed
+    assert "write" in narrowed
     assert "web_search" not in narrowed  # 检索类仍不放回
 
-    # 导出既有 .md 不得判越界；调查/执行类仍照判。
     assert (
         wind_down_breach_tool_names(
-            ["md_export", "handoff"], keep_file_read=True
+            ["write", "handoff"], keep_file_read=True
         )
         == []
     )

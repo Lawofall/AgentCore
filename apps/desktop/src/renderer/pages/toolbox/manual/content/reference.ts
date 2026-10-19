@@ -267,7 +267,7 @@ export const referenceChapter: ManualChapterContent = {
                 {
                   type: "text",
                   text: [
-                    "拍板卡：提交＝带选择继续，取消＝结束本回合。装软件、推远程、毁灭形删除、读私钥仍会单独拦住；边界内的改文件和跑命令不再逐次问。展开见 ",
+                    "拍板卡：提交＝带选择继续，取消＝结束本回合。非完全权限下装软件、推远程仍会问；格式化磁盘、私钥、密码框仍拦住。边界内的改文件和跑命令不再逐次问。展开见 ",
                     {
                       text: "检查点与审批",
                       link: {
@@ -304,7 +304,7 @@ export const referenceChapter: ManualChapterContent = {
               a: [
                 {
                   type: "text",
-                  text: "对话输入区权限徽章四档：只看＝只能看和搜索；本文件夹（网页推荐）＝本文件夹里可以改文件和跑命令；这台电脑（桌面推荐）＝这台电脑上的文件和本机操作；完全权限＝推远程、装软件、MCP 不再询问，硬拒仍在，云端网页没有 Host。人选的那档会记住，下次新建还用这一档。",
+                  text: "对话输入区权限徽章四档：只看＝只能看和搜索；本文件夹（网页推荐）＝本文件夹里可以改文件和跑命令；这台电脑（桌面推荐）＝这台电脑上的文件和本机操作；完全权限＝不再询问（含推主干和强推），格式化磁盘、私钥、密码框仍拦住，云端网页没有本机操作。人选的那档会记住，下次新建还用这一档。",
                 },
               ],
             },
@@ -437,14 +437,14 @@ export const referenceChapter: ManualChapterContent = {
                     {
                       can: "读文件；git status / diff / log / fetch",
                       approve:
-                        "改文件；git add / commit / push / pull / 建分支 / 切分支；开 PR（GitHub）；跑代码",
-                      wont: "force push；reset / clean；在 main / master 上直接提交或 push；GitLab 开 PR",
+                        "改文件；git add / commit / push / pull / 建分支 / 切分支；开 PR（GitHub）；跑代码。完全权限下推主干、强推、reset / clean 也不再问",
+                      wont: "格式化磁盘；把私钥读进对话；代填密码框；GitLab 开 PR",
                     },
                   ],
                 },
                 {
                   type: "text",
-                  text: "普通 push / 开 PR 会先弹确认；force / 推保护分支仍禁止。",
+                  text: "非完全权限下普通 push / 开 PR 会先弹确认；完全权限不再问，包括推主干和强推。",
                 },
               ],
             },

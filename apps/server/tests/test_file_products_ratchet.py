@@ -55,7 +55,6 @@ from agentcore.tools.builtin.file_ops import (
     FileWriteTool,
     StrReplaceTool,
 )
-from agentcore.tools.builtin.md_export import MdExportTool
 from agentcore.tools.builtin.run import RunTool
 from agentcore.tools.protocol import ToolContext, ToolResult, ToolSchema
 from agentcore.tools.registration import (
@@ -172,16 +171,6 @@ async def _run_file_batch(root: Path, _mp: pytest.MonkeyPatch) -> ToolResult:
     )
 
 
-def _seed_note_md(root: Path) -> None:
-    (root / "note.md").write_text("# Hi\n\n你好世界\n", encoding="utf-8")
-
-
-async def _run_md_export(root: Path, _mp: pytest.MonkeyPatch) -> ToolResult:
-    return await MdExportTool().execute(
-        {"path": "note.md", "format": "docx"}, _ctx(root)
-    )
-
-
 class _CopyOutBackend:
     """沙箱替身：只回一份带 copy-out 路径的执行结果（真跑 gVisor 不属于单测）。"""
 
@@ -240,8 +229,6 @@ _CASES: tuple[_Case, ...] = (
         (("out/b.md", "md", None), ("out/keep.md", "md", None)),
         _seed_batch_sources,
     ),
-    # 导出件：产物是 .docx / .pdf，入参那份 md 是它的源（``derived_from``），不是产物。
-    _Case("md_export", _run_md_export, (("note.docx", "docx", "note.md"),), _seed_note_md),
     # 间接落盘（沙箱 copy-out）：报的是 copy-out 的 EXACT 路径，含中文顿号也不会被散文切错。
     _Case(
         "run",

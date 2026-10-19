@@ -10,7 +10,7 @@ PDF 首版不做 OCR，写入明确降级提示。解析失败不阻塞驻留，
 ``extract_office_bytes``（可杀子进程；墙钟超时 = FAILED / extract_timeout，由
 ``read`` 收成成功观察信封，不是通道活性挂起；读时默认不写 ``*.md``）。
 磁盘后端父进程只 stat，子进程 ``--extract-path`` 打开文件（磁盘摄入 100 MiB）；过桥 Local 仍
-``read_bytes`` 再 ``extract_office_bytes``（IPC 摄入 25 MiB）。PDF 认 ``start_page`` 开窗。
+``read_bytes`` 再 ``extract_office_bytes``（IPC 摄入 25 MiB）。PDF 按首页窗开窗。
 ``convert_with_markitdown`` 仅服务非 docx 桶；``preparse_resident`` 仍只服务附件驻留。
 
 → 见决策：docs/02-架构/工作区.md §七（Office 云=本地）与附件驻留实现。
@@ -73,7 +73,7 @@ TABLE_PREVIEW_MAX_PROMPT_CHARS = 4_000
 SCAN_NOTICE = (
     "这份文件几乎抽不到文本层（扫描件或纯图）。当前没有 OCR。"
     "按文件名归类；"
-    "offset/limit / start_page 变不出文本层。"
+    "offset/limit 变不出文本层。"
 )
 
 

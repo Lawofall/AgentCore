@@ -83,7 +83,7 @@ paths: **/*.py
 
 1. 本场对话历史经 `load_recent_history` 进窗口（CEO / worker 共用）。
 2. 每回合都带上的正文进 `<设定>`。碰到某类文件的全文跟路径走。需要时翻开的进 `<按需目录>`。
-3. 桌面 sidecar **有 account 票**时：prepare/resume 对账号/文件夹**文档**按需目录**只读进程快照**（miss → 空文档注入、不 await 云 HTTP）；`consult` 取文档正文与目录同一份快照。快照 **300s TTL**；人保存后立刻强制重暖。**detached execution 存活期**按同一 TTL 周期续暖——只 warm 一次则 TTL 到期后文档目录会**静默**全失。空注入仍打 `account.rules_memory_cache_miss`。本桌 `AgentCore/rules` 仍从当前工作区现读，不经这份快照。**无票**仍走本地 DB。→ 见代码：`memory/rules_injection.py` · `memory/account_prepare_cache.py` · sidecar `warmAccountRulesMemory`
+3. 桌面 sidecar **有 account 票**时：prepare/resume 对账号/文件夹**文档**按需目录**只读进程快照**（miss → 空文档注入、不 await 云 HTTP）；`consult` 取文档正文与目录同一份快照。快照 **300s TTL**；人保存后立刻强制重暖。**detached execution 存活期**按同一 TTL 周期续暖——只 warm 一次则 TTL 到期后文档目录会**静默**全失。空注入仍打 `account.rules_memory_cache_miss`。本桌 `AgentCore/rules` 仍从当前工作区现读，不经这份快照。**无票**仍走本地 DB。账号篇进不进这场、以哪种带法，走 `session` 快照里的成员名单（官方配方为未过滤），不经这份文档 TTL。→ 见代码：`memory/rules_injection.py` · `memory/account_prepare_cache.py` · sidecar `warmAccountRulesMemory` · `runtime/turn/snapshot.py`
 4. 需要时翻开的交代与系统 Skill、低频工具合并为单一 `<按需目录>` → `consult`。`<按需目录>` 非空才渲染。
 5. **跨文件夹名册**（派生）：**不进** CEO 常驻提示。当前桌只在 `<工作区>`；其它桌用 `folders`。
 6. 装配顺序权威 → [执行引擎 §七](/docs/03-AI核心/执行引擎架构设计.md) / `runtime/context/`（`SectionOrder`）。
@@ -96,7 +96,7 @@ paths: **/*.py
 
 ## 过往事实 {#过往事实}
 
-Worker / CEO 默认开场持 `search_conversations` / `read_conversation`。**过往事实走这里**，不靠笔记。工具箱「对话」关掉则这两把离开开场表和执行。用户 `@` 一场旧对话仍由服务端塞对话稿，不靠这两把。工具面（query / folder_id / focus / 分页）权威 → [工具与能力 · 跨会话工具边界](/docs/03-AI核心/工具与能力系统.md#四跨会话工具边界)。
+Worker / CEO 在「完整」开场持 `search_conversations` / `read_conversation`。出厂「标准」关掉「对话」，这两把不在开场表。**过往事实走这里**，不靠笔记。工具箱「对话」关掉同样离开开场表和执行。用户 `@` 一场旧对话仍由服务端塞对话稿，不靠这两把。工具面（query / folder_id / focus / 分页）权威 → [工具与能力 · 跨会话工具边界](/docs/03-AI核心/工具与能力系统.md#四跨会话工具边界)。
 
 对外口径：白话三层——当前会话 / 你写的交代 / 旧场可查；不报工具名。→ 见代码：`core/search_query.py` · `conversation/log_export.py` · `tools/builtin/search_conversations.py`
 

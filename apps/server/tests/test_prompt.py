@@ -237,7 +237,6 @@ def test_how_identifiers_not_in_resident_core():
         "folders",
         "create_folder",
         "mkdir",
-        "md_export",
         "consult(name)",
         "consult(browser)",
         "HOW→consult",

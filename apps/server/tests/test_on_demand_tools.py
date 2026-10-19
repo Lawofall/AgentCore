@@ -27,7 +27,6 @@ from agentcore.tools.builtin.browser import BrowserTool
 from agentcore.tools.builtin.consult import ConsultTool
 from agentcore.tools.builtin.file_ops.read import FileReadTool
 from agentcore.tools.builtin.host import HostTool
-from agentcore.tools.builtin.md_export import MdExportTool
 from agentcore.tools.mcp.dynamic import McpDynamicTool
 from agentcore.tools.mcp.wire import McpDiscoverResult, McpToolSpec, register_mcp_tools
 from agentcore.tools.on_demand import (
@@ -104,7 +103,6 @@ def test_resident_tools_are_not_on_the_roster():
         "file_delete",
         "file_batch",
         "debate",
-        "md_export",
         "git",
         "host",
         "browser",
@@ -121,10 +119,10 @@ def test_resident_tools_are_not_on_the_roster():
 def test_openai_defs_include_assembled_on_demand():
     reg = ToolRegistry()
     reg.register(FileReadTool())
-    reg.register(MdExportTool())
-    assert "md_export" in reg.names
+    reg.register(HostTool())
+    assert "host" in reg.names
     assert "read" in reg.names
-    assert _def_names(reg) == {"read", "md_export"}
+    assert _def_names(reg) == {"read", "host"}
 
 
 def test_execute_path_sees_opening_table():
@@ -294,16 +292,6 @@ async def test_consult_cache_returns_cached_user_skill():
 
 
 
-async def test_consult_offers_export_and_resolves_retired_names():
-    """md_export has no consult HOW; it is already on the opening table."""
-    reg = ToolRegistry()
-    reg.register(MdExportTool())
-    src = ToolConsultSource(registry=reg, audience="ceo")
-    assert "md_export" in _def_names(reg)
-    assert await src.fetch_by_name("u", "md_export") is None
-    assert await src.fetch_by_name("u", "md_to_docx") is None
-
-
 async def test_host_consult_already_on_table():
     """No host HOW: consult misses; the tool is already on the opening table."""
     reg = ToolRegistry()
@@ -402,9 +390,6 @@ def test_family_of_covers_browser_and_solo_tools():
     assert family_of("run") == frozenset({"run"})
     assert family_of("host") == frozenset({"host"})
     assert family_of("debate") == frozenset({"debate"})
-    assert family_of("md_export") == frozenset({"md_export"})
-    assert "md_to_docx" not in ON_DEMAND_TOOL_NAMES
-    assert "md_to_pdf" not in ON_DEMAND_TOOL_NAMES
     assert "desktop_notify" not in ON_DEMAND_TOOL_NAMES
     # Without a live registry the Server siblings are unknown — name stands alone.
     assert family_of("mcp_playwright_browser_navigate") == frozenset(
@@ -472,11 +457,11 @@ def _stuffed_worker() -> ToolRegistry:
 def test_stuffed_worker_opening_table_includes_assembled_tools():
     """Assembled tools — including former on-demand — sit on the opening FC table."""
     registry = _stuffed_worker()
-    assert registry.count == 16
+    assert registry.count == 15
     offered = _def_names(registry)
     assert offered == set(registry.names)
     assert offered >= _STUFFED_WORKER_RESIDENT
-    assert {"browser", "host", "md_export"} <= offered
+    assert {"browser", "host"} <= offered
 
 
 def _playwright_mcp_result(*, tool_count: int = 24) -> McpDiscoverResult:
@@ -504,12 +489,12 @@ async def test_stuffed_worker_opening_table_includes_mcp_tools():
     registry = _stuffed_worker()
     opening_before = _def_names(registry)
     count_before = registry.count
-    assert count_before == 16
+    assert count_before == 15
     assert opening_before == set(registry.names)
 
     registered = register_mcp_tools(registry, _playwright_mcp_result(tool_count=24))
     assert registered == 24
-    assert registry.count == 40
+    assert registry.count == 39
     mcp_names = {n for n in registry.names if n.startswith("mcp_")}
     assert len(mcp_names) == 24
     offered = _def_names(registry)

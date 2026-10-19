@@ -3,6 +3,7 @@ import {
   type SidecarConversationSnapshot,
   type SidecarResumeRequest,
   type SidecarTurnResult,
+  bareSidecarSession,
   buildSidecarResumeRpcParams,
 } from "@shared/sidecar-contract";
 import { describe, expect, it } from "vitest";
@@ -12,13 +13,7 @@ function assertExactKeys(obj: object, keys: readonly string[]): void {
   expect(Object.keys(obj).sort()).toEqual([...keys].sort());
 }
 
-const BARE_SESSION: SidecarConversationSnapshot = {
-  permissionAxes: { boundary: "folder" },
-  delegateMode: false,
-  folderId: null,
-  localRootId: null,
-  localSubpath: null,
-};
+const BARE_SESSION: SidecarConversationSnapshot = bareSidecarSession();
 
 describe("sidecar IPC contract (TS ↔ Python single source)", () => {
   it("SidecarTurnResult sample matches turnResult.keys + usageKeys", () => {
@@ -117,11 +112,8 @@ describe("sidecar IPC contract (TS ↔ Python single source)", () => {
     ]);
     expect(withoutInference.selected).toEqual(["a"]);
     expect(withoutInference.session).toEqual({
+      ...BARE_SESSION,
       permissionAxes: { boundary: "read" },
-      delegateMode: false,
-      folderId: null,
-      localRootId: null,
-      localSubpath: null,
     });
 
     // Explicit null clears sidecar sticky env / prior turn.

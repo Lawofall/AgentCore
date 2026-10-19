@@ -5,13 +5,14 @@ import {
 } from "@/components/ui/context-menu";
 import type { FileNode, FileSource } from "@/lib/fileSource";
 import {
-  baseName,
   canOpenPathWithOsDefaultApp,
   downloadSaveName,
-  isMarkdownPath,
-  parentDir,
 } from "@/lib/fileSource";
-import { notifyActionError, notifySuccess } from "@/lib/toast";
+import {
+  canExportMarkdown,
+  exportWorkspaceMarkdown,
+} from "@/lib/markdownExport";
+import { notifyActionError } from "@/lib/toast";
 import { openShellAtWorkspacePath } from "@/services/terminalActions";
 import {
   ClipboardPaste,
@@ -28,7 +29,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useState } from "react";
-import { ExportWordDialog } from "./ExportWordDialog";
+import { ExportMarkdownDialog } from "./ExportMarkdownDialog";
 import type { FileTreeRowProps } from "./FileTreeRow";
 import type { BatchMenuActions } from "./fileTreeTypes";
 
@@ -85,7 +86,7 @@ export function FileTreeRowMenu({
   onCopy,
   onCut,
   onPaste,
-  onReloadDir,
+  onReloadDir: _onReloadDir,
 }: {
   node: FileNode;
   source: FileSource;
@@ -141,27 +142,7 @@ export function FileTreeRowMenu({
   // viewer) hides mutate actions; single-file download still rides on `caps.transfer`.
   const canMutate = source.caps.edit;
   const canDownload = source.caps.transfer && !!source.download && !node.isDir;
-  const exportMdToDocx = async (
-    path: string,
-    layout: "standard" | "official",
-  ) => {
-    try {
-      const result = await source.exportMdToDocx?.(path, layout);
-      if (!result) return;
-      onReloadDir(parentDir(path));
-      if (result.warnings.length > 0) {
-        notifySuccess(
-          `已导出 ${baseName(result.path)}（${result.warnings.length} 条警告）`,
-        );
-      } else {
-        notifySuccess(`已导出 ${baseName(result.path)}`);
-      }
-    } catch (e) {
-      notifyActionError("导出 Word 失败", e);
-    }
-  };
-  const canExportWord =
-    canMutate && isMarkdownPath(node.path) && !!source.exportMdToDocx;
+  const canExport = canMutate && canExportMarkdown(source, node.path);
   const downloadItem = canDownload ? (
     <ContextMenuItem
       onSelect={() =>
@@ -198,7 +179,7 @@ export function FileTreeRowMenu({
               <FileText size={14} className="shrink-0" />
               <span className="flex-1 truncate">打开</span>
             </ContextMenuItem>
-            {canExportWord && (
+            {canExport && (
               <ContextMenuItem
                 onSelect={() => {
                   // 菜单先关再出弹窗，避免两层 modal 抢 pointer-events。
@@ -206,7 +187,7 @@ export function FileTreeRowMenu({
                 }}
               >
                 <FileType size={14} className="shrink-0" />
-                <span className="flex-1 truncate">导出 Word</span>
+                <span className="flex-1 truncate">导出</span>
               </ContextMenuItem>
             )}
           </>
@@ -268,14 +249,14 @@ export function FileTreeRowMenu({
           </>
         )}
       </ContextMenuContent>
-      {canExportWord && (
-        <ExportWordDialog
+      {canExport && (
+        <ExportMarkdownDialog
           open={exportOpen}
           fileName={node.name}
           onOpenChange={setExportOpen}
-          onPick={(layout) => {
+          onPick={(format, layout) => {
             setExportOpen(false);
-            void exportMdToDocx(node.path, layout);
+            void exportWorkspaceMarkdown(source, node.path, format, layout);
           }}
         />
       )}

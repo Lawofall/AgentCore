@@ -51,7 +51,7 @@ def test_soft_warning_office_without_execution():
 
 
 def test_exec_office_predicate_splits_by_deterministic_exporter():
-    """粒度按真实能力：docx/pdf 有 md_export，不算「需执行」Office。"""
+    """粒度按真实能力：docx/pdf 是人侧导出，不算「需执行」Office。"""
     assert plan_suggests_exec_office_deliverable(_plan("产出 课件.pptx")) is True
     assert plan_suggests_exec_office_deliverable(_plan("产出 台账.xlsx")) is True
     assert (
@@ -91,7 +91,10 @@ def test_office_warning_does_not_claim_word_pdf_impossible():
         _plan("产出 课件.pptx 与 讲义.docx"), _CloudBackend()
     )
     assert warn is not None
-    assert "md_export" in warn
+    assert "本缺口内" in warn
+    assert ".docx" in warn and ".pdf" in warn
+    assert "打开的文件" not in warn
+    assert "md_export" not in warn
     assert "md_to_docx" not in warn and "md_to_pdf" not in warn
 
 

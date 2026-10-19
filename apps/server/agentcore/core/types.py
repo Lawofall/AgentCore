@@ -52,8 +52,9 @@ class WorkspaceBoundary(StrEnum):
     ``read`` — look only. ``folder`` — change this folder and run inside it.
     ``computer`` — folder plus the local Host face (factory default; web /
     no local engine clamp to folder). ``full`` — skip remaining confirmation
-    cards (push / install / attach / MCP); Host only on a local engine.
-    Stored as ``permission_axes.boundary``. Breaker DENY / FORCE stay orthogonal.
+    cards (push / install / attach / MCP) and git-protection DENY; Host only
+    on a local engine. Stored as ``permission_axes.boundary``. Fuse / private-key
+    / password DENY stay.
     """
 
     READ = "read"
@@ -75,7 +76,11 @@ class WorkspaceBoundary(StrEnum):
 
     @property
     def skips_confirm(self) -> bool:
-        """Skip always-confirm and leftover GRANTABLE cards. Not DENY / FORCE."""
+        """Skip always-confirm, leftover GRANTABLE, and FORCE cards.
+
+        Also lifts git-protection DENY at the tool-exec chokepoint. Fuse /
+        private-key / password DENY stay.
+        """
         return self is WorkspaceBoundary.FULL
 
     def host_in_registry(self, location: str | None) -> bool:

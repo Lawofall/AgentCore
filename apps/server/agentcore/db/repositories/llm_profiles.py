@@ -54,6 +54,7 @@ class LlmModelProfileRepository:
         worker_provider_id: str | None = None,
         worker_model: str | None = None,
         reasoning_effort: str | None = None,
+        disabled_tools: list[str] | None = None,
     ) -> LlmModelProfile:
         row = LlmModelProfile(
             user_id=user_id,
@@ -66,6 +67,7 @@ class LlmModelProfileRepository:
             worker_provider_id=worker_provider_id,
             worker_model=worker_model,
             reasoning_effort=reasoning_effort,
+            disabled_tools=list(disabled_tools or ()),
         )
         self._session.add(row)
         await self._session.commit()

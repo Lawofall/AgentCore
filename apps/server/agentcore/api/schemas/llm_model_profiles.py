@@ -40,11 +40,11 @@ class LlmModelProfileView(BaseModel):
     name: str
     kind: Literal["system", "user", "implicit"]
     is_default: bool = False
-    recipe: Literal["chat", "full"] | None = Field(
+    recipe: Literal["chat", "full", "standard"] | None = Field(
         default=None,
         description=(
             "Official recipe still locked on this assembly. "
-            "Null on user snapshots. Official 完整 / 极简 themselves are virtual ids."
+            "Null on user snapshots. Official 标准 / 完整 / 极简 themselves are virtual ids."
         ),
     )
     main: ModelProfileSlot | None = None
@@ -70,6 +70,25 @@ class LlmModelProfileView(BaseModel):
             "is released."
         ),
     )
+    disabled_tools: list[str] = Field(
+        default_factory=list,
+        description="Whole-tool switch ids this assembly turns off. Empty = all on.",
+    )
+    omitted_projections: list[str] = Field(
+        default_factory=list,
+        description="Envelope rows this assembly does not write. Empty = every row.",
+    )
+    omit_desk_rules: bool | None = Field(
+        default=None,
+        description="True when this turn does not read folder AgentCore/rules. Null/omitted = false.",
+    )
+    skill_membership: dict[str, str] | None = Field(
+        default=None,
+        description=(
+            "Account 交代 document id → apply mode. Null = follow the documents "
+            "(official recipes). Empty object = this assembly names none."
+        ),
+    )
     created_at: datetime | None = None
     updated_at: datetime | None = None
     warnings: list[str] = Field(
@@ -87,13 +106,15 @@ class LlmModelProfileListResponse(BaseModel):
 
 
 class CreateLlmModelProfileRequest(BaseModel):
-    """New user assembly. Always a snapshot of official 完整, not a locked recipe."""
+    """New user assembly. Always a snapshot of official 标准, not a locked recipe."""
 
     name: str = Field(max_length=200)
     set_as_default: bool = False
-    origin: Literal["full"] = Field(
-        default="full",
-        description="Snapshot of official 完整 (tools, envelope, factory catalog on).",
+    origin: Literal["standard"] = Field(
+        default="standard",
+        description=(
+            "Snapshot of official 标准 (daily tools on; debate / chats / folders off)."
+        ),
     )
 
 

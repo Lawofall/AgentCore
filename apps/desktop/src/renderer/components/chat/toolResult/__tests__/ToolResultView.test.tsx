@@ -716,7 +716,7 @@ describe("ToolResultView · read strips the line-window footer", () => {
           toolName: "read",
           args: { file_path: "doc.pdf" },
           result:
-            "extracted\n\n（第 1–200 行，共 500 行）\n\n抽取第 1–3 页，共 12 页。后面的页请用 start_page=4 再读",
+            "extracted\n\n（第 1–200 行，共 500 行）\n\n抽取第 1–3 页，共 12 页。本工具只交第一窗；后面的页按文件名归类或先写已读部分",
         })}
       />,
     );

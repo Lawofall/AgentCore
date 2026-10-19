@@ -109,7 +109,7 @@ const card = (over: Partial<ApprovalView> = {}): ApprovalView => ({
 describe("autoApproveSiblings (本轮内都允许 batch放行)", () => {
   it("FILE_OP_TOOLS matches backend approval_class_tool_names (文件改动类 ∪ git)", () => {
     expect([...FILE_OP_TOOLS].sort()).toEqual(
-      ["edit", "file_batch", "file_delete", "git", "md_export", "write"].sort(),
+      ["edit", "file_batch", "file_delete", "git", "write"].sort(),
     );
     expect(isFileOpTool("git")).toBe(true);
     expect(isFileOpTool("code_execute")).toBe(false);

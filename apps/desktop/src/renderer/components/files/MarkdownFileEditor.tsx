@@ -14,6 +14,7 @@
  */
 
 import { Markdown } from "@/components/chat/Markdown";
+import { MarkdownExportControl } from "@/components/files/ExportMarkdownDialog";
 import {
   MarkdownSourceEditor,
   type MarkdownSourceEditorHandle,
@@ -432,6 +433,7 @@ export function MarkdownFileEditor({
         {saveState === "saved" && !dirty && (
           <span className="shrink-0 text-xs text-muted-foreground">已保存</span>
         )}
+        <MarkdownExportControl source={source} path={path} name={name} />
         {canOpenExternal && (
           <SimpleTooltip label="用默认程序打开">
             <IconButton

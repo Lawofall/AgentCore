@@ -8,13 +8,17 @@ import {
   EXEC_ENV_SPAWN_DENIED_CODE,
   PYTHON_LAUNCHER_MISSING,
   _setPathExistsForTests,
+  bashShellLabel,
   decodePipeChunk,
   isSpawnDeniedError,
   isWslBashTrampoline,
   launcherMissingStderr,
+  powershellShellLabel,
   probeAvailableLanguages,
   resolveBashLauncher,
   resolvePythonLauncher,
+  resolveRunShell,
+  runShellArgv,
   spawnDeniedStderr,
 } from "../fs/workspace/execCodec";
 
@@ -264,5 +268,84 @@ describe("spawnDeniedStderr", () => {
     expect(isSpawnDeniedError(enoent)).toBe(false);
     expect(isSpawnDeniedError(new Error("Permission denied"))).toBe(false);
     expect(isSpawnDeniedError(new Error("spawn python EACCES"))).toBe(false);
+  });
+});
+
+describe("resolveRunShell", () => {
+  const originalPlatform = process.platform;
+  const originalPath = process.env.PATH;
+  const originalLocal = process.env.LOCALAPPDATA;
+
+  afterEach(() => {
+    Object.defineProperty(process, "platform", {
+      value: originalPlatform,
+      configurable: true,
+    });
+    process.env.PATH = originalPath;
+    if (originalLocal === undefined) process.env.LOCALAPPDATA = undefined;
+    else process.env.LOCALAPPDATA = originalLocal;
+    _setPathExistsForTests(null);
+  });
+
+  it("labels Git Bash vs other bash, and PowerShell editions", () => {
+    expect(
+      bashShellLabel(String.raw`C:\Program Files\Git\bin\bash.exe`),
+    ).toBe("Git Bash");
+    expect(bashShellLabel("/usr/bin/bash")).toBe("bash");
+    expect(
+      powershellShellLabel(
+        String.raw`C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe`,
+      ),
+    ).toBe("PowerShell 5.1");
+    expect(
+      powershellShellLabel(String.raw`C:\Program Files\PowerShell\7\pwsh.exe`),
+    ).toBe("PowerShell 7");
+  });
+
+  it("prefers Git Bash on Windows and uses bash -lc", () => {
+    Object.defineProperty(process, "platform", {
+      value: "win32",
+      configurable: true,
+    });
+    process.env.LOCALAPPDATA = undefined;
+    const git = String.raw`C:\Program Files\Git\bin\bash.exe`;
+    _setPathExistsForTests((p) => {
+      const s = String(p).replace(/\//g, "\\").toLowerCase();
+      return s === git.toLowerCase();
+    });
+    const spec = resolveRunShell("win32");
+    expect(spec).toEqual({
+      os: "Windows",
+      shell: "Git Bash",
+      kind: "bash",
+      file: git,
+    });
+    expect(runShellArgv(spec!, "pnpm test")).toEqual(["-lc", "pnpm test"]);
+    expect(runShellArgv(spec!, "pnpm test")).not.toContain("/c");
+  });
+
+  it("falls back to PowerShell 5.1 when no Git Bash, never cmd.exe", () => {
+    Object.defineProperty(process, "platform", {
+      value: "win32",
+      configurable: true,
+    });
+    process.env.LOCALAPPDATA = undefined;
+    const ps = String.raw`C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe`;
+    process.env.PATH = String.raw`C:\Windows\System32\WindowsPowerShell\v1.0`;
+    _setPathExistsForTests((p) => {
+      const s = String(p).replace(/\//g, "\\").toLowerCase();
+      return s === ps.toLowerCase();
+    });
+    const spec = resolveRunShell("win32");
+    expect(spec?.os).toBe("Windows");
+    expect(spec?.shell).toBe("PowerShell 5.1");
+    expect(spec?.kind).toBe("powershell");
+    expect(spec?.file.toLowerCase()).not.toContain("cmd.exe");
+    expect(runShellArgv(spec!, "Get-ChildItem")).toEqual([
+      "-NoProfile",
+      "-NonInteractive",
+      "-Command",
+      "Get-ChildItem",
+    ]);
   });
 });

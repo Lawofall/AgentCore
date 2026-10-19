@@ -13,7 +13,7 @@ import type { StoredRoot } from "../roots";
 import { ensureReady, getRoot } from "../roots";
 import { opArchive } from "./archive";
 import { opExecute } from "./exec";
-import { probeAvailableLanguages } from "./execCodec";
+import { probeAvailableLanguages, resolveRunShell } from "./execCodec";
 import { opGitRepoStatus } from "./gitRepoStatus";
 import { opGitRun } from "./gitRun";
 import { opGitScm } from "./gitScm";
@@ -680,9 +680,14 @@ export async function executeWorkspaceOp(
         return await opGlobFiles(root, args);
       case "execute":
         return await opExecute(root, args, onOutput);
-      case "probe_exec":
+      case "probe_exec": {
         // PATH / Git Bash probe — independent of the bound root contents.
-        return opOk({ languages: probeAvailableLanguages() });
+        const runShell = resolveRunShell();
+        return opOk({
+          languages: probeAvailableLanguages(),
+          ...(runShell ? { os: runShell.os, shell: runShell.shell } : {}),
+        });
+      }
       case "archive":
         return await opArchive(root, args);
       case "ensure_turn_baseline":

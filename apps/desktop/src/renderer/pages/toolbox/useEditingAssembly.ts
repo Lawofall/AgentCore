@@ -84,7 +84,7 @@ export function useEditingAssembly() {
       const created = await createLlmModelProfile({
         name: "未命名",
         set_as_default: true,
-        origin: "full",
+        origin: "standard",
       });
       if (conversationId) {
         const saved = await setConversationModelProfile(

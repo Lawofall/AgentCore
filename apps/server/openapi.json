@@ -5413,7 +5413,7 @@
         "type": "object"
       },
       "CreateLlmModelProfileRequest": {
-        "description": "New user assembly. Always a snapshot of official 完整, not a locked recipe.",
+        "description": "New user assembly. Always a snapshot of official 标准, not a locked recipe.",
         "properties": {
           "name": {
             "maxLength": 200,
@@ -5421,9 +5421,9 @@
             "type": "string"
           },
           "origin": {
-            "const": "full",
-            "default": "full",
-            "description": "Snapshot of official 完整 (tools, envelope, factory catalog on).",
+            "const": "standard",
+            "default": "standard",
+            "description": "Snapshot of official 标准 (daily tools on; debate / chats / folders off).",
             "title": "Origin",
             "type": "string"
           },
@@ -8820,6 +8820,14 @@
             ],
             "title": "Created At"
           },
+          "disabled_tools": {
+            "description": "Whole-tool switch ids this assembly turns off. Empty = all on.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Disabled Tools",
+            "type": "array"
+          },
           "enabled_mcp_server_ids": {
             "description": "Local MCP server ids this assembly enables. Empty = none.",
             "items": {
@@ -8860,12 +8868,32 @@
             "title": "Name",
             "type": "string"
           },
+          "omit_desk_rules": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "True when this turn does not read folder AgentCore/rules. Null/omitted = false.",
+            "title": "Omit Desk Rules"
+          },
           "omitted_factory_skills": {
             "description": "Official HOW names this assembly leaves off the consult directory. Empty = every factory row stays. A name on the list is missing from the directory and consult. New skills default on once the recipe is released.",
             "items": {
               "type": "string"
             },
             "title": "Omitted Factory Skills",
+            "type": "array"
+          },
+          "omitted_projections": {
+            "description": "Envelope rows this assembly does not write. Empty = every row.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Omitted Projections",
             "type": "array"
           },
           "reasoning_effort": {
@@ -8884,7 +8912,8 @@
               {
                 "enum": [
                   "chat",
-                  "full"
+                  "full",
+                  "standard"
                 ],
                 "type": "string"
               },
@@ -8892,8 +8921,23 @@
                 "type": "null"
               }
             ],
-            "description": "Official recipe still locked on this assembly. Null on user snapshots. Official 完整 / 极简 themselves are virtual ids.",
+            "description": "Official recipe still locked on this assembly. Null on user snapshots. Official 标准 / 完整 / 极简 themselves are virtual ids.",
             "title": "Recipe"
+          },
+          "skill_membership": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Account 交代 document id → apply mode. Null = follow the documents (official recipes). Empty object = this assembly names none.",
+            "title": "Skill Membership"
           },
           "updated_at": {
             "anyOf": [
@@ -30233,6 +30277,91 @@
         ]
       }
     },
+    "/v1/conversations/{conversation_id}/workspace/export-pdf": {
+      "post": {
+        "description": "Export a conversation-workspace Markdown file to a sibling ``.pdf``.",
+        "operationId": "export_conversation_workspace_pdf_v1_conversations__conversation_id__workspace_export_pdf_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExportPdfRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportPdfResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Export Conversation Workspace Pdf",
+        "tags": [
+          "conversations"
+        ]
+      }
+    },
     "/v1/conversations/{conversation_id}/workspace/external-grants": {
       "delete": {
         "description": "Revoke one grant (by alias or root_id) or all grants for the conversation.",
@@ -41186,7 +41315,7 @@
     },
     "/v1/workspaces/convert/md-to-docx": {
       "post": {
-        "description": "Stateless Markdown → Word (shared converter; used by local desktop「导出 Word」).\n\nDoes not touch a workspace. Images are optional base64 payloads keyed by the\nraw Markdown ``src``. Auth required so the surface is not a public converter.",
+        "description": "Stateless Markdown → Word (shared converter; used by local desktop「导出」).\n\nDoes not touch a workspace. Images are optional base64 payloads keyed by the\nraw Markdown ``src``. Auth required so the surface is not a public converter.",
         "operationId": "convert_md_to_docx_v1_workspaces_convert_md_to_docx_post",
         "parameters": [
           {
@@ -41262,7 +41391,7 @@
     },
     "/v1/workspaces/convert/md-to-pdf": {
       "post": {
-        "description": "Stateless Markdown → PDF (shared converter; used by local desktop「导出 PDF」).\n\nDoes not touch a workspace. Auth required so the surface is not a public converter.",
+        "description": "Stateless Markdown → PDF (shared converter; used by local desktop「导出」).\n\nDoes not touch a workspace. Auth required so the surface is not a public converter.",
         "operationId": "convert_md_to_pdf_v1_workspaces_convert_md_to_pdf_post",
         "parameters": [
           {

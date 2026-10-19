@@ -172,17 +172,27 @@ def omit_disabled_tools(registry: ToolRegistry) -> None:
 
 
 async def disabled_tools_for_user(session: object, user_id: str) -> list[str]:
-    """Deny list on the starred assembly. Missing user or star → none off."""
+    """Deny list on the starred assembly. Missing pin → factory 标准."""
+    from agentcore.assembly.recipes import (
+        capability_recipe_for_id,
+        factory_default_id,
+        surface_from_recipe,
+        surface_from_row,
+    )
     from agentcore.db.models import LlmModelProfile
     from agentcore.db.repositories import UserRepository
 
     user = await UserRepository(session).get_by_id(user_id)  # type: ignore[arg-type]
     aid = getattr(user, "default_assembly_id", None) if user else None
     if not aid:
-        return []
+        aid = factory_default_id()
+    recipe = capability_recipe_for_id(aid)
+    if recipe is not None:
+        return list(surface_from_recipe(recipe).disabled_tools)
     row = await session.get(LlmModelProfile, aid)  # type: ignore[attr-defined]
     if row is None or row.user_id != user_id:
-        return []
-    from agentcore.assembly.recipes import surface_from_row
-
+        fallback = capability_recipe_for_id(factory_default_id())
+        if fallback is None:
+            return []
+        return list(surface_from_recipe(fallback).disabled_tools)
     return list(surface_from_row(row).disabled_tools)

@@ -33,6 +33,7 @@ vi.mock("../mcp-service", () => ({
 }));
 
 import { rmSync } from "node:fs";
+import { bareSidecarSession } from "@shared/sidecar-contract";
 import { SidecarManager } from "../sidecar/manager";
 import type { Transport } from "../sidecar/transport";
 
@@ -133,13 +134,7 @@ describe("SidecarManager execution warm keepalive", () => {
         userMessageId: "u-keep",
         messageId: "m-asst",
         userMessage: "long task",
-        session: {
-          permissionAxes: { boundary: "folder" as const },
-          delegateMode: false,
-          folderId: "folder-keep",
-          localRootId: null,
-          localSubpath: null,
-        },
+        session: bareSidecarSession({ folderId: "folder-keep" }),
         accountAuth,
         userId: "user-keep",
       },

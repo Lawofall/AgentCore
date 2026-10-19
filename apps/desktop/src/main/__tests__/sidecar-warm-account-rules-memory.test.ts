@@ -31,6 +31,7 @@ vi.mock("../outbox/projection", () => ({
 }));
 
 import { rmSync } from "node:fs";
+import { bareSidecarSession } from "@shared/sidecar-contract";
 import { SidecarManager } from "../sidecar/manager";
 import type { Transport } from "../sidecar/transport";
 
@@ -133,13 +134,9 @@ function startTurnReq(
     userMessageId: overrides.userMessageId ?? "u1",
     messageId: "m-asst",
     userMessage: "hello",
-    session: {
-      permissionAxes: { boundary: "folder" as const },
-      delegateMode: false,
+    session: bareSidecarSession({
       folderId: overrides.folderId ?? "folder-1",
-      localRootId: null,
-      localSubpath: null,
-    },
+    }),
     accountAuth: overrides.accountAuth,
     userId: overrides.userId,
   };

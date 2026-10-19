@@ -9,7 +9,7 @@ import {
   parentDir,
 } from "@/lib/fileSource";
 import { isAgentCoreMemoryDirPath } from "@/lib/stageDirs";
-import { convertMdToDocx } from "@/services/workspaces";
+import { convertMdToDocx, convertMdToPdf } from "@/services/workspaces";
 import type {
   FsErrorCode,
   FilePreview as LocalPreview,
@@ -295,7 +295,7 @@ export function createLocalRootSource(
       const result = await api.openShellAtRoot(rootId, containerSub);
       if (!result.ok) throw new Error(result.reason);
     },
-    async exportMdToDocx(path, layout = "standard") {
+    async exportMarkdown(path, format, layout = "standard") {
       if (!isMarkdownPath(path)) {
         throw new Error("仅支持导出 Markdown（.md / .markdown）");
       }
@@ -304,6 +304,26 @@ export function createLocalRootSource(
         if (!res.ok) throwFs(res.reason, res.code);
         return res.data.content;
       })();
+
+      if (format === "pdf") {
+        const converted = await convertMdToPdf({
+          markdown: doc,
+          sourceName: baseName(path),
+          layout,
+        });
+        const outName = converted.suggestedFilename;
+        const outPath = parentDir(path)
+          ? `${parentDir(path)}/${outName}`
+          : outName;
+        const wb = await window.fsApi.workspaceOp(rootId, "write_bytes", {
+          path: inPath(outPath),
+          data: converted.pdfBase64,
+        });
+        if (!wb.ok) {
+          throw new Error(wb.error.detail || "写入 PDF 失败");
+        }
+        return { path: outPath, warnings: converted.warnings };
+      }
 
       // Collect relative image srcs (same heuristic as server collect_image_srcs).
       const imgRe = /!\[[^\]]*]\(([^)\s]+)(?:\s+"[^"]*")?\)/g;

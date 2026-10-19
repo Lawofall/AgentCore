@@ -15,7 +15,7 @@ import time
 # 未装配 ≠ 写进队员任务 在 delegate task 参数，不进核。
 # 「邻格 ≠ 否决本格」出核（补集）。换路 HOW 不进本基座（缺口在工作区；晋升在 consult）。
 # 不写注入近义词表；consult 时序写在 consult description，不进本基座。
-# 凭据落盘：写侧熔断硬拒。不进本基座。
+# 凭据写进源码 / 私钥路径：写侧熔断硬拒。Ask 类路径按会话写权限。不进本基座。
 # 某时刻长到需要目录再套该时刻标签；不要预留空壳。
 _DEFAULT_SYSTEM_PROMPT = ""
 

@@ -22,7 +22,6 @@ from agentcore.tools.on_demand import is_mcp_tool_name
 # browser / file_delete / file_batch) are never in this set.
 DEFERRED_OPENING_TOOL_NAMES: frozenset[str] = frozenset(
     {
-        "md_export",
         "search_conversations",
         "read_conversation",
         "debate",

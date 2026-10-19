@@ -56,6 +56,10 @@ def _to_response(view: ModelProfileView) -> LlmModelProfileView:
         context_budget=view.context_budget,
         enabled_mcp_server_ids=list(view.enabled_mcp_server_ids),
         omitted_factory_skills=list(view.omitted_factory_skills),
+        disabled_tools=list(view.disabled_tools),
+        omitted_projections=list(view.omitted_projections),
+        omit_desk_rules=view.omit_desk_rules,
+        skill_membership=view.skill_membership,
         warnings=list(view.warnings),
     )
 

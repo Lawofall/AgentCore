@@ -21,10 +21,12 @@ from agentcore.runtime.interaction import InteractionRegistry
 from agentcore.runtime.safety_breaker import (
     BreakerVerdict,
     SensitivePathClass,
+    apply_boundary_to_breaker,
     classify_sensitive_path,
     command_text_for_tool,
     evaluate_tool_call,
     fuse_aligned_deny_rule_ids,
+    git_protection_deny_rule_ids,
     is_sensitive_path,
     scan_destructive_text,
 )
@@ -152,6 +154,21 @@ def test_deny_sensitive_paths(path: str):
     assert is_sensitive_path(path) is True
 
 
+@pytest.mark.parametrize(
+    "path",
+    [
+        ".ssh/known_hosts",
+        ".ssh/id_ed25519.pub",
+        "id_rsa.pub",
+        ".ssh/config",
+        ".ssh/authorized_keys",
+    ],
+)
+def test_ssh_public_files_are_not_private_keys(path: str):
+    assert classify_sensitive_path(path) is SensitivePathClass.NONE
+    assert is_sensitive_path(path) is False
+
+
 def test_sensitive_globs():
     assert classify_sensitive_path(".env*") is SensitivePathClass.ASK
     assert classify_sensitive_path("*.pem") is SensitivePathClass.DENY
@@ -185,8 +202,9 @@ def test_evaluate_file_read_credential_asks():
     assert hit is not None
     assert hit.verdict is BreakerVerdict.FORCE_APPROVAL
     assert hit.rule_id == "sensitive.path_read_ask"
-    assert "模型上下文" in hit.reason
-    assert "并非完整拦截" in hit.reason
+    assert "进入对话" in hit.reason
+    assert "设置页凭据" in hit.reason
+    assert "并非完整拦截" not in hit.reason
     assert "粘贴" not in hit.reason
 
 
@@ -211,12 +229,56 @@ def test_evaluate_file_read_normal_passes():
     assert evaluate_tool_call("read", {"file_path": "src/app.py"}) is None
 
 
-def test_evaluate_file_write_sensitive_path_denies():
-    """案 image-gen B：敏感路径写盘硬拒（含凭据 Ask 类路径）。"""
-    hit = evaluate_tool_call("write", {"file_path": ".env", "content": "FOO=1"})
+def test_evaluate_file_write_env_scaffold_passes():
+    """Ask 类整类可写（会话写权限），不单开 ``.env``。"""
+    assert evaluate_tool_call("write", {"file_path": ".env", "content": "FOO=1"}) is None
+    assert (
+        evaluate_tool_call("edit", {"file_path": ".env.local", "old_string": "A=1", "new_string": "A=2"})
+        is None
+    )
+    assert evaluate_tool_call("write", {"file_path": "credentials.json", "content": "{}\n"}) is None
+    assert evaluate_tool_call("write", {"file_path": ".npmrc", "content": "registry=https://registry.npmjs.org/\n"}) is None
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "id_rsa",
+        "id_ed25519",
+        "certs/server.pem",
+        "certs/server.key",
+        "keystore.p12",
+        ".gnupg/secring.gpg",
+    ],
+)
+def test_evaluate_file_write_key_material_denies(path: str):
+    """Deny 层不升 Ask：SSH / PEM / 密钥库 / GPG 写仍硬拒。"""
+    hit = evaluate_tool_call("write", {"file_path": path, "content": "-----BEGIN"})
     assert hit is not None
     assert hit.verdict is BreakerVerdict.DENY
     assert hit.rule_id == "sensitive.path_write"
+
+
+def test_evaluate_file_write_secret_in_env_passes():
+    """Ask 类路径是项目密钥的落点；Key 形正文不在这里硬拒。"""
+    assert (
+        evaluate_tool_call(
+            "write",
+            {"file_path": ".env", "content": "OPENAI_API_KEY=sk-abcdEFGH1234567890\n"},
+        )
+        is None
+    )
+
+
+def test_evaluate_file_write_secret_in_template_denies():
+    """模板不是密钥落点：``.env.example`` 上的 Key 形仍拒。"""
+    hit = evaluate_tool_call(
+        "write",
+        {"file_path": ".env.example", "content": "OPENAI_API_KEY=sk-abcdEFGH1234567890\n"},
+    )
+    assert hit is not None
+    assert hit.verdict is BreakerVerdict.DENY
+    assert hit.rule_id == "sensitive.secret_write"
 
 
 def test_evaluate_file_write_secret_content_denies():
@@ -503,6 +565,37 @@ def test_evaluate_git_push_force_or_protected_denies(command: str, rule_id: str)
     assert hit is not None
     assert hit.verdict is BreakerVerdict.DENY
     assert hit.rule_id == rule_id
+
+
+def test_full_lifts_git_protection_and_force_cards():
+    git_hit = evaluate_tool_call("run", {"command": "git push origin main"})
+    assert apply_boundary_to_breaker(git_hit, WorkspaceBoundary.FOLDER) is git_hit
+    assert apply_boundary_to_breaker(git_hit, WorkspaceBoundary.FULL) is None
+    force = evaluate_tool_call("run", {"command": "git push --force"})
+    assert apply_boundary_to_breaker(force, WorkspaceBoundary.FULL) is None
+    reset = evaluate_tool_call("run", {"command": "git reset --hard"})
+    assert apply_boundary_to_breaker(reset, WorkspaceBoundary.FULL) is None
+    env = evaluate_tool_call("read", {"file_path": ".env.local"})
+    assert apply_boundary_to_breaker(env, WorkspaceBoundary.FOLDER) is env
+    assert apply_boundary_to_breaker(env, WorkspaceBoundary.FULL) is None
+    tree = evaluate_tool_call(
+        "run",
+        {"command": 'shutil.rmtree(cwd / "ai-team-workbench")\n'},
+    )
+    assert apply_boundary_to_breaker(tree, WorkspaceBoundary.FULL) is None
+
+
+def test_full_still_denies_keys_and_converts_fuse_force():
+    key = evaluate_tool_call("read", {"file_path": "id_rsa"})
+    assert apply_boundary_to_breaker(key, WorkspaceBoundary.FULL) is key
+    rm = evaluate_tool_call("run", {"command": "rm -rf /"})
+    assert rm is not None
+    assert rm.verdict is BreakerVerdict.FORCE_APPROVAL
+    denied = apply_boundary_to_breaker(rm, WorkspaceBoundary.FULL)
+    assert denied is not None
+    assert denied.verdict is BreakerVerdict.DENY
+    assert denied.rule_id == "destructive.rm_root"
+    assert git_protection_deny_rule_ids() & fuse_aligned_deny_rule_ids() == set()
 
 
 # ── Gate + full_trust: force still prompts ───────────────────────────────────
@@ -916,7 +1009,8 @@ async def test_sensitive_credential_preview_soft_fail_still_asks():
     hint = soft_args["circuit_breaker_hint"]
     assert soft_args["rule_id"] == "sensitive.path_read_ask"
     assert "force_one_shot" not in soft_args
-    assert "并非完整拦截" in hint
+    assert "进入对话" in hint
+    assert "并非完整拦截" not in hint
     assert "键名预览" not in hint
 
 
@@ -950,3 +1044,120 @@ async def test_sensitive_key_read_denied_as_policy_failure():
     assert attempts[0].success is False
     assert attempts[0].policy_failure is True
     assert "敏感" in messages[0].content or "私钥" in messages[0].content or "密钥" in messages[0].content
+
+
+async def test_full_skips_env_read_card_via_tool_exec():
+    sink = EventSink()
+    gate = ApprovalGate(
+        sink=sink,
+        conversation_id="conv-full-env",
+        registry=InteractionRegistry(),
+        timeout_seconds=5.0,
+        permission_axes=WorkspaceBoundary.FULL,
+    )
+
+    class _ReadTool:
+        @property
+        def schema(self) -> ToolSchema:
+            return ToolSchema(
+                name="read",
+                description="t",
+                parameters={"type": "object", "properties": {}},
+                face=ToolFace.FILE,
+                approval=ToolApproval.NEVER,
+            )
+
+        async def execute(self, arguments: dict[str, Any], context: ToolContext) -> ToolResult:
+            return ToolResult(tool_call_id="", success=True, output="K=1")
+
+    tools = ToolRegistry()
+    tools.register(_ReadTool())
+    tc = ToolCall(
+        id="tc-full-env",
+        function=ToolCallFunction(name="read", arguments='{"file_path": ".env"}'),
+    )
+    messages, _, attempts = await tool_exec_mod.execute_tools(
+        [tc], tools, _ctx(), sink, approval_gate=gate, run_id="run-full-env"
+    )
+    assert attempts[0].success is True
+    assert "K=1" in messages[0].content
+    assert not [e for e in _drain(sink) if e.type is EventType.APPROVAL_REQUIRED]
+
+
+async def test_full_lifts_git_push_main_via_tool_exec():
+    sink = EventSink()
+    gate = ApprovalGate(
+        sink=sink,
+        conversation_id="conv-full-git",
+        registry=InteractionRegistry(),
+        timeout_seconds=5.0,
+        permission_axes=WorkspaceBoundary.FULL,
+    )
+
+    class _RunTool:
+        @property
+        def schema(self) -> ToolSchema:
+            return ToolSchema(
+                name="run",
+                description="t",
+                parameters={"type": "object", "properties": {}},
+                face=ToolFace.EXECUTION,
+                approval=ToolApproval.GRANTABLE,
+            )
+
+        async def execute(self, arguments: dict[str, Any], context: ToolContext) -> ToolResult:
+            return ToolResult(tool_call_id="", success=True, output="pushed")
+
+    tools = ToolRegistry()
+    tools.register(_RunTool())
+    tc = ToolCall(
+        id="tc-full-git",
+        function=ToolCallFunction(
+            name="run", arguments='{"command": "git push origin main"}'
+        ),
+    )
+    messages, _, attempts = await tool_exec_mod.execute_tools(
+        [tc], tools, _ctx(), sink, approval_gate=gate, run_id="run-full-git"
+    )
+    assert attempts[0].success is True
+    assert "pushed" in messages[0].content
+    assert not [e for e in _drain(sink) if e.type is EventType.APPROVAL_REQUIRED]
+
+
+async def test_full_still_denies_rm_root_via_tool_exec():
+    sink = EventSink()
+    gate = ApprovalGate(
+        sink=sink,
+        conversation_id="conv-full-rm",
+        registry=InteractionRegistry(),
+        timeout_seconds=5.0,
+        permission_axes=WorkspaceBoundary.FULL,
+    )
+
+    class _RunTool:
+        @property
+        def schema(self) -> ToolSchema:
+            return ToolSchema(
+                name="run",
+                description="t",
+                parameters={"type": "object", "properties": {}},
+                face=ToolFace.EXECUTION,
+                approval=ToolApproval.GRANTABLE,
+            )
+
+        async def execute(self, arguments: dict[str, Any], context: ToolContext) -> ToolResult:
+            raise AssertionError("must not execute rm -rf /")
+
+    tools = ToolRegistry()
+    tools.register(_RunTool())
+    tc = ToolCall(
+        id="tc-full-rm",
+        function=ToolCallFunction(name="run", arguments='{"command": "rm -rf /"}'),
+    )
+    messages, _, attempts = await tool_exec_mod.execute_tools(
+        [tc], tools, _ctx(), sink, approval_gate=gate, run_id="run-full-rm"
+    )
+    assert attempts[0].success is False
+    assert attempts[0].policy_failure is True
+    assert "熔断" in messages[0].content or "拒绝" in messages[0].content
+    assert not [e for e in _drain(sink) if e.type is EventType.APPROVAL_REQUIRED]

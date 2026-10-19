@@ -37,7 +37,7 @@ describe("parseFileReadWindow", () => {
   it("finds the window footer when a PDF page HOW follows", () => {
     expect(
       parseFileReadWindow(
-        "body\n\n（第 1–200 行，共 500 行）\n\n抽取第 1–3 页，共 12 页。后面的页请用 start_page=4 再读",
+        "body\n\n（第 1–200 行，共 500 行）\n\n抽取第 1–3 页，共 12 页。本工具只交第一窗；后面的页按文件名归类或先写已读部分",
       ),
     ).toEqual({ start: 1, end: 200, total: 500 });
   });
@@ -83,8 +83,8 @@ describe("stripFileReadFooter", () => {
   it("keeps a following PDF page HOW", () => {
     expect(
       stripFileReadFooter(
-        "body\n\n（第 1–200 行，共 500 行）\n\n抽取第 1–3 页，共 12 页。后面的页请用 start_page=4 再读",
+        "body\n\n（第 1–200 行，共 500 行）\n\n抽取第 1–3 页，共 12 页。本工具只交第一窗；后面的页按文件名归类或先写已读部分",
       ),
-    ).toBe("body\n\n抽取第 1–3 页，共 12 页。后面的页请用 start_page=4 再读");
+    ).toBe("body\n\n抽取第 1–3 页，共 12 页。本工具只交第一窗；后面的页按文件名归类或先写已读部分");
   });
 });

@@ -3,6 +3,7 @@ import {
   patchConversationCache,
 } from "@/hooks/useConversations";
 import { getFolders } from "@/hooks/useFolders";
+import { resolveSidecarCapability } from "@/lib/assemblyCapability";
 import { contextBudgetForConversation } from "@/lib/composerModelProfile";
 import { StreamError } from "@/lib/errors";
 import { logEvent } from "@/lib/log";
@@ -318,6 +319,7 @@ async function resolveSidecarSession(
   const { folderId, localRootId, localSubpath } =
     resolveProjectTurnBinding(conversationId);
   const contextBudget = contextBudgetForConversation(conversationId);
+  const capability = await resolveSidecarCapability(conversationId);
   return buildSidecarConversationSnapshot({
     permissionAxes,
     delegateMode,
@@ -325,6 +327,7 @@ async function resolveSidecarSession(
     localRootId,
     localSubpath,
     ...(contextBudget ? { contextBudget } : {}),
+    capability,
   });
 }
 

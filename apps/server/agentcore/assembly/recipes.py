@@ -1,8 +1,9 @@
-"""Official capabilities: locked 完整 and 极简 recipes.
+"""Official capabilities: locked 标准, 完整, and 极简 recipes.
 
 Conversations may pin a virtual recipe id; that is not a copy. User assemblies
-are snapshots of 完整. A switch added later stays off on 极简 and comes on for
-完整. Official recipes cannot be written.
+are snapshots of 标准. A switch added later stays off on 标准 until it is
+listed in STANDARD_TOOLS, stays off on 极简, and comes on for 完整. Official
+recipes cannot be written.
 """
 
 from __future__ import annotations
@@ -10,10 +11,25 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 
-CHAT = "chat"
+STANDARD = "standard"
 FULL = "full"
+CHAT = "chat"
 
-CAPABILITY_ORDER: tuple[str, ...] = (FULL, CHAT)
+CAPABILITY_ORDER: tuple[str, ...] = (STANDARD, FULL, CHAT)
+
+# Daily working set. New switches stay off here until they are added.
+STANDARD_TOOLS: frozenset[str] = frozenset(
+    {
+        "files",
+        "run",
+        "browser",
+        "web",
+        "ask_user",
+        "delegate",
+        "host",
+        "look",
+    }
+)
 
 _NS = uuid.NAMESPACE_URL
 _PREFIX = "agentcore:capability-preset:"
@@ -36,6 +52,14 @@ class CapabilityRecipe:
 def _recipes() -> tuple[CapabilityRecipe, ...]:
     return (
         CapabilityRecipe(
+            STANDARD,
+            "标准",
+            STANDARD_TOOLS,
+            None,
+            omit_factory_catalog=False,
+            omit_desk_rules=False,
+        ),
+        CapabilityRecipe(
             FULL,
             "完整",
             None,
@@ -57,6 +81,11 @@ def _recipes() -> tuple[CapabilityRecipe, ...]:
 def capability_preset_id(key: str) -> str:
     """Stable virtual id for one official recipe."""
     return str(uuid.uuid5(_NS, f"{_PREFIX}{key}"))
+
+
+def factory_default_id() -> str:
+    """Virtual id of the factory fallback recipe (标准)."""
+    return capability_preset_id(STANDARD)
 
 
 def capability_recipe_for_key(key: object) -> CapabilityRecipe | None:

@@ -484,14 +484,15 @@ async def test_execute_tools_unknown_tool_suggests_alias():
             assert f"你是否想用：{old_name}" not in content
 
 
-async def test_execute_tools_retired_md_export_names_suggest_no_exec():
-    """废名 md_to_docx / md_to_pdf 只 did-you-mean，永不自动改写执行。"""
+async def test_execute_tools_retired_export_names_are_user_side():
+    """md_export / 废名只说明人侧导出，永不自动改写执行、不指向 run。"""
     from agentcore.llm.provider.protocol import ToolCall, ToolCallFunction
+    from agentcore.tools.retired import USER_SIDE_EXPORT_MESSAGE
 
-    export_tool = _StubTool("md_export")
+    live_tool = _StubTool("write")
     reg = ToolRegistry()
-    reg.register(export_tool)
-    for retired in ("md_to_docx", "md_to_pdf"):
+    reg.register(live_tool)
+    for retired in ("md_export", "md_to_docx", "md_to_pdf"):
         sink = EventSink()
         messages, terminal, attempts = await execute_tools(
             [ToolCall(id="c1", function=ToolCallFunction(name=retired, arguments="{}"))],
@@ -504,9 +505,10 @@ async def test_execute_tools_retired_md_export_names_suggest_no_exec():
         assert terminal is None
         assert attempts[0].success is False
         content = messages[0].content or ""
-        assert "not found" in content
-        assert "你是否想用：md_export" in content
-    assert export_tool.calls == 0
+        assert USER_SIDE_EXPORT_MESSAGE in content
+        assert "你是否想用" not in content
+        assert "请使用合法工具名" not in content
+    assert live_tool.calls == 0
 
 
 async def test_execute_tools_unknown_file_append_suggests_str_replace_no_exec():
@@ -545,14 +547,13 @@ def test_registry_suggest_names_alias_and_close_match():
     reg.register(_StubTool("file_list"))
     reg.register(_StubTool("glob"))
 
-    reg.register(_StubTool("md_export"))
-
     assert reg.suggest_names("fetch") == ["run"]
     assert reg.suggest_names("wget") == ["run"]
     assert reg.suggest_names("curl") == ["run"]
     assert reg.suggest_names("file_append") == ["edit"]
-    assert reg.suggest_names("md_to_docx") == ["md_export"]
-    assert reg.suggest_names("md_to_pdf") == ["md_export"]
+    assert reg.suggest_names("md_to_docx") == []
+    assert reg.suggest_names("md_to_pdf") == []
+    assert reg.suggest_names("md_export") == []
     assert reg.suggest_names("ls") == ["file_list"]
     assert reg.suggest_names("list_dir") == ["file_list"]
     assert reg.suggest_names("find") == ["glob"]

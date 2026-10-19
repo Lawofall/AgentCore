@@ -1,4 +1,5 @@
 import { Markdown } from "@/components/chat/Markdown";
+import { MarkdownExportControl } from "@/components/files/ExportMarkdownDialog";
 import { FilePreviewBody } from "@/components/files/FilePreviewBody";
 import { Centered, InlineError } from "@/components/files/parts";
 import { Button, IconButton } from "@/components/ui";
@@ -333,6 +334,7 @@ export function FilePreviewView({
             </>
           ) : (
             <>
+              <MarkdownExportControl source={source} path={path} name={name} />
               {canEdit && (
                 <SimpleTooltip label="编辑">
                   <IconButton

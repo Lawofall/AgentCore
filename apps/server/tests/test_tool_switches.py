@@ -28,7 +28,6 @@ def test_switch_member_names_follow_the_group_and_delegate_companions():
         "edit",
         "file_batch",
         "file_delete",
-        "md_export",
         "write",
     )
     assert switch_member_names("delegate") == (
@@ -48,7 +47,7 @@ def test_delegate_off_withholds_companions_and_leaves_debate():
 
 def test_files_and_web_name_sets():
     files = withheld_names(["files"])
-    assert files == frozenset({"write", "edit", "file_delete", "file_batch", "md_export"})
+    assert files == frozenset({"write", "edit", "file_delete", "file_batch"})
     assert withheld_names(["web"]) == frozenset({"web_search", "web_fetch"})
     assert withheld_names(["run"]) == frozenset({"run"})
     assert "browser" not in withheld_names(["run"])

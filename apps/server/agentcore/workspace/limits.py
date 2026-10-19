@@ -110,10 +110,6 @@ WORKSPACE_CHANNEL_DEAD_RETIRE_TOOLS: tuple[str, ...] = (
     # Ambient listing rides the same local channel — retire with the file family
     # so post-dead index_files rejects are not leftover noise.
     "index_files",
-    # Export tools: every call round-trips the same dead backend
-    # (read the .md, write the sibling artifact), so leaving them on the
-    # surface only buys guaranteed-failed rounds.
-    "md_export",
 )
 
 # Short user-visible honest sentence (chat bubble / harvest fallback). Soft steer

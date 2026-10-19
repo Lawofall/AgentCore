@@ -36,8 +36,8 @@ _OPENING = [
     {
         "type": "function",
         "function": {
-            "name": "md_export",
-            "description": "export markdown",
+            "name": "debate",
+            "description": "start a debate",
             "parameters": {"type": "object", "properties": {"path": {"type": "string"}}},
         },
     },
@@ -90,7 +90,6 @@ def test_deferred_roster_is_declared_and_excludes_core_loop():
         "file_batch",
     ):
         assert not is_deferred_opening_tool(name), name
-    assert is_deferred_opening_tool("md_export")
     assert is_deferred_opening_tool("search_conversations")
     assert is_deferred_opening_tool("read_conversation")
     assert is_deferred_opening_tool("debate")
@@ -156,7 +155,7 @@ def test_anthropic_convert_stamps_only_when_asked():
     plain = convert_anthropic_tools(_OPENING)
     assert [t["name"] for t in plain] == [
         "read",
-        "md_export",
+        "debate",
         "search_conversations",
         "mcp_github_list_issues",
     ]
@@ -166,7 +165,7 @@ def test_anthropic_convert_stamps_only_when_asked():
     assert stamped[0]["type"] == "tool_search_tool_bm25_20251119"
     by_name = {t.get("name"): t for t in stamped}
     assert "defer_loading" not in by_name["read"]
-    assert by_name["md_export"]["defer_loading"] is True
+    assert by_name["debate"]["defer_loading"] is True
     assert by_name["search_conversations"]["defer_loading"] is True
     assert by_name["mcp_github_list_issues"]["defer_loading"] is True
 
@@ -180,7 +179,7 @@ def test_responses_convert_stamps_only_when_asked():
     assert stamped[0] == {"type": "tool_search"}
     by_name = {t.get("name"): t for t in stamped if t.get("type") == "function"}
     assert "defer_loading" not in by_name["read"]
-    assert by_name["md_export"]["defer_loading"] is True
+    assert by_name["debate"]["defer_loading"] is True
 
 
 def test_opencode_messages_payload_does_not_stamp():
@@ -220,8 +219,8 @@ def test_official_openai_responses_payload_stamps_gpt_5_4():
         vendor_id="openai",
     )
     assert payload["tools"][0] == {"type": "tool_search"}
-    export = next(t for t in payload["tools"] if t.get("name") == "md_export")
-    assert export["defer_loading"] is True
+    debate = next(t for t in payload["tools"] if t.get("name") == "debate")
+    assert debate["defer_loading"] is True
     read = next(t for t in payload["tools"] if t.get("name") == "read")
     assert "defer_loading" not in read
 

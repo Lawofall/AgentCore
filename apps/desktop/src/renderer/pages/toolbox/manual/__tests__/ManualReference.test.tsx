@@ -47,13 +47,13 @@ describe("ManualReference", () => {
       screen.getByText(/git add \/ commit \/ push \/ pull \/ 建分支 \/ 切分支/),
     ).toBeTruthy();
     expect(screen.getByText(/开 PR（GitHub）/)).toBeTruthy();
-    expect(screen.getByText(/force push/)).toBeTruthy();
-    expect(screen.getByText(/reset \/ clean/)).toBeTruthy();
+    expect(screen.getAllByText(/格式化磁盘/).length).toBeGreaterThan(0);
+    expect(screen.getByText(/把私钥读进对话/)).toBeTruthy();
     expect(screen.queryByText(/show \/ blame/)).toBeNull();
     expect(screen.queryByText(/stash push/)).toBeNull();
     expect(
       screen.getByText(
-        /普通 push \/ 开 PR 会先弹确认；force \/ 推保护分支仍禁止/,
+        /非完全权限下普通 push \/ 开 PR 会先弹确认；完全权限不再问，包括推主干和强推/,
       ),
     ).toBeTruthy();
     expect(screen.queryByText(/推送远端请你在本地终端手动完成/)).toBeNull();

@@ -33,7 +33,7 @@ from agentcore.runtime.turn import complete_log as complete_mod
 from agentcore.sidecar import protocol
 from agentcore.sidecar.server import SidecarServer
 from tests.conftest import LogSpy
-from tests.sidecar_session import sidecar_session
+from tests.sidecar_session import sidecar_capability, sidecar_session
 
 
 class _ScriptedProvider:
@@ -621,6 +621,71 @@ def test_sidecar_start_turn_local_binding_reaches_pipeline(tmp_path, monkeypatch
     assert "prepare_ms" in close
     assert "ttft_reasoning_ms" in close
     assert close["ttft_reasoning_ms"] is None
+
+
+def test_sidecar_start_turn_arms_chat_recipe(tmp_path, monkeypatch):
+    """极简 id 在 pipeline 入口已经绑上，不吃客户端全开名单。"""
+    from agentcore.assembly.recipes import CHAT, capability_preset_id
+    from agentcore.runtime.skills.factory_switches import current_omit_factory_catalog
+    from agentcore.tools.switchboard import current_disabled_tools
+
+    captured: dict[str, Any] = {}
+
+    async def fake_pipeline(**kwargs: Any) -> dict[str, Any]:
+        captured["omit_factory"] = current_omit_factory_catalog()
+        captured["disabled"] = current_disabled_tools()
+        kwargs["sink"].close()
+        return {"finish_reason": "end_turn", "content": "ok", "rounds": 1}
+
+    monkeypatch.setattr("agentcore.sidecar.server.run_chat_pipeline", fake_pipeline)
+    sent, write_line = _recorder()
+    server = SidecarServer(write_line)
+
+    async def drive() -> None:
+        await server.handle_line(
+            json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "initialize",
+                    "params": {
+                        "userId": "u",
+                        "workspaceRoot": str(tmp_path),
+                        "approvalsEnabled": True,
+                        "inference": _FAKE_INFERENCE,
+                    },
+                }
+            )
+        )
+        await server.handle_line(
+            json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 2,
+                    "method": "startTurn",
+                    "params": {
+                        **_CLIENT_TURN_IDS,
+                        "turnId": "t-chat",
+                        "conversationId": "c-chat",
+                        "userMessage": "hello",
+                        "session": sidecar_session(
+                            capability=sidecar_capability(
+                                assemblyId=capability_preset_id(CHAT),
+                                disabledTools=[],
+                                omittedFactorySkills=[],
+                                omitDeskRules=False,
+                            )
+                        ),
+                    },
+                }
+            )
+        )
+        await asyncio.gather(*list(server._turns.values()))
+
+    asyncio.run(drive())
+    assert captured["omit_factory"] is True
+    assert "web" in captured["disabled"]
+    assert "error" not in _response(sent, 2)
 
 
 def test_rpc_agent_mentions_accepts_camel_and_snake():

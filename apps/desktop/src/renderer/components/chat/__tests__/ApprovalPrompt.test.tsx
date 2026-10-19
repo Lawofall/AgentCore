@@ -394,7 +394,7 @@ describe("ApprovalCard escalation tracks (熔断 vs 敏感读)", () => {
       screen.getByText(/安全熔断升格审批（启发式兜底，并非完整拦截）/),
     ).toBeTruthy();
     expect(screen.getByText(/命中毁灭性命令启发式/)).toBeTruthy();
-    expect(screen.queryByText(/敏感路径读升格审批/)).toBeNull();
+    expect(screen.queryByText(/读取凭据文件需确认/)).toBeNull();
     expect(screen.queryByRole("button", { name: /本轮内都允许/ })).toBeNull();
     expect(
       screen.queryByRole("button", { name: /本轮内允许所有文件改动/ }),
@@ -434,7 +434,7 @@ describe("ApprovalCard escalation tracks (熔断 vs 敏感读)", () => {
         },
       }),
     );
-    expect(screen.getByText(/敏感路径读升格审批/)).toBeTruthy();
+    expect(screen.getByText(/读取凭据文件需确认/)).toBeTruthy();
     expect(screen.getByText(/键名预览：API_KEY, DATABASE_URL/)).toBeTruthy();
     expect(screen.queryByText(/安全熔断升格审批/)).toBeNull();
     expect(screen.getByRole("button", { name: /本轮内都允许/ })).toBeTruthy();
@@ -452,7 +452,7 @@ describe("ApprovalCard escalation tracks (熔断 vs 敏感读)", () => {
         },
       }),
     );
-    expect(screen.getByText(/敏感路径读升格审批/)).toBeTruthy();
+    expect(screen.getByText(/读取凭据文件需确认/)).toBeTruthy();
     expect(screen.queryByText(/安全熔断升格审批/)).toBeNull();
     expect(screen.getByRole("button", { name: /本轮内都允许/ })).toBeTruthy();
   });
@@ -468,7 +468,7 @@ describe("ApprovalCard escalation tracks (熔断 vs 敏感读)", () => {
       }),
     );
     expect(screen.queryByText(/安全熔断升格审批/)).toBeNull();
-    expect(screen.queryByText(/敏感路径读升格审批/)).toBeNull();
+    expect(screen.queryByText(/读取凭据文件需确认/)).toBeNull();
     expect(screen.getByRole("button", { name: /本轮内都允许/ })).toBeTruthy();
   });
 
@@ -486,7 +486,7 @@ describe("ApprovalCard escalation tracks (熔断 vs 敏感读)", () => {
       }),
     );
     expect(screen.getByText(/安全熔断升格审批/)).toBeTruthy();
-    expect(screen.queryByText(/敏感路径读升格审批/)).toBeNull();
+    expect(screen.queryByText(/读取凭据文件需确认/)).toBeNull();
     expect(screen.queryByRole("button", { name: /本轮内都允许/ })).toBeNull();
   });
 });

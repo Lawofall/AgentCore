@@ -24,19 +24,14 @@ vi.mock("../outbox/projection", () => ({
   abortLocalTurnPlaceholder: vi.fn(async () => undefined),
 }));
 
+import { bareSidecarSession } from "@shared/sidecar-contract";
 import {
   SidecarManager,
   isDestroyedWebContentsError,
 } from "../sidecar/manager";
 import type { Transport } from "../sidecar/transport";
 
-const BARE_SESSION = {
-  permissionAxes: { boundary: "folder" as const },
-  delegateMode: false,
-  folderId: null as string | null,
-  localRootId: null as string | null,
-  localSubpath: null as string | null,
-};
+const BARE_SESSION = bareSidecarSession();
 
 /** Fake stdio transport: complete initialize, hang startTurn/resume, inject notifications. */
 function hangingTransport(

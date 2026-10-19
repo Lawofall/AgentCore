@@ -16,6 +16,12 @@ import {
 import { BrowserWindow, app, ipcMain } from "electron";
 import { resolveCwdInside } from "./fs/pathGuard";
 import type { StoredRoot } from "./fs/roots";
+import {
+  RUN_SHELL_UNAVAILABLE,
+  resolveRunShell,
+  runShellArgv,
+  runShellEnvExtra,
+} from "./fs/workspace/execCodec";
 import { requireStringFields } from "./ipc-validate";
 import {
   killProcessTree,
@@ -96,24 +102,17 @@ function broadcast(event: ProcessEventPush): void {
 }
 
 function spawnShell(command: string, cwd: string): ChildProcess {
+  // Same launcher as short/verify ``run`` (Git Bash / PowerShell / PATH bash).
   // treeSpawnOptions：POSIX 新进程组，便于杀树（Windows 走 taskkill /T 无需标志）；
   // 仍由本服务持有引用，应用退出会主动杀。
-  if (process.platform === "win32") {
-    return spawn(
-      process.env.ComSpec || "cmd.exe",
-      ["/d", "/s", "/c", command],
-      {
-        cwd,
-        env: process.env,
-        windowsHide: true,
-        stdio: ["ignore", "pipe", "pipe"],
-        ...treeSpawnOptions(),
-      },
-    );
+  const spec = resolveRunShell();
+  if (!spec) {
+    throw new Error(RUN_SHELL_UNAVAILABLE);
   }
-  return spawn("/bin/sh", ["-c", command], {
+  return spawn(spec.file, runShellArgv(spec, command), {
     cwd,
-    env: process.env,
+    env: { ...process.env, ...runShellEnvExtra() },
+    windowsHide: true,
     stdio: ["ignore", "pipe", "pipe"],
     ...treeSpawnOptions(),
   });

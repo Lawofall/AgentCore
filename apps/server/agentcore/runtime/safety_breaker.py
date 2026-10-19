@@ -7,9 +7,10 @@ gate obvious credential / key-material paths (template allow → credential ask 
 key deny). They do **not** intercept every dangerous command — comments, audit
 copy, and approval-card hints must not claim otherwise.
 
-Permission presets (including ``full_trust``), delegation grants, and turn-wide
-「本轮放行」never override these rules. Aligns with Claude Code's practice that
-bypass mode still trips the circuit breaker.
+``full`` skips FORCE cards and git-protection DENY (push to main, force push,
+reset / clean). Fuse-aligned destruction, private-key file reads/writes, silent
+install, and secret writes stay DENY. Delegation grants and turn-wide
+「本轮放行」never override remaining DENY.
 
 Git force / protected-branch / reset / clean rules live in the command-text
 deny table below. There is no structured git tool.
@@ -21,7 +22,10 @@ import re
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import PurePosixPath, PureWindowsPath
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from agentcore.core.types import WorkspaceBoundary
 
 # ── Verdicts ────────────────────────────────────────────────────────────────
 
@@ -117,13 +121,19 @@ FUSE_ALIGNED_DENY_RULE_IDS: frozenset[str] = frozenset(
 
 # Shell/command text rules that hard-deny (not FORCE_APPROVAL). Distinct from
 # fuse⊆DENY: applies on terminal / code_execute / test_run / host(action=shell) alike.
-_TEXT_DENY_RULE_IDS: frozenset[str] = frozenset(
+_GIT_PROTECTION_DENY_RULE_IDS: frozenset[str] = frozenset(
     {
         "destructive.git_force_push_protected",
         "destructive.git_force_push",
         "destructive.git_reset_or_clean",
         "destructive.git_push_protected",
     }
+)
+_TEXT_DENY_RULE_IDS: frozenset[str] = _GIT_PROTECTION_DENY_RULE_IDS
+
+_FULL_FUSE_DENY_REASON = (
+    "检测到疑似毁灭性命令（启发式兜底，并非完整拦截）。"
+    "完全权限也不放行格式化磁盘、删系统或关机。"
 )
 
 _HOST_SHELL_FUSE_DENY_REASON = (
@@ -136,12 +146,48 @@ def fuse_aligned_deny_rule_ids() -> frozenset[str]:
     """Destructive rule ids that host shell fuse covers → breaker DENY on host+shell."""
     return FUSE_ALIGNED_DENY_RULE_IDS
 
+
+def git_protection_deny_rule_ids() -> frozenset[str]:
+    """Git protection DENY ids. ``full`` lifts these; other boundaries do not."""
+    return _GIT_PROTECTION_DENY_RULE_IDS
+
+
+def apply_boundary_to_breaker(
+    hit: BreakerHit | None,
+    axes: WorkspaceBoundary | None,
+) -> BreakerHit | None:
+    """Apply conversation boundary to a breaker hit.
+
+    ``full`` skips FORCE cards (``.env`` / 整树删除) and git-protection DENY.
+    Fuse-aligned destruction stays DENY even when it arrived as FORCE on ``run``.
+    Keys, silent install, and other DENY stay.
+    """
+    if hit is None or axes is None or not axes.skips_confirm:
+        return hit
+    if hit.verdict is BreakerVerdict.FORCE_APPROVAL:
+        if hit.rule_id in FUSE_ALIGNED_DENY_RULE_IDS:
+            return BreakerHit(
+                verdict=BreakerVerdict.DENY,
+                rule_id=hit.rule_id,
+                reason=_FULL_FUSE_DENY_REASON,
+            )
+        return None
+    if (
+        hit.verdict is BreakerVerdict.DENY
+        and hit.rule_id in _GIT_PROTECTION_DENY_RULE_IDS
+    ):
+        return None
+    return hit
+
 # ── Sensitive path heuristics (allow / ask / deny) ───────────────────────────
 #
 # Templates (``.env.example`` …) → allow. Credential/env files → ask on read
 # (FORCE_APPROVAL entrance; turn grant allowed for same tool after human approve).
-# Key material / ``.ssh`` → hard DENY on read. Writes to ask|deny paths stay DENY
-# (no plaintext secret scaffolding).
+# Private-key basenames / ``.gnupg`` → hard DENY on read and write. Public files
+# under ``.ssh`` (``*.pub``, ``known_hosts``, ``config``) are not keys. Writes to
+# ASK paths (``.env`` …) follow the session file-write boundary — no extra deny.
+# Key-shaped body is DENY on ordinary files; ASK destinations are the place for
+# project secrets (Cursor-aligned).
 
 
 class SensitivePathClass(StrEnum):
@@ -181,10 +227,14 @@ _DENY_BASENAME_EXACT: frozenset[str] = frozenset(
         "id_dsa",
         "id_ecdsa",
         "id_ed25519",
-        "id_rsa.pub",
-        "id_ed25519.pub",
-        "authorized_keys",
+    }
+)
+_SSH_PUBLIC_BASENAMES: frozenset[str] = frozenset(
+    {
         "known_hosts",
+        "known_hosts.old",
+        "config",
+        "authorized_keys",
     }
 )
 
@@ -205,13 +255,11 @@ _TEMPLATE_BASENAME_SUFFIXES: tuple[str, ...] = (
 )
 _ASK_PATH_SEGMENTS: frozenset[str] = frozenset({".aws", ".azure", ".gcloud"})
 _DENY_PATH_SEGMENTS: frozenset[str] = frozenset(
-    {".ssh", ".gnupg", "private-keys", "private_keys"}
+    {".gnupg", "private-keys", "private_keys"}
 )
 
 _SENSITIVE_ASK_READ_REASON = (
-    "该路径疑似凭据或环境配置文件。读入后内容会进入模型上下文"
-    "（启发式兜底，并非完整拦截）。需人工确认后才能读取；"
-    "也可改用设置页凭据、本机环境变量，或只告知无密钥的配置键名。"
+    "读入后内容会进入对话。也可改用设置页凭据或本机环境变量。"
 )
 
 _SENSITIVE_DENY_READ_REASON = (
@@ -220,8 +268,8 @@ _SENSITIVE_DENY_READ_REASON = (
 )
 
 _SENSITIVE_WRITE_DENY_REASON = (
-    "该路径疑似凭据/密钥类敏感文件，默认拒绝写入（启发式兜底，并非完整拦截）。"
-    "【禁止】把 API Key 写入工作区明文；请用不含密钥的脚手架 + 用户本机环境变量。"
+    "该路径疑似私钥/密钥材料，默认拒绝写入（启发式兜底，并非完整拦截）。"
+    "请改用本机密钥代理或设置页凭据；不要把密钥文件写进工作区。"
 )
 
 
@@ -241,6 +289,11 @@ def classify_sensitive_path(path: str) -> SensitivePathClass:
             continue
         for part in parts[:-1]:
             low = part.lower()
+            if low == ".ssh":
+                name_low = parts[-1].lower()
+                if name_low.endswith(".pub") or name_low in _SSH_PUBLIC_BASENAMES:
+                    break
+                return SensitivePathClass.DENY
             if low in _DENY_PATH_SEGMENTS:
                 return SensitivePathClass.DENY
             if low in _ASK_PATH_SEGMENTS:
@@ -428,19 +481,25 @@ def evaluate_tool_call(tool_name: str, arguments: dict[str, Any] | None) -> Brea
                     reason=_SENSITIVE_ASK_READ_REASON,
                 )
 
-    # Sensitive writes + pasted-key content (案 20260803-image-gen-byok-egress-boundary B).
+    # Sensitive writes: private-key paths DENY. ASK paths (``.env`` …) write like
+    # any other project file (session boundary). Key-shaped body DENY except when
+    # the destination is ASK — that is the designated secret file.
     if name in {"write", "edit"}:
+        ask_dest = False
         for path in _path_args_for_tool(name, args):
-            if classify_sensitive_path(path) is not SensitivePathClass.NONE:
+            kind = classify_sensitive_path(path)
+            if kind is SensitivePathClass.DENY:
                 return BreakerHit(
                     verdict=BreakerVerdict.DENY,
                     rule_id="sensitive.path_write",
                     reason=_SENSITIVE_WRITE_DENY_REASON,
                 )
+            if kind is SensitivePathClass.ASK:
+                ask_dest = True
         from agentcore.core.secrets import SECRET_WRITE_DENY_REASON, contains_secret
 
         body = _write_content_for_secret_scan(name, args)
-        if contains_secret(body):
+        if contains_secret(body) and not ask_dest:
             return BreakerHit(
                 verdict=BreakerVerdict.DENY,
                 rule_id="sensitive.secret_write",

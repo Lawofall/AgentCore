@@ -62,8 +62,9 @@ async def resolve_exec_languages(
 ) -> tuple[ExecLanguage, ...]:
     """Languages to put on ``code_execute`` schema + workspace_context this turn.
 
-    Caches the result on ``backend._exec_languages`` so registry + context share
-    one probe. Cloud backends keep the fixed full surface.
+    Caches languages on ``backend._exec_languages`` and the ``run`` dialect on
+    ``backend._run_shell_fact`` so registry + ``<工作区>`` share one probe.
+    Cloud backends keep the fixed full language surface (no host shell fact).
     """
     if backend is None or backend.location != "local":
         return ALL_EXEC_LANGUAGES
@@ -72,24 +73,35 @@ async def resolve_exec_languages(
     if cached is not None:
         return tuple(lang for lang in ALL_EXEC_LANGUAGES if lang in cached)
 
+    from agentcore.tools.sandbox.run_shell import (
+        parse_run_shell_fact,
+        probe_host_run_shell,
+    )
+
     channel = getattr(backend, "_channel", None)
+    run_shell = None
     if channel is not None:
-        langs = await _probe_via_desktop(channel)
+        langs, payload = await _probe_via_desktop(channel)
+        run_shell = parse_run_shell_fact(payload)
     else:
         langs = probe_host_languages()
+        run_shell = probe_host_run_shell()
 
     # Protocol has no typed cache slot; concrete backends accept a dynamic attr.
     object.__setattr__(backend, "_exec_languages", langs)
+    object.__setattr__(backend, "_run_shell_fact", run_shell)
     return langs
 
 
-async def _probe_via_desktop(channel: object) -> tuple[ExecLanguage, ...]:
-    """Ask the bound desktop to probe launchers on the user's machine."""
+async def _probe_via_desktop(
+    channel: object,
+) -> tuple[tuple[ExecLanguage, ...], object]:
+    """Ask the bound desktop to probe launchers + ``run`` shell on the user's machine."""
     from agentcore.workspace.channel import WorkspaceOp
 
     request = getattr(channel, "request", None)
     if request is None:
-        return ()
+        return (), None
     try:
         value = await request(WorkspaceOp.PROBE_EXEC, {}, timeout=5.0)
     except Exception as exc:  # noqa: BLE001 — fail closed on advertise surface
@@ -106,9 +118,10 @@ async def _probe_via_desktop(channel: object) -> tuple[ExecLanguage, ...]:
             "workspace.exec_languages_probe_failed",
             error=str(exc)[:200],
         )
-        return ()
+        return (), None
     raw = value.get("languages") if isinstance(value, dict) else None
     if not isinstance(raw, list):
-        return ()
+        return (), value
     allowed = set(ALL_EXEC_LANGUAGES)
-    return tuple(lang for lang in ALL_EXEC_LANGUAGES if lang in raw and lang in allowed)
+    langs = tuple(lang for lang in ALL_EXEC_LANGUAGES if lang in raw and lang in allowed)
+    return langs, value

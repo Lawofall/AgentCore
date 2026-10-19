@@ -67,6 +67,9 @@ vi.mock("@/services/chatContext", () => ({
 }));
 
 import { getConversations } from "@/hooks/useConversations";
+import { testAssemblyProfile } from "@/lib/assemblyCapability";
+import { queryClient } from "@/lib/queryClient";
+import { llmModelProfileKeys } from "@/lib/queryKeys";
 import { getFolders } from "@/hooks/useFolders";
 import { notifyWarning } from "@/lib/toast";
 import {
@@ -209,6 +212,11 @@ beforeEach(() => {
   looksLikeWorkspacesTokenFailureMock.mockReturnValue(false);
   fetchChatContextMock.mockReset();
   fetchChatContextMock.mockResolvedValue([]);
+  const profile = testAssemblyProfile();
+  queryClient.setQueryData(llmModelProfileKeys.list, {
+    data: [profile],
+    default_assembly_id: profile.id,
+  });
   vi.spyOn(
     permissionAxes,
     "resolveConversationPermissionAxes",
@@ -260,6 +268,7 @@ beforeEach(() => {
 
 afterEach(() => {
   resetSidecarEventPumpForTests();
+  queryClient.removeQueries({ queryKey: llmModelProfileKeys.list });
   (globalThis as Record<string, unknown>).window = undefined;
 });
 
@@ -853,6 +862,11 @@ describe("streamConversationViaSidecar", () => {
           folderId: null,
           localRootId: null,
           localSubpath: null,
+          capability: expect.objectContaining({
+            assemblyId: "asm-full",
+            skillMembership: null,
+            omitDeskRules: false,
+          }),
         }),
       }),
     );

@@ -142,6 +142,7 @@ export const REST_PATH_TEMPLATES = [
   "/v1/conversations/{conversation_id}/workspace/dirs",
   "/v1/conversations/{conversation_id}/workspace/edit/{path}",
   "/v1/conversations/{conversation_id}/workspace/export-docx",
+  "/v1/conversations/{conversation_id}/workspace/export-pdf",
   "/v1/conversations/{conversation_id}/workspace/external-grants",
   "/v1/conversations/{conversation_id}/workspace/files",
   "/v1/conversations/{conversation_id}/workspace/files/{path}",

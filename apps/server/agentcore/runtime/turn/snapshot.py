@@ -11,6 +11,27 @@ from typing import Any
 
 from agentcore.core.types import DEFAULT_PERMISSION_AXES, WorkspaceBoundary
 
+_SKILL_MODES = frozenset({"always", "on_demand", "paths"})
+
+
+@dataclass(frozen=True, slots=True)
+class AssemblyBind:
+    """Resolved capability surface for one sidecar turn.
+
+    Official 标准 / 完整 / 极简 are recognized by ``assembly_id``; stored lists
+    are ignored there. A user assembly uses the lists. ``skill_membership`` None
+    means account 交代 follow the documents (official recipes). An empty dict
+    means this assembly names none.
+    """
+
+    assembly_id: str
+    disabled_tools: tuple[str, ...]
+    omitted_projections: tuple[str, ...]
+    omitted_factory_skills: tuple[str, ...]
+    omit_desk_rules: bool
+    enabled_mcp_server_ids: tuple[str, ...]
+    skill_membership: dict[str, str] | None
+
 
 @dataclass(frozen=True, slots=True)
 class ConversationSnapshot:
@@ -27,6 +48,7 @@ class ConversationSnapshot:
     folder_local_root_id: str | None = None
     folder_local_subpath: str | None = None
     context_budget: int | None = None
+    assembly: AssemblyBind | None = None
 
     @classmethod
     def default(
@@ -39,6 +61,7 @@ class ConversationSnapshot:
         folder_local_root_id: str | None = None,
         folder_local_subpath: str | None = None,
         context_budget: int | None = None,
+        assembly: AssemblyBind | None = None,
     ) -> ConversationSnapshot:
         """Evals / tests / jobs with no conversation row."""
         return cls(
@@ -51,6 +74,7 @@ class ConversationSnapshot:
             folder_local_root_id=folder_local_root_id,
             folder_local_subpath=folder_local_subpath,
             context_budget=context_budget,
+            assembly=assembly,
         )
 
     @classmethod
@@ -86,6 +110,17 @@ SESSION_REQUIRED_KEYS = (
     "folderId",
     "localRootId",
     "localSubpath",
+    "capability",
+)
+
+CAPABILITY_REQUIRED_KEYS = (
+    "assemblyId",
+    "disabledTools",
+    "omittedProjections",
+    "omittedFactorySkills",
+    "omitDeskRules",
+    "enabledMcpServerIds",
+    "skillMembership",
 )
 
 
@@ -116,6 +151,55 @@ def _optional_budget(raw: Any) -> int | None:
     return value if value > 0 else None
 
 
+def _string_list(raw: Any) -> tuple[str, ...]:
+    if not isinstance(raw, list):
+        raise SessionRequiredError("capability")
+    return tuple(item for item in raw if isinstance(item, str) and item)
+
+
+def _parse_capability(raw: Any) -> AssemblyBind:
+    from agentcore.core.errors import ClientTooOldError
+
+    if not isinstance(raw, dict):
+        raise SessionRequiredError(ClientTooOldError().message)
+    if any(key not in raw for key in CAPABILITY_REQUIRED_KEYS):
+        raise SessionRequiredError(ClientTooOldError().message)
+    aid = raw.get("assemblyId")
+    if not isinstance(aid, str) or not aid.strip():
+        raise SessionRequiredError(ClientTooOldError().message)
+    omit_desk = raw.get("omitDeskRules")
+    if not isinstance(omit_desk, bool):
+        raise SessionRequiredError(ClientTooOldError().message)
+    membership_raw = raw.get("skillMembership")
+    membership: dict[str, str] | None
+    if membership_raw is None:
+        membership = None
+    elif isinstance(membership_raw, dict):
+        membership = {
+            key: mode
+            for key, mode in membership_raw.items()
+            if isinstance(key, str) and key and isinstance(mode, str) and mode in _SKILL_MODES
+        }
+    else:
+        raise SessionRequiredError(ClientTooOldError().message)
+    try:
+        disabled = _string_list(raw.get("disabledTools"))
+        omitted = _string_list(raw.get("omittedProjections"))
+        factory = _string_list(raw.get("omittedFactorySkills"))
+        plugs = _string_list(raw.get("enabledMcpServerIds"))
+    except SessionRequiredError as exc:
+        raise SessionRequiredError(ClientTooOldError().message) from exc
+    return AssemblyBind(
+        assembly_id=aid.strip(),
+        disabled_tools=disabled,
+        omitted_projections=omitted,
+        omitted_factory_skills=factory,
+        omit_desk_rules=omit_desk,
+        enabled_mcp_server_ids=plugs,
+        skill_membership=membership,
+    )
+
+
 def parse_sidecar_session(params: dict[str, Any]) -> ConversationSnapshot:
     """Require RPC ``session`` with every snapshot key (null folder = bare)."""
     from agentcore.core.errors import ClientTooOldError
@@ -140,6 +224,7 @@ def parse_sidecar_session(params: dict[str, Any]) -> ConversationSnapshot:
         folder_local_root_id=_normalize_folder_id(raw.get("localRootId")),
         folder_local_subpath=_normalize_subpath(raw.get("localSubpath")),
         context_budget=_optional_budget(raw.get("contextBudget")),
+        assembly=_parse_capability(raw.get("capability")),
     )
 
 

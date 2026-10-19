@@ -70,6 +70,65 @@ export interface SidecarPermissionAxes {
 }
 
 /**
+ * 这场钉的能力面。官方标准 / 完整 / 极简引擎只认 ``assemblyId``；自建用下列名单。
+ * ``skillMembership`` null = 账号交代跟文档走（官方配方）；空对象 = 这份一个都不带。
+ */
+export interface SidecarCapabilitySnapshot {
+  assemblyId: string;
+  disabledTools: string[];
+  omittedProjections: string[];
+  omittedFactorySkills: string[];
+  omitDeskRules: boolean;
+  enabledMcpServerIds: string[];
+  skillMembership: Record<string, string> | null;
+}
+
+export function buildSidecarCapabilitySnapshot(
+  input: SidecarCapabilitySnapshot,
+): SidecarCapabilitySnapshot {
+  return {
+    assemblyId: input.assemblyId,
+    disabledTools: [...input.disabledTools],
+    omittedProjections: [...input.omittedProjections],
+    omittedFactorySkills: [...input.omittedFactorySkills],
+    omitDeskRules: input.omitDeskRules,
+    enabledMcpServerIds: [...input.enabledMcpServerIds],
+    skillMembership:
+      input.skillMembership == null ? null : { ...input.skillMembership },
+  };
+}
+
+/** Tests / IPC stubs: official-like empty deny lists. ``assemblyId`` is required. */
+export function emptySidecarCapability(
+  assemblyId: string,
+): SidecarCapabilitySnapshot {
+  return {
+    assemblyId,
+    disabledTools: [],
+    omittedProjections: [],
+    omittedFactorySkills: [],
+    omitDeskRules: false,
+    enabledMcpServerIds: [],
+    skillMembership: null,
+  };
+}
+
+/** Tests / IPC stubs: a complete session object. */
+export function bareSidecarSession(
+  overrides: Partial<SidecarConversationSnapshot> = {},
+): SidecarConversationSnapshot {
+  return {
+    permissionAxes: { boundary: "folder" },
+    delegateMode: false,
+    folderId: null,
+    localRootId: null,
+    localSubpath: null,
+    capability: emptySidecarCapability("asm-full"),
+    ...overrides,
+  };
+}
+
+/**
  * 本回合会话快照。sidecar 无会话库，桌面每次 startTurn / resume 必送齐。
  * 缺对象或缺任一必填键 → 引擎 ``SessionRequiredError``（请更新桌面）。
  */
@@ -95,6 +154,8 @@ export interface SidecarConversationSnapshot {
    * 装配上调低的上下文长度（token）。缺省 = 用模型自己的窗口。
    */
   contextBudget?: number;
+  /** 这场的工具 / 信封 / 出厂 HOW / 插头 / 交代成员。必填。 */
+  capability: SidecarCapabilitySnapshot;
 }
 
 export function buildSidecarConversationSnapshot(
@@ -107,6 +168,7 @@ export function buildSidecarConversationSnapshot(
     localRootId: input.localRootId ?? null,
     localSubpath: input.localSubpath ?? null,
     ...(input.contextBudget ? { contextBudget: input.contextBudget } : {}),
+    capability: buildSidecarCapabilitySnapshot(input.capability),
   };
 }
 

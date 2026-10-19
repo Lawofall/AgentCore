@@ -20,8 +20,6 @@ _KNOWN_TOOL_ALIASES: dict[str, str] = {
     "wget": "run",
     "curl": "run",
     "file_append": "edit",
-    "md_to_docx": "md_export",
-    "md_to_pdf": "md_export",
     "search": "web_search",
     "websearch": "web_search",
     "google": "web_search",
@@ -74,11 +72,16 @@ class ToolRegistry:
         """Did-you-mean candidates for a missing tool name (alias map + close matches).
 
         Returns at most ``n`` registered names. Empty when nothing is close enough.
-        Never rewrites or executes — callers only embed these in error feedback.
+        User-side export names never suggest a replacement. Never rewrites or
+        executes — callers only embed these in error feedback.
         """
         if not name or n < 1:
             return []
         key = name.strip().lower().replace("-", "_")
+        from agentcore.tools.retired import USER_SIDE_EXPORT_NAMES
+
+        if key in USER_SIDE_EXPORT_NAMES or name in USER_SIDE_EXPORT_NAMES:
+            return []
         out: list[str] = []
         alias = _KNOWN_TOOL_ALIASES.get(key)
         if alias and alias in self._tools:

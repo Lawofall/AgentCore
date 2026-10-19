@@ -352,36 +352,46 @@ async def test_file_read_pdf_transparent_extract(tmp_path: Path):
     assert not (tmp_path / "paper.pdf.md").exists()
 
 
-async def test_file_read_pdf_start_page_skips_sidecar(tmp_path: Path):
+async def test_file_read_pdf_leftover_start_page_rejected(tmp_path: Path):
+    (tmp_path / "paper.pdf").write_bytes(b"%PDF-x")
+    with patch(
+        "agentcore.tools.builtin.file_ops.read._extract_office",
+        side_effect=AssertionError("leftover start_page must not extract"),
+    ):
+        result = await FileReadTool().execute(
+            {"file_path": "paper.pdf", "start_page": 41}, _ctx(tmp_path)
+        )
+    assert result.success is False
+    assert result.contract_failure is True
+    err = result.error or ""
+    assert "start_page" in err
+    assert "第一窗" in err
+
+
+async def test_file_read_pdf_first_window_does_not_teach_page_seek(tmp_path: Path):
     from agentcore.workspace.attachment_parse import ExtractResult, ParseStatus
 
     (tmp_path / "paper.pdf").write_bytes(b"%PDF-x")
-    (tmp_path / "paper.pdf.md").write_text(
-        "Sidecar first window only with alphanumeric body.\n", encoding="utf-8"
-    )
     with patch(
         "agentcore.tools.builtin.file_ops.read._extract_office",
         new=AsyncMock(
             return_value=ExtractResult(
                 status=ParseStatus.OK,
-                text="Clause from page 41 with enough alphanumeric body here.",
+                text="Abstract from the first window with enough alphanumeric body.",
                 detail="ok:pdfminer",
-                page_start=41,
-                page_end=80,
+                page_start=1,
+                page_end=40,
                 page_total=200,
             )
         ),
-    ) as mocked:
-        result = await FileReadTool().execute(
-            {"file_path": "paper.pdf", "start_page": 41}, _ctx(tmp_path)
-        )
-    assert mocked.await_args is not None
-    assert mocked.await_args.kwargs.get("start_page") == 41
+    ):
+        result = await FileReadTool().execute({"file_path": "paper.pdf"}, _ctx(tmp_path))
     assert result.success is True
     out = result.output or ""
-    assert "Clause from page 41" in out
-    assert "start_page=81" in out
-    assert "Sidecar first window" not in out
+    assert "Abstract from the first window" in out
+    assert "抽取第 1–40 页，共 200 页" in out
+    assert "只交第一窗" in out
+    assert "start_page" not in out
 
 async def test_file_read_xlsx_does_not_extract(tmp_path: Path):
     from unittest.mock import patch
@@ -860,8 +870,8 @@ def test_file_read_schema_teaches_default_full_read():
     schema = FileReadTool().schema
     limit = schema.parameters["properties"]["limit"]
     assert limit["maximum"] == FILE_READ_SAFETY_LINE_CAP
-    assert "省略则尽量整读" in limit["description"]
-    assert "超安全顶截断" in limit["description"]
+    assert "省略则整读至安全顶" in limit["description"]
+    assert "仅当页脚要开窗时再填" in limit["description"]
     desc = schema.description
     assert desc == "读取工作区文件。"
     assert "web_fetch" not in desc
@@ -873,6 +883,8 @@ def test_file_read_schema_teaches_default_full_read():
     assert "Office/PDF" in path_desc
     offset = schema.parameters["properties"]["offset"]
     assert "起始行号" in offset["description"]
+    assert "已达安全顶" in offset["description"]
+    assert "start_page" not in schema.parameters["properties"]
 
 
 @pytest.mark.parametrize("path", [".", "pkg"])

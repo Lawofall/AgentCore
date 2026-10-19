@@ -223,7 +223,16 @@ describe("装配胶囊", () => {
     expect(screen.queryByRole("switch", { name: "出厂目录" })).toBeNull();
   });
 
-  it("官方完整和自建同一套胶囊，自建不折进完整", () => {
+  it("官方标准和完整与自建同一套胶囊，自建不折进官方", () => {
+    const standard = {
+      id: "sys-standard",
+      name: "标准",
+      kind: "system" as const,
+      is_default: true,
+      recipe: "standard" as const,
+      main: { origin: "platform" as const, provider_id: null, model: "flash" },
+      enabled_mcp_server_ids: [],
+    };
     const full = {
       id: "sys-full",
       name: "完整",
@@ -243,12 +252,13 @@ describe("装配胶囊", () => {
       enabled_mcp_server_ids: [],
     };
     editing.profile = owned;
-    editing.profiles = [full, owned];
+    editing.profiles = [standard, full, owned];
     renderPage();
 
     expect(screen.queryByRole("group", { name: "预置" })).toBeNull();
     expect(screen.queryByRole("button", { name: "极简" })).toBeNull();
     expect(screen.queryByRole("button", { name: "轻量" })).toBeNull();
+    expect(screen.getByRole("button", { name: "标准" })).toBeTruthy();
     const presetChip = screen.getByRole("button", { name: "完整" });
     const ownedChip = screen.getByRole("button", {
       name: "写稿",
@@ -262,7 +272,7 @@ describe("装配胶囊", () => {
     expect(screen.getByText(/还指着它的对话会改用剩下的另一份/)).toBeTruthy();
   });
 
-  it("看着完整点新建直接从完整复制，极简不进胶囊", () => {
+  it("看着标准点新建直接从标准复制，极简不进胶囊", () => {
     const chat = {
       id: "sys-chat",
       name: "极简",
@@ -272,24 +282,35 @@ describe("装配胶囊", () => {
       main: { origin: "platform" as const, provider_id: null, model: "flash" },
       enabled_mcp_server_ids: [],
     };
+    const standard = {
+      id: "sys-standard",
+      name: "标准",
+      kind: "system" as const,
+      is_default: true,
+      recipe: "standard" as const,
+      main: { origin: "platform" as const, provider_id: null, model: "flash" },
+      enabled_mcp_server_ids: [],
+    };
     const full = {
       id: "sys-full",
       name: "完整",
       kind: "system" as const,
-      is_default: true,
+      is_default: false,
       recipe: "full" as const,
       main: { origin: "platform" as const, provider_id: null, model: "flash" },
       enabled_mcp_server_ids: [],
     };
-    editing.profile = full;
-    editing.profiles = [full, chat, mine];
+    editing.profile = standard;
+    editing.profiles = [standard, full, chat, mine];
     renderPage();
     fireEvent.click(screen.getByRole("button", { name: "新建一份" }));
     expect(create).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole("button", { name: "空白" })).toBeNull();
     expect(screen.queryByRole("button", { name: "从完整复制" })).toBeNull();
     expect(screen.queryByRole("button", { name: "极简" })).toBeNull();
-    expect(screen.getByText("完整不能改。要自己关工具，点新建。")).toBeTruthy();
+    expect(
+      screen.getByText("标准不能改。要自己关工具，点新建。"),
+    ).toBeTruthy();
   });
 
   it("这场用极简时胶囊不选中，说明只聊天", () => {
@@ -302,20 +323,32 @@ describe("装配胶囊", () => {
       main: { origin: "platform" as const, provider_id: null, model: "flash" },
       enabled_mcp_server_ids: [],
     };
+    const standard = {
+      id: "sys-standard",
+      name: "标准",
+      kind: "system" as const,
+      is_default: true,
+      recipe: "standard" as const,
+      main: { origin: "platform" as const, provider_id: null, model: "flash" },
+      enabled_mcp_server_ids: [],
+    };
     const full = {
       id: "sys-full",
       name: "完整",
       kind: "system" as const,
-      is_default: true,
+      is_default: false,
       recipe: "full" as const,
       main: { origin: "platform" as const, provider_id: null, model: "flash" },
       enabled_mcp_server_ids: [],
     };
     editing.profile = chat;
-    editing.profiles = [full, chat, mine];
+    editing.profiles = [standard, full, chat, mine];
     editing.conversationId = "c1";
     renderPage();
     expect(screen.queryByRole("button", { name: "极简" })).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "标准", pressed: false }),
+    ).toBeTruthy();
     expect(
       screen.getByRole("button", { name: "完整", pressed: false }),
     ).toBeTruthy();

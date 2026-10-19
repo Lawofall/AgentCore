@@ -218,3 +218,86 @@ export function probeAvailableLanguages(): ExecLanguage[] {
   }
   return out;
 }
+
+export type RunShellOs = "Windows" | "macOS" | "Linux";
+
+export type RunShellKind = "bash" | "powershell";
+
+/** The launcher ``run`` uses for a human command. Not host, not the user PTY. */
+export type RunShellSpec = {
+  os: RunShellOs;
+  shell: string;
+  kind: RunShellKind;
+  file: string;
+};
+
+function hostOsLabel(
+  platform: NodeJS.Platform = process.platform,
+): RunShellOs | null {
+  if (platform === "win32") return "Windows";
+  if (platform === "darwin") return "macOS";
+  if (platform === "linux") return "Linux";
+  return null;
+}
+
+export function bashShellLabel(file: string): string {
+  const norm = file.replace(/\//g, "\\").toLowerCase();
+  if (norm.includes("\\git\\bin\\bash")) return "Git Bash";
+  return "bash";
+}
+
+export function powershellShellLabel(file: string): string {
+  const norm = file.replace(/\//g, "\\").toLowerCase();
+  if (norm.includes("windowspowershell") || norm.endsWith("\\powershell.exe")) {
+    return "PowerShell 5.1";
+  }
+  if (norm.endsWith("\\pwsh.exe") || norm.endsWith("\\pwsh")) {
+    return "PowerShell 7";
+  }
+  return "PowerShell";
+}
+
+/**
+ * Resolve ``run``'s command launcher on this host.
+ * Mirrors server ``probe_host_run_shell`` (Git Bash → powershell → pwsh).
+ */
+export function resolveRunShell(
+  platform: NodeJS.Platform = process.platform,
+): RunShellSpec | null {
+  const os = hostOsLabel(platform);
+  if (!os) return null;
+  const bash = resolveBashLauncher();
+  if (bash) {
+    return {
+      os,
+      shell: bashShellLabel(bash),
+      kind: "bash",
+      file: bash,
+    };
+  }
+  const ps = whichCommand("powershell") ?? whichCommand("pwsh");
+  if (ps) {
+    return {
+      os,
+      shell: powershellShellLabel(ps),
+      kind: "powershell",
+      file: ps,
+    };
+  }
+  return null;
+}
+
+export const RUN_SHELL_UNAVAILABLE =
+  "找不到可用的 bash 或 PowerShell，无法执行命令。";
+
+/** argv after ``file`` for one human command string. */
+export function runShellArgv(spec: RunShellSpec, command: string): string[] {
+  if (spec.kind === "bash") return ["-lc", command];
+  return ["-NoProfile", "-NonInteractive", "-Command", command];
+}
+
+export function runShellEnvExtra(
+  platform: NodeJS.Platform = process.platform,
+): Record<string, string> {
+  return platform === "win32" ? { CHERE_INVOKING: "1" } : {};
+}

@@ -37,6 +37,46 @@ def reset_omit_desk_rules(token: Token[bool]) -> None:
     _OMIT_DESK.reset(token)
 
 
+def arm_assembly_bind(
+    bind: object | None,
+) -> tuple[Token, Token, Token, Token, Token, Token]:
+    """Bind a sidecar session's capability surface. None stays unbound (evals)."""
+    from agentcore.assembly.recipes import (
+        AssemblySurface,
+        capability_recipe_for_id,
+        surface_from_recipe,
+    )
+    from agentcore.runtime.context.envelope_switches import normalize_omitted_projections
+    from agentcore.runtime.skills.factory_switches import normalize_omitted_factory_skills
+    from agentcore.tools.switchboard import normalize_disabled_tools
+
+    if bind is None:
+        return _unbound()
+    aid = getattr(bind, "assembly_id", None)
+    recipe = capability_recipe_for_id(aid) if isinstance(aid, str) else None
+    if recipe is not None:
+        # Official recipe: id wins. Client lists are not a second copy.
+        return _bound(surface_from_recipe(recipe), skills=None, plugs=frozenset())
+    surface = AssemblySurface(
+        disabled_tools=normalize_disabled_tools(list(getattr(bind, "disabled_tools", ()) or ())),
+        omitted_projections=normalize_omitted_projections(
+            list(getattr(bind, "omitted_projections", ()) or ())
+        ),
+        omitted_factory_skills=normalize_omitted_factory_skills(
+            list(getattr(bind, "omitted_factory_skills", ()) or ())
+        ),
+        omit_desk_rules=bool(getattr(bind, "omit_desk_rules", False)),
+        recipe=None,
+    )
+    skills = getattr(bind, "skill_membership", None)
+    if skills is None:
+        skills = {}
+    elif not isinstance(skills, dict):
+        skills = {}
+    plugs = frozenset(str(item) for item in (getattr(bind, "enabled_mcp_server_ids", ()) or ()))
+    return _bound(surface, skills=skills, plugs=plugs)
+
+
 async def arm_conversation_assembly(
     session: AsyncSession, conv: object
 ) -> tuple[Token, Token, Token, Token, Token, Token]:
@@ -59,7 +99,7 @@ async def arm_conversation_assembly(
         surface = surface_for(aid, None)
         if surface is None:
             return _unbound()
-        # Official 完整 has no membership row: account 交代 follow the documents.
+        # Official recipes have no membership row: account 交代 follow the documents.
         return _bound(surface, skills=None, plugs=frozenset())
     result = await session.execute(select(AssemblySkill).where(AssemblySkill.assembly_id == aid))
     skills = {skill.document_id: skill.apply_mode for skill in result.scalars()}

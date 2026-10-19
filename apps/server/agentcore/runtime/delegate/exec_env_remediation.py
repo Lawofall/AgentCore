@@ -81,14 +81,13 @@ def exec_env_remediation_zh(
         )
 
     if kind == "capability_office":
-        # 仅针对无确定性导出器的 Office 目标（.pptx/.xlsx/.odt/.rtf）。
-        # Word/PDF 有 md_export，与沙箱正交——别顺手一起报做不到。
+        # 仅针对无确定性转换器的 Office 目标（.pptx/.xlsx/.odt/.rtf）。
+        # Word/PDF 与沙箱正交——别顺手一起报做不到。
         docx_clause = (
             "【注意·别扩大缺口】`.docx` / `.pdf` **不在**本缺口内："
-            "确定性导出器 `md_export` 与执行沙箱无关"
-            "（本回合工具表有这把即可用，不看 `run`），"
-            "落盘 `.md` 后导出即可当场交付真 Word / PDF；"
-            "【禁止】把 Word/PDF 一并说成本回合做不到。"
+            "成篇 `.md` 即收口，与执行沙箱无关；"
+            "【禁止】把 Word/PDF 一并说成本回合做不到；"
+            "【禁止】用 run / reportlab / python-docx 转换。"
         )
         if local:
             return (

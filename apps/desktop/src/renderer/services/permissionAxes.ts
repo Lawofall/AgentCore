@@ -27,18 +27,15 @@ export const BOUNDARY_LABELS: Record<
   },
   folder: {
     short: "本文件夹",
-    description:
-      "本文件夹里可以改文件、跑命令、装依赖、用浏览器。装软件、推远程、毁灭形删除、读私钥仍会单独拦住。",
+    description: "这个文件夹里可以改文件、跑命令、用浏览器。装软件、推远程仍会问。",
   },
   computer: {
     short: "这台电脑",
-    description:
-      "这台电脑上的文件和本机操作。整盘、私钥、毁灭形删除、装软件、推远程仍会单独拦住。",
+    description: "这台电脑上的文件和本机操作。装软件、推远程仍会问。",
   },
   full: {
     short: "完全权限",
-    description:
-      "推远程、装软件、附着窗口和 MCP 不再询问。毁灭形删除、force push、私钥、密码框仍会拦住。本机引擎上还能做本机操作。",
+    description: "不再询问。格式化磁盘、私钥、密码框仍拦住。",
   },
 };
 
@@ -104,10 +101,10 @@ export function permissionAxesShortLabel(raw: unknown): string | null {
 }
 
 const COMPUTER_CONFIRM =
-  "这台电脑上的文件和本机操作都会放行。整盘、私钥、毁灭形删除、装软件、推远程仍会单独拦住。确定继续？";
+  "这台电脑上的文件和本机操作都会放行。装软件、推远程仍会问。格式化磁盘、私钥、密码框仍拦住。确定继续？";
 
 const FULL_CONFIRM =
-  "完全权限下，推远程、装软件、附着窗口和 MCP 不再询问。格式化磁盘、force push、私钥、密码框仍会拦住。确定继续？";
+  "完全权限下不再询问，包括推主干和强推。格式化磁盘、私钥、密码框仍拦住。确定继续？";
 
 export function needsComputerConfirm(
   current: PermissionAxes,

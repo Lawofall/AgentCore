@@ -49,7 +49,7 @@ export function updateLlmModelProfile(
   );
 }
 
-/** 删除自建能力。官方完整不能删。 */
+/** 删除自建能力。官方配方不能删。 */
 export function deleteLlmModelProfile(
   profileId: string,
 ): Promise<{ status: string }> {

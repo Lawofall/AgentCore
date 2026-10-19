@@ -61,11 +61,14 @@ def test_cloud_capability_warning_forbids_reimport():
     assert "runsc_failed" in warn
 
 
-def test_capability_office_copy_carves_out_deterministic_word_pdf():
-    """两个分支都须点名 md_export，且缺口只落在 pptx/xlsx。"""
+def test_capability_office_copy_carves_out_word_pdf():
+    """两个分支都须说明 Word/PDF 不在缺口内，且缺口只落在 pptx/xlsx。"""
     for backend in (LocalBackend(), _CloudBackend()):
         copy = exec_env_remediation_zh(backend=backend, kind="capability_office")
-        assert "md_export" in copy
+        assert "本缺口内" in copy
+        assert ".docx" in copy and ".pdf" in copy
+        assert "打开的文件" not in copy
+        assert "md_export" not in copy
         assert "md_to_docx" not in copy and "md_to_pdf" not in copy
         assert ".pptx/.xlsx" in copy
         assert ".docx/.pptx/.xlsx" not in copy

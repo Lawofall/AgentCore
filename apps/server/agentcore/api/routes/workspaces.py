@@ -445,7 +445,7 @@ async def convert_md_to_docx(
     body: ConvertMdToDocxRequest,
     user: AuthUser,
 ):
-    """Stateless Markdown → Word (shared converter; used by local desktop「导出 Word」).
+    """Stateless Markdown → Word (shared converter; used by local desktop「导出」).
 
     Does not touch a workspace. Images are optional base64 payloads keyed by the
     raw Markdown ``src``. Auth required so the surface is not a public converter.
@@ -507,7 +507,7 @@ async def convert_md_to_pdf(
     body: ConvertMdToPdfRequest,
     user: AuthUser,
 ):
-    """Stateless Markdown → PDF (shared converter; used by local desktop「导出 PDF」).
+    """Stateless Markdown → PDF (shared converter; used by local desktop「导出」).
 
     Does not touch a workspace. Auth required so the surface is not a public converter.
     """

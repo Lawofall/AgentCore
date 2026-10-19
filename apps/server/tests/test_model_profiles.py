@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from agentcore.assembly.recipes import FULL, capability_preset_id
+from agentcore.assembly.recipes import FULL, STANDARD, capability_preset_id
 from agentcore.llm.model_profiles import (
     LlmModelProfileService,
     _capability_main_model_id,
@@ -21,6 +21,14 @@ from agentcore.llm.model_profiles import (
 # Former hardcoded product UUIDs — must NOT be recognized as system presets.
 _LEGACY_SYSTEM_PROFILE_52 = "00000000-0000-4000-8000-000000000011"
 _LEGACY_SYSTEM_PROFILE_GROK = "00000000-0000-4000-8000-000000000012"
+
+
+@pytest.fixture(autouse=True)
+def _empty_skill_maps(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "agentcore.llm.model_profiles.LlmModelProfileService._skill_maps",
+        AsyncMock(return_value={}),
+    )
 
 
 def _glm_preset_id() -> str:
@@ -70,7 +78,7 @@ def test_system_profile_default_prefers_platform_model(monkeypatch):
         "agentcore.llm.model_profiles.settings.platform_model",
         "glm-5.2",
     )
-    assert system_profile_default_id() == capability_preset_id(FULL)
+    assert system_profile_default_id() == capability_preset_id(STANDARD)
     assert _capability_main_model_id() == "glm-5.2"
 
 
@@ -91,7 +99,7 @@ def test_system_profile_default_falls_to_first_when_platform_model_absent(monkey
         "agentcore.llm.model_profiles.settings.platform_model",
         "not-in-list",
     )
-    assert system_profile_default_id() == capability_preset_id(FULL)
+    assert system_profile_default_id() == capability_preset_id(STANDARD)
     assert _capability_main_model_id() == "grok-4.5"
 
 
@@ -114,7 +122,7 @@ async def test_list_profiles_hides_missing_catalog_models(monkeypatch):
     svc._repo.list_for_user = AsyncMock(return_value=[])  # type: ignore[method-assign]
 
     views = await svc.list_profiles("u1")
-    assert [v.name for v in views] == ["完整", "极简"]
+    assert [v.name for v in views] == ["标准", "完整", "极简"]
 
 
 @pytest.mark.asyncio
@@ -137,7 +145,7 @@ async def test_list_profiles_hides_system_when_platform_billing_off(monkeypatch)
     svc._repo.list_for_user = AsyncMock(return_value=[])  # type: ignore[method-assign]
 
     views = await svc.list_profiles("u1")
-    assert [v.name for v in views] == ["完整", "极简"]
+    assert [v.name for v in views] == ["标准", "完整", "极简"]
 
 
 @pytest.mark.asyncio
@@ -163,10 +171,12 @@ async def test_list_profiles_marks_default_when_present(monkeypatch):
     svc._repo.list_for_user = AsyncMock(return_value=[])  # type: ignore[method-assign]
 
     views = await svc.list_profiles("u1")
-    assert [v.name for v in views] == ["完整", "极简"]
-    assert views[0].id == capability_preset_id(FULL)
+    assert [v.name for v in views] == ["标准", "完整", "极简"]
+    assert views[0].id == capability_preset_id(STANDARD)
     assert views[0].is_default is True
     assert views[0].omitted_factory_skills == ()
+    assert "debate" in views[0].disabled_tools
+    assert "files" not in views[0].disabled_tools
 
 
 @pytest.mark.asyncio
@@ -192,7 +202,7 @@ async def test_list_profiles_projects_multiple_models(monkeypatch):
     svc._repo.list_for_user = AsyncMock(return_value=[])  # type: ignore[method-assign]
 
     views = await svc.list_profiles("u1")
-    assert [v.name for v in views] == ["完整", "极简"]
+    assert [v.name for v in views] == ["标准", "完整", "极简"]
     assert views[0].is_default is True
 
 
@@ -216,13 +226,13 @@ async def test_official_list_is_one_recipe_not_one_row_per_sku(monkeypatch):
     svc._repo.list_for_user = AsyncMock(return_value=[])  # type: ignore[method-assign]
 
     views = await svc.list_profiles("u1")
-    assert [v.name for v in views] == ["完整", "极简"]
-    assert [v.recipe for v in views] == ["full", "chat"]
+    assert [v.name for v in views] == ["标准", "完整", "极简"]
+    assert [v.recipe for v in views] == ["standard", "full", "chat"]
 
     expanded = await svc.expand("u1", None)
     assert expanded.main.model == "deepseek-v4-flash-free"
-    assert expanded.name == "完整"
-    assert expanded.profile_id == capability_preset_id(FULL)
+    assert expanded.name == "标准"
+    assert expanded.profile_id == capability_preset_id(STANDARD)
 
 
 @pytest.mark.asyncio
@@ -250,7 +260,7 @@ async def test_expand_none_and_dangling_fall_back_to_platform_default(monkeypatc
     expanded = await svc.expand("u1", None)
     assert expanded.profile_id == system_profile_default_id()
     assert expanded.main.model == "glm-5.2"
-    assert expanded.name == "完整"
+    assert expanded.name == "标准"
 
     dangling = await svc.expand("u1", "00000000-0000-4000-8000-000000000002")
     assert dangling.profile_id == system_profile_default_id()
@@ -327,24 +337,24 @@ async def test_set_default_pins_official_recipe_without_copying():
 
 
 @pytest.mark.asyncio
-async def test_snapshot_default_returns_virtual_full():
+async def test_snapshot_default_returns_virtual_standard():
     svc = LlmModelProfileService(MagicMock())
     svc._default_id = AsyncMock(return_value=None)  # type: ignore[method-assign]
     svc._repo.list_for_user = AsyncMock(return_value=[])  # type: ignore[method-assign]
-    assert await svc.snapshot_default_profile_id("u1") == capability_preset_id(FULL)
+    assert await svc.snapshot_default_profile_id("u1") == capability_preset_id(STANDARD)
 
 
 @pytest.mark.asyncio
 async def test_ensure_writable_star_copies_official():
     svc = LlmModelProfileService(MagicMock())
     svc.snapshot_default_profile_id = AsyncMock(  # type: ignore[method-assign]
-        return_value=capability_preset_id(FULL)
+        return_value=capability_preset_id(STANDARD)
     )
     created = SimpleNamespace(id="asm-copy")
     svc.create_profile = AsyncMock(return_value=created)  # type: ignore[method-assign]
     assert await svc.ensure_writable_star("u1") == "asm-copy"
     svc.create_profile.assert_awaited_once_with(
-        "u1", name="完整 副本", origin="full", set_as_default=True
+        "u1", name="标准 副本", origin="standard", set_as_default=True
     )
 
 
@@ -361,7 +371,7 @@ async def test_ensure_writable_star_keeps_owned_pin():
 
 @pytest.mark.asyncio
 async def test_list_marks_user_default_when_system_pin_dormant(monkeypatch):
-    """A leftover per-model pin is not an assembly. Recipes stay listed; 完整 is the star."""
+    """A leftover per-model pin is not an assembly. Recipes stay listed; 标准 is the star."""
     from types import SimpleNamespace
 
     monkeypatch.setattr(
@@ -394,11 +404,11 @@ async def test_list_marks_user_default_when_system_pin_dormant(monkeypatch):
     svc._users.set_default_model_profile = AsyncMock()  # type: ignore[method-assign]
 
     views = await svc.list_profiles("u1")
-    assert [v.name for v in views] == ["完整", "极简", "我的组合"]
+    assert [v.name for v in views] == ["标准", "完整", "极简", "我的组合"]
     assert views[0].is_default is True
-    assert views[2].id == "user-combo-1"
-    assert views[2].is_default is False
-    assert views[2].recipe is None
+    assert views[3].id == "user-combo-1"
+    assert views[3].is_default is False
+    assert views[3].recipe is None
     svc._users.set_default_model_profile.assert_not_awaited()
 
 
@@ -841,7 +851,7 @@ async def test_list_profiles_keeps_hidden_recipe(monkeypatch):
     svc._repo.list_for_user = AsyncMock(return_value=[])  # type: ignore[method-assign]
 
     views = await svc.list_profiles("u1")
-    assert [v.name for v in views] == ["完整", "极简"]
+    assert [v.name for v in views] == ["标准", "完整", "极简"]
 
 
 @pytest.mark.asyncio
@@ -883,9 +893,9 @@ async def test_create_profile_rejects_chat_origin():
     from agentcore.core.errors import ValidationError
 
     svc = LlmModelProfileService(MagicMock())
-    with pytest.raises(ValidationError, match="新建从完整复制"):
+    with pytest.raises(ValidationError, match="新建从标准复制"):
         await svc.create_profile("u1", name="未命名", origin="chat")
-    with pytest.raises(ValidationError, match="新建从完整复制"):
+    with pytest.raises(ValidationError, match="新建从标准复制"):
         await svc.create_profile("u1", name="未命名", origin="blank")
 
 

@@ -18,7 +18,7 @@ import {
   deleteWorkspaceFile,
   downloadWorkspaceArchive,
   downloadWorkspaceFile,
-  exportWorkspaceMdToDocx,
+  exportConversationMarkdown,
   fetchWorkspaceFileBlob,
   listWorkspaceFiles,
   moveWorkspaceFile,
@@ -43,7 +43,7 @@ import {
   wsDeleteFile,
   wsDownloadArchive,
   wsDownloadFile,
-  wsExportMdToDocx,
+  wsExportMarkdown,
   wsFetchFileBlob,
   wsListFileIndex,
   wsListFiles,
@@ -184,8 +184,9 @@ interface CloudFileClient {
   ): Promise<void>;
   /** Raw bytes (no save dialog) — backs 「用本机默认应用打开」's temp copy. */
   fetchBytes(path: string): Promise<Blob>;
-  exportMdToDocx(
+  exportMarkdown(
     path: string,
+    format: "docx" | "pdf",
     layout?: "standard" | "official",
   ): Promise<{ path: string; warnings: string[] }>;
   listFileIndex?(): Promise<FileIndexListing>;
@@ -337,7 +338,8 @@ function makeCloudSource(
     ...(caps.edit
       ? {
           copy: (src: string, dst: string) => client.copy(src, dst),
-          exportMdToDocx: (path, layout) => client.exportMdToDocx(path, layout),
+          exportMarkdown: (path, format, layout) =>
+            client.exportMarkdown(path, format, layout),
         }
       : {}),
   };
@@ -368,8 +370,8 @@ export function createWorkspaceSource(
         ? downloadWorkspaceArchive(conversationId, path, filename)
         : downloadWorkspaceFile(conversationId, path, filename),
     fetchBytes: (path) => fetchWorkspaceFileBlob(conversationId, path),
-    exportMdToDocx: (path, layout) =>
-      exportWorkspaceMdToDocx(conversationId, path, layout),
+    exportMarkdown: (path, format, layout) =>
+      exportConversationMarkdown(conversationId, path, format, layout),
   });
   // 桌面专属 HTML 完整效果出口（web stub 不提供 → 面板源码 + 下载兜底）。
   return withCloudHtmlEntries(source, {
@@ -409,7 +411,8 @@ export function createCloudWorkspaceSource(
           ? wsDownloadArchive(wsId, path, filename)
           : wsDownloadFile(wsId, path, filename),
       fetchBytes: (path) => wsFetchFileBlob(wsId, path),
-      exportMdToDocx: (path, layout) => wsExportMdToDocx(wsId, path, layout),
+      exportMarkdown: (path, format, layout) =>
+        wsExportMarkdown(wsId, path, format, layout),
       listFileIndex: () => wsListFileIndex(wsId),
     },
     readonly ? CLOUD_READONLY_CAPS : CLOUD_CAPS,

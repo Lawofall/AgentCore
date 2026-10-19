@@ -6,8 +6,8 @@ follow_main. Images ride ``main``.
 
 **Not a model-metadata owner.** Platform 上架 / display enrichment live in
 :mod:`agentcore.llm.catalog` (+ :mod:`agentcore.llm.model_metadata`). The official
-list is the locked 完整 recipe; its id is
-``uuid5(NAMESPACE_URL, "agentcore:capability-preset:full")``. It uses the
+list starts with the locked 标准 recipe; its id is
+``uuid5(NAMESPACE_URL, "agentcore:capability-preset:standard")``. It uses the
 platform default model (or the first visible 上架 id).
 
 Distinct from scenario ``ProfileParams`` (temperature / rounds) in ``llm/profiles.py``.
@@ -72,11 +72,16 @@ class ModelProfileView:
     name: str
     kind: ProfileKind
     is_default: bool = False
-    # full while an owned row still locks official 完整. None on snapshots.
+    # full / standard while an owned row still locks that official recipe. None on snapshots.
     recipe: str | None = None
     warnings: tuple[str, ...] = ()
     enabled_mcp_server_ids: tuple[str, ...] = ()
     omitted_factory_skills: tuple[str, ...] = ()
+    disabled_tools: tuple[str, ...] = ()
+    omitted_projections: tuple[str, ...] = ()
+    omit_desk_rules: bool = False
+    # None = account 交代 follow the documents (official recipes).
+    skill_membership: dict[str, str] | None = None
     main: ProfileSlot | None = None
     worker: ProfileSlot | None = None
     reasoning_effort: str | None = None
@@ -140,10 +145,10 @@ def _capability_main_model_id() -> str | None:
 
 
 def system_profile_default_id() -> str:
-    """Logical default assembly: the 完整 recipe. Its model is copied on materialize."""
-    from agentcore.assembly.recipes import FULL, capability_preset_id
+    """Logical default assembly: the 标准 recipe. Its model is copied on materialize."""
+    from agentcore.assembly.recipes import factory_default_id
 
-    return capability_preset_id(FULL)
+    return factory_default_id()
 
 
 def is_system_profile_id(profile_id: str | None) -> bool:
@@ -287,6 +292,7 @@ class LlmModelProfileService:
 
         recipe = capability_recipe_for_id(profile_id)
         assert recipe is not None
+        surface = surface_from_recipe(recipe)
         model_id = _capability_main_model_id()
         main = (
             ProfileSlot(origin="platform", model=model_id, provider_id=None) if model_id else None
@@ -297,13 +303,24 @@ class LlmModelProfileService:
             kind="system",
             is_default=is_default,
             recipe=recipe.key,
-            omitted_factory_skills=surface_from_recipe(recipe).omitted_factory_skills,
+            omitted_factory_skills=surface.omitted_factory_skills,
+            disabled_tools=surface.disabled_tools,
+            omitted_projections=surface.omitted_projections,
+            omit_desk_rules=surface.omit_desk_rules,
+            skill_membership=None,
             main=main,
         )
 
-    def _view_row(self, row: LlmModelProfile, *, is_default: bool) -> ModelProfileView:
+    def _view_row(
+        self,
+        row: LlmModelProfile,
+        *,
+        is_default: bool,
+        skills: dict[str, str],
+    ) -> ModelProfileView:
         from agentcore.assembly.recipes import surface_from_row
 
+        surface = surface_from_row(row)
         main = _slot_from_row(
             getattr(row, "main_origin", None),
             getattr(row, "main_model", None),
@@ -316,7 +333,11 @@ class LlmModelProfileService:
             is_default=is_default,
             recipe=_locked_recipe_key(row),
             enabled_mcp_server_ids=_mcp_server_ids(getattr(row, "enabled_mcp_server_ids", None)),
-            omitted_factory_skills=surface_from_row(row).omitted_factory_skills,
+            omitted_factory_skills=surface.omitted_factory_skills,
+            disabled_tools=surface.disabled_tools,
+            omitted_projections=surface.omitted_projections,
+            omit_desk_rules=surface.omit_desk_rules,
+            skill_membership=dict(skills),
             main=main,
             worker=_slot_from_row(
                 getattr(row, "worker_origin", None),
@@ -350,13 +371,26 @@ class LlmModelProfileService:
                 effective = next((v.id for v in views), None)
         return [replace(v, is_default=(v.id == effective)) for v in views]
 
+    async def _skill_maps(self, assembly_ids: list[str]) -> dict[str, dict[str, str]]:
+        from agentcore.assembly.membership import skill_maps
+
+        return await skill_maps(self._session, assembly_ids)
+
+    async def _owned_view(self, row: LlmModelProfile, *, is_default: bool) -> ModelProfileView:
+        maps = await self._skill_maps([row.id])
+        return self._view_row(row, is_default=is_default, skills=maps.get(row.id, {}))
+
     async def list_profiles(self, user_id: str) -> list[ModelProfileView]:
         default_id = await self._default_id(user_id)
         views = [
             self._view_system(pid, is_default=False) for pid in self._visible_system_ids()
         ]
-        for row in await self._repo.list_for_user(user_id, include_implicit=False):
-            views.append(self._view_row(row, is_default=False))
+        rows = await self._repo.list_for_user(user_id, include_implicit=False)
+        maps = await self._skill_maps([row.id for row in rows])
+        for row in rows:
+            views.append(
+                self._view_row(row, is_default=False, skills=maps.get(row.id, {}))
+            )
         return self._mark_default(views, default_id)
 
     async def snapshot_default_profile_id(self, user_id: str) -> str | None:
@@ -378,27 +412,27 @@ class LlmModelProfileService:
         return system_profile_default_id()
 
     async def ensure_writable_star(self, user_id: str) -> str | None:
-        """Owned starred assembly. Official 完整 is copied first (点新建)."""
+        """Owned starred assembly. Official 标准 is copied first (点新建)."""
         pin = await self.snapshot_default_profile_id(user_id)
         if pin and not is_system_profile_id(pin):
             return pin
         from agentcore.assembly.recipes import (
-            FULL,
+            STANDARD,
             capability_preset_id,
             capability_recipe_for_id,
         )
 
-        recipe = capability_recipe_for_id(capability_preset_id(FULL))
-        name = f"{recipe.name} 副本" if recipe is not None else "完整 副本"
+        recipe = capability_recipe_for_id(capability_preset_id(STANDARD))
+        name = f"{recipe.name} 副本" if recipe is not None else "标准 副本"
         view = await self.create_profile(
-            user_id, name=name, origin="full", set_as_default=True
+            user_id, name=name, origin="standard", set_as_default=True
         )
         return view.id
 
     def _preferred_visible_preset_ids(self) -> list[str]:
-        from agentcore.assembly.recipes import FULL, capability_preset_id
+        from agentcore.assembly.recipes import factory_default_id
 
-        preset_id = capability_preset_id(FULL)
+        preset_id = factory_default_id()
         return [preset_id] if _system_preset_available(preset_id) else []
 
     async def get_profile(self, user_id: str, profile_id: str) -> ModelProfileView:
@@ -413,7 +447,7 @@ class LlmModelProfileService:
         row = await self._repo.get(profile_id, user_id=user_id)
         if row is None:
             raise NotFoundError("模型组合不存在")
-        return self._view_row(row, is_default=(row.id == default_id))
+        return await self._owned_view(row, is_default=(row.id == default_id))
 
     async def _validate_slot(self, user_id: str, slot: ProfileSlot, *, label: str) -> None:
         if not (slot.model or "").strip():
@@ -502,27 +536,37 @@ class LlmModelProfileService:
         name: str,
         kind: str = "user",
         set_as_default: bool = False,
-        origin: str = "full",
+        origin: str = "standard",
     ) -> ModelProfileView:
         name_s = (name or "").strip()
         if not name_s:
             raise ValidationError("能力名称不能为空")
-        if origin != "full":
-            raise ValidationError("新建从完整复制")
+        if origin != "standard":
+            raise ValidationError("新建从标准复制")
         model_id = _capability_main_model_id() or PLATFORM_MODEL_FLASH
+        from agentcore.assembly.recipes import (
+            STANDARD,
+            capability_recipe_for_key,
+            surface_from_recipe,
+        )
+
+        recipe = capability_recipe_for_key(STANDARD)
+        assert recipe is not None
+        surface = surface_from_recipe(recipe)
         row = await self._repo.create(
             user_id=user_id,
             name=name_s,
             kind=kind,
             main_origin="platform",
             main_model=model_id,
+            disabled_tools=list(surface.disabled_tools),
         )
         from agentcore.assembly.membership import seed_assembly_skills_from_account
 
         await seed_assembly_skills_from_account(self._session, user_id, row.id)
         if set_as_default:
             await self._users.set_default_model_profile(user_id, row.id)
-        return self._view_row(row, is_default=set_as_default)
+        return await self._owned_view(row, is_default=set_as_default)
 
     async def update_profile(
         self,
@@ -614,7 +658,7 @@ class LlmModelProfileService:
         updated = await self._repo.update(profile_id, user_id=user_id, **kwargs)
         assert updated is not None
         default_id = await self._default_id(user_id)
-        view = self._view_row(updated, is_default=(updated.id == default_id))
+        view = await self._owned_view(updated, is_default=(updated.id == default_id))
         if fields_set & {"main", "worker"}:
             from agentcore.llm.model_visibility import byok_refs_from_slots
 
@@ -691,7 +735,7 @@ class LlmModelProfileService:
         if row.kind == "implicit":
             raise ValidationError("不能将隐式组合设为账号默认")
         await self._users.set_default_model_profile(user_id, profile_id)
-        return self._view_row(row, is_default=True)
+        return await self._owned_view(row, is_default=True)
 
     async def ensure_profile_usable(self, user_id: str, profile_id: str) -> str:
         """Return an assembly id that this account may pin. Official recipes stay virtual."""

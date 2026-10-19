@@ -18,6 +18,8 @@ from agentcore.api.schemas import (
     CreateDirRequest,
     ExportDocxRequest,
     ExportDocxResponse,
+    ExportPdfRequest,
+    ExportPdfResponse,
     MoveFileRequest,
     StatusResponse,
     UploadFileResponse,
@@ -32,7 +34,11 @@ from agentcore.conversation.common import resolve_turn_file_workspace
 from agentcore.core.errors import NotFoundError, ValidationError
 from agentcore.db.models import Conversation
 from agentcore.db.repositories import ConversationRepository
-from agentcore.docs_export.workspace_export import ExportMarkdownError, export_markdown_path
+from agentcore.docs_export.workspace_export import (
+    ExportMarkdownError,
+    export_markdown_path,
+    export_markdown_to_pdf_path,
+)
 from agentcore.folders.desk import desk_workspace_user_id, resolve_folder_owner_user_id
 from agentcore.folders.placement import resolve_folder_placement
 from agentcore.storage._archive import ArchiveLimitError
@@ -183,6 +189,33 @@ async def export_conversation_workspace_docx(
     except ExportMarkdownError as e:
         raise ValidationError(e.message) from e
     return ExportDocxResponse(
+        path=result.output_path,
+        source_path=result.source_path,
+        size_bytes=result.size_bytes,
+        warnings=list(result.warnings),
+    )
+
+
+@router.post(
+    "/{conversation_id}/workspace/export-pdf",
+    response_model=ExportPdfResponse,
+)
+async def export_conversation_workspace_pdf(
+    conversation_id: str,
+    body: ExportPdfRequest,
+    user: AuthUser,
+    conv_repo: ConversationRepository = Depends(get_conversation_repo),
+    session: AsyncSession = Depends(get_db),
+):
+    """Export a conversation-workspace Markdown file to a sibling ``.pdf``."""
+    conv = await _get_owned_conversation(conversation_id, user.user_id, conv_repo)
+    await _require_conversation_write(conversation_id, user.user_id, session)
+    try:
+        backend = build_server_workspace(**await _workspace_coords(user.user_id, conv, session))
+        result = await export_markdown_to_pdf_path(backend, body.path, layout=body.layout)
+    except ExportMarkdownError as e:
+        raise ValidationError(e.message) from e
+    return ExportPdfResponse(
         path=result.output_path,
         source_path=result.source_path,
         size_bytes=result.size_bytes,

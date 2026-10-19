@@ -11,6 +11,10 @@
  * 为 ""。具体源（WorkspaceSource / LocalRootSource）各自负责映射到其后端。
  */
 
+/** Markdown → Word / PDF。档位与人侧对话框同一套。 */
+export type MarkdownExportFormat = "docx" | "pdf";
+export type DocLayout = "standard" | "official";
+
 /** 一次列举里的一个条目（树的某一层）。 */
 export interface FileNode {
   /** 源内相对 POSIX 路径；根本身为 ""。 */
@@ -182,12 +186,13 @@ export interface FileSource {
   watch?(dir: string, onChange: FileChangeHandler): () => void;
 
   /**
-   * 把工作区内 Markdown 导出为同目录同名 ``.docx``（调服务端确定性转换器）。
-   * ``layout`` 默认 standard；official = 正式文书通例。仅当源支持时存在。失败抛异常。
+   * 把工作区内 Markdown 导出为同目录同名 Word / PDF（确定性转换器）。
+   * ``layout`` 默认 standard；official = 正式文书通例。仅当源支持且可写时存在。失败抛异常。
    */
-  exportMdToDocx?(
+  exportMarkdown?(
     path: string,
-    layout?: "standard" | "official",
+    format: MarkdownExportFormat,
+    layout?: DocLayout,
   ): Promise<{ path: string; warnings: string[] }>;
 
   /**

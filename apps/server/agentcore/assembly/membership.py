@@ -8,10 +8,28 @@ later edit names a different mode on another assembly.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agentcore.db.models import AssemblySkill, LlmModelProfile
+
+
+async def skill_maps(
+    session: AsyncSession, assembly_ids: Sequence[str]
+) -> dict[str, dict[str, str]]:
+    """document id → apply mode, keyed by assembly. Missing ids are absent."""
+    ids = [item for item in assembly_ids if item]
+    if not ids:
+        return {}
+    result = await session.execute(
+        select(AssemblySkill).where(AssemblySkill.assembly_id.in_(ids))
+    )
+    out: dict[str, dict[str, str]] = {}
+    for skill in result.scalars():
+        out.setdefault(skill.assembly_id, {})[skill.document_id] = skill.apply_mode
+    return out
 
 _MODES = frozenset({"always", "on_demand", "paths"})
 

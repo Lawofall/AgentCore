@@ -76,7 +76,7 @@ export function ToolSwitchList({
   heading?: string;
   /** 组装页一排矮卡，不按目录拆开。输入区菜单仍是行。 */
   layout?: "rows" | "shelf";
-  /** Official 完整: switches are the catalog, not an editor. */
+  /** Official recipe: switches are the catalog, not an editor. */
   locked?: boolean;
 }) {
   const navigate = useNavigate();

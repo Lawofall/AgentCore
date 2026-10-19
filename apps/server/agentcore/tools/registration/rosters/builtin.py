@@ -20,7 +20,6 @@ def load_roster() -> tuple[type, ...]:
     )
     from agentcore.tools.builtin.grep import GrepTool
     from agentcore.tools.builtin.host import HostTool
-    from agentcore.tools.builtin.md_export import MdExportTool
     from agentcore.tools.builtin.run import RunTool
     from agentcore.tools.builtin.web.search import WebSearchTool
     from agentcore.tools.builtin.web.web_fetch import WebFetchTool
@@ -36,7 +35,6 @@ def load_roster() -> tuple[type, ...]:
         GlobTool,
         FileDeleteTool,
         FileBatchTool,
-        MdExportTool,
         GrepTool,
         RunTool,
         # L3 团队浏览器：单一 ``browser``（GRANTABLE · action 政策表；CEO+worker）

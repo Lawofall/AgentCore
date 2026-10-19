@@ -28,6 +28,7 @@ vi.mock("../outbox/projection", () => ({
 }));
 
 import { rmSync } from "node:fs";
+import { bareSidecarSession } from "@shared/sidecar-contract";
 import { SidecarManager } from "../sidecar/manager";
 import type { Transport } from "../sidecar/transport";
 
@@ -141,13 +142,7 @@ describe("SidecarManager warmLlmHttp", () => {
         userMessage: "hi",
         userId: ACCOUNT_USER,
         inference: INFERENCE,
-        session: {
-          permissionAxes: { boundary: "folder" as const },
-          delegateMode: false,
-          folderId: null,
-          localRootId: null,
-          localSubpath: null,
-        },
+        session: bareSidecarSession(),
       },
       "/tmp/ws-await-llm",
     );
