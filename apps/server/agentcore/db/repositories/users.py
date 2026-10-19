@@ -231,7 +231,7 @@ class UserRepository:
         await self._session.commit()
 
     async def set_autonomy_policy(self, user_id: str, policy: str) -> None:
-        """Set the user's capability-authorization posture (安全权限与治理 §二)."""
+        """Set last-picked boundary (安全权限与治理 §二). Seeds new conversations."""
         await self._session.execute(
             update(User).where(User.user_id == user_id).values(autonomy_policy=policy)
         )
@@ -316,6 +316,159 @@ class UserRepository:
         )
         await self._session.commit()
 
+    async def hidden_model_refs(self, user_id: str) -> tuple[str, ...]:
+        """Platform (and leftover) refs this account hid from pickers."""
+        from agentcore.llm.model_visibility import normalize_hidden_model_refs
+
+        user = await self.get_by_id(user_id)
+        if user is None:
+            return ()
+        return tuple(
+            normalize_hidden_model_refs(
+                getattr(user, "hidden_model_refs", None) or ()
+            )
+        )
+
+    async def enabled_model_refs(self, user_id: str) -> tuple[str, ...]:
+        """BYOK refs this account opened onto pickers."""
+        from agentcore.llm.model_visibility import normalize_picker_model_refs
+
+        user = await self.get_by_id(user_id)
+        if user is None:
+            return ()
+        return tuple(
+            normalize_picker_model_refs(
+                getattr(user, "enabled_model_refs", None) or ()
+            )
+        )
+
+    async def set_hidden_model_refs(
+        self, user_id: str, refs: Sequence[str]
+    ) -> tuple[str, ...]:
+        """Replace the hidden-ref list. Returns the stored canonical set."""
+        hidden, _enabled = await self.set_picker_visibility(
+            user_id, hidden=refs, enabled=None
+        )
+        return hidden
+
+    async def enable_picker_refs(
+        self, user_id: str, refs: Sequence[str]
+    ) -> tuple[str, ...]:
+        """Union BYOK refs onto the picker allowlist. No-op when nothing new."""
+        from agentcore.llm.model_visibility import merge_enabled_picker_refs
+
+        current = await self.enabled_model_refs(user_id)
+        merged = merge_enabled_picker_refs(current, refs)
+        if merged == list(current):
+            return current
+        hidden = await self.hidden_model_refs(user_id)
+        _hidden, enabled = await self.set_picker_visibility(
+            user_id, hidden=hidden, enabled=merged
+        )
+        return enabled
+
+    async def set_picker_visibility(
+        self,
+        user_id: str,
+        *,
+        hidden: Sequence[str],
+        enabled: Sequence[str] | None,
+    ) -> tuple[tuple[str, ...], tuple[str, ...]]:
+        """Replace picker membership. ``enabled is None`` leaves the allowlist."""
+        from agentcore.llm.model_visibility import normalize_picker_model_refs
+
+        stored_hidden = normalize_picker_model_refs(list(hidden))
+        values: dict[str, list[str]] = {"hidden_model_refs": stored_hidden}
+        stored_enabled: tuple[str, ...] | None = None
+        if enabled is not None:
+            stored_enabled = tuple(normalize_picker_model_refs(list(enabled)))
+            values["enabled_model_refs"] = list(stored_enabled)
+        await self._session.execute(
+            update(User).where(User.user_id == user_id).values(**values)
+        )
+        await self._session.commit()
+        if stored_enabled is None:
+            stored_enabled = await self.enabled_model_refs(user_id)
+        return tuple(stored_hidden), stored_enabled
+
+    async def model_display_names(self, user_id: str) -> dict[str, str]:
+        """BYOK ref → display name for this account (platform rows never appear)."""
+        from agentcore.llm.model_display_names import normalize_model_display_names
+
+        user = await self.get_by_id(user_id)
+        if user is None:
+            return {}
+        return normalize_model_display_names(
+            getattr(user, "model_display_names", None) or {}
+        )
+
+    async def composer_model_override(self, user_id: str) -> dict | None:
+        """Account last-used composer snapshot, or None if the picker never wrote one."""
+        user = await self.get_by_id(user_id)
+        if user is None:
+            return None
+        raw = getattr(user, "composer_model_override", None)
+        return dict(raw) if isinstance(raw, dict) else None
+
+    async def set_composer_model_override(
+        self, user_id: str, payload: dict | None
+    ) -> dict | None:
+        """Replace the account last-used composer snapshot (includes knobs_by_model)."""
+        await self._session.execute(
+            update(User)
+            .where(User.user_id == user_id)
+            .values(composer_model_override=payload)
+        )
+        await self._session.commit()
+        return payload
+
+    async def vision_accept_refs(self, user_id: str) -> tuple[str, ...]:
+        """BYOK refs this account declared as accepting native image parts."""
+        from agentcore.llm.vision_declare import normalize_vision_accept_refs
+
+        user = await self.get_by_id(user_id)
+        if user is None:
+            return ()
+        return tuple(
+            normalize_vision_accept_refs(
+                getattr(user, "vision_accept_refs", None) or ()
+            )
+        )
+
+    async def set_vision_accept(
+        self, user_id: str, ref: str, accept: bool
+    ) -> tuple[str, bool]:
+        """Upsert or delete one BYOK vision declare. Returns ``(canonical, stored)``."""
+        from agentcore.llm.vision_declare import apply_vision_accept
+
+        current = await self.vision_accept_refs(user_id)
+        canonical, stored, mapping = apply_vision_accept(current, ref, accept)
+        await self._session.execute(
+            update(User)
+            .where(User.user_id == user_id)
+            .values(vision_accept_refs=mapping)
+        )
+        await self._session.commit()
+        return canonical, stored
+
+    async def set_model_display_name(
+        self, user_id: str, ref: str, display_name: str | None
+    ) -> tuple[str, str | None]:
+        """Upsert or delete one BYOK alias. Returns ``(canonical_ref, stored_or_none)``."""
+        from agentcore.llm.model_display_names import apply_model_display_name
+
+        current = await self.model_display_names(user_id)
+        canonical, name, mapping = apply_model_display_name(
+            current, ref, display_name
+        )
+        await self._session.execute(
+            update(User)
+            .where(User.user_id == user_id)
+            .values(model_display_names=mapping)
+        )
+        await self._session.commit()
+        return canonical, name
+
     async def list_user_ids(self) -> Sequence[str]:
         """All user ids (memory backfill / account-wide scans)."""
         result = await self._session.execute(select(User.user_id))
@@ -356,6 +509,71 @@ class UserRepository:
             return
         await self._session.execute(update(User).where(User.user_id == user_id).values(**values))
         await self._session.commit()
+
+    async def apply_seat(
+        self,
+        user_id: str,
+        *,
+        plan: str | None,
+        until: datetime | None,
+        pending_plan: str | None,
+        reminded_until: datetime | None,
+        monthly_cost_cny: float | None,
+        daily_cost_cny: float | None,
+        search_daily: int | None,
+        search_monthly: int | None,
+        commit: bool = True,
+    ) -> User | None:
+        """Write the paid seat + the SKU quota overrides in one update."""
+        await self._session.execute(
+            update(User)
+            .where(User.user_id == user_id)
+            .values(
+                seat_plan=plan,
+                seat_until=until,
+                seat_pending_plan=pending_plan,
+                seat_reminded_until=reminded_until,
+                quota_monthly_cost_cny=monthly_cost_cny,
+                quota_daily_cost_cny=daily_cost_cny,
+                quota_search_daily=search_daily,
+                quota_search_monthly=search_monthly,
+            )
+        )
+        await commit_or_flush(self._session, commit=commit)
+        return await self.get_by_id(user_id)
+
+    async def list_seated(self, *, until_before: datetime) -> Sequence[User]:
+        """Accounts with a paid seat whose ``seat_until`` is at or before ``until_before``.
+
+        Used by the expiry / reminder sweep. Includes grace / pending rows — the
+        service decides which action applies.
+        """
+        result = await self._session.execute(
+            select(User).where(
+                User.seat_plan.is_not(None),
+                User.seat_until.is_not(None),
+                User.seat_until <= until_before,
+                User.deleted_at.is_(None),
+            )
+        )
+        return result.scalars().all()
+
+    async def list_remindable(self, *, remind_from: datetime, now: datetime) -> Sequence[User]:
+        """Paid seats entering the 3-day reminder window that have not been mailed."""
+        result = await self._session.execute(
+            select(User).where(
+                User.seat_plan.is_not(None),
+                User.seat_until.is_not(None),
+                User.seat_until > now,
+                User.seat_until <= remind_from,
+                User.deleted_at.is_(None),
+                or_(
+                    User.seat_reminded_until.is_(None),
+                    User.seat_reminded_until != User.seat_until,
+                ),
+            )
+        )
+        return result.scalars().all()
 
     async def update(
         self,

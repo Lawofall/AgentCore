@@ -18,6 +18,7 @@ from agentcore.api.schemas.messages import (
     LocalTurnHeartbeatRequest,
     LocalTurnJournalRequest,
     LocalTurnStreamSegmentsRequest,
+    RecordTurnRequest,
 )
 from agentcore.conversation import local_turn as local_turn_mod
 from agentcore.conversation.local_turn import (
@@ -430,7 +431,6 @@ async def test_get_overlay_stacks_running_and_segments(monkeypatch):
         agent_mentions=[],
         citations=[],
         evidence_ledger=[],
-        followups=[],
         cost=None,
         trace_id=_TRACE,
     )
@@ -619,4 +619,13 @@ async def test_begin_rejects_non_uuid_ids():
     with pytest.raises(PydanticValidationError):
         AbortLocalTurnRequest.model_validate(
             {"user_message_id": _UMID, "message_id": "resume-x"}
+        )
+    with pytest.raises(PydanticValidationError):
+        RecordTurnRequest.model_validate(
+            {
+                "user_message": "hi",
+                "user_message_id": "resume-not-a-uuid",
+                "message_id": _MID,
+                "trace_id": _TRACE,
+            }
         )

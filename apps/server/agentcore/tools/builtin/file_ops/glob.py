@@ -38,6 +38,7 @@ from .listing import (
     pattern_targets_archives,
     visible_list_entries,
 )
+from .prepare_path import TOOL_PATH_DESCRIPTION
 
 
 class GlobTool:
@@ -69,7 +70,7 @@ class GlobTool:
                     },
                     "path": {
                         "type": "string",
-                        "description": "搜索根（默认 `.`=整仓）。",
+                        "description": TOOL_PATH_DESCRIPTION,
                     },
                 },
                 "required": ["pattern"],

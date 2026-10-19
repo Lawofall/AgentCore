@@ -1,53 +1,32 @@
 // @vitest-environment jsdom
 /**
- * Tests for 设置·通用 — 主题与联网搜索。
+ * Tests for 设置·通用 — 外观、发送方式、系统通知、开发者模式。
  */
-import {
-  cleanup,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-} from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/services/searchConnection", () => ({
-  getSearchConnection: vi.fn(),
-  selectSearchEngine: vi.fn(),
-  connectCleverSee: vi.fn(),
-  connectSearxng: vi.fn(),
-  disconnectSearchEngine: vi.fn(),
-}));
+vi.mock("@/lib/useNarrowLayout", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/useNarrowLayout")>();
+  return {
+    ...actual,
+    useNarrowLayout: vi.fn(() => false),
+  };
+});
 
-import {
-  type SearchConnectionResponse,
-  connectCleverSee,
-  getSearchConnection,
-  selectSearchEngine,
-} from "@/services/searchConnection";
+import { useNarrowLayout } from "@/lib/useNarrowLayout";
 import { useUIStore } from "@/stores/ui";
 import { GeneralSettings } from "../GeneralSettings";
 
-function connection(
-  patch: Partial<SearchConnectionResponse> = {},
-): SearchConnectionResponse {
-  return {
-    selected: "platform",
-    quota: {
-      daily_used: 3,
-      daily_limit: 40,
-      monthly_used: 12,
-      monthly_limit: 400,
-    },
-    cleversee: null,
-    searxng: null,
-    ...patch,
-  };
-}
-
 beforeEach(() => {
-  vi.mocked(getSearchConnection).mockResolvedValue(connection());
-  useUIStore.setState({ theme: "light", developerMode: false });
+  vi.mocked(useNarrowLayout).mockReturnValue(false);
+  useUIStore.setState({
+    theme: "light",
+    developerMode: false,
+    fontSize: "md",
+    zoom: 1,
+    sendOnEnter: true,
+    osNotifications: true,
+  });
 });
 
 afterEach(() => {
@@ -57,7 +36,7 @@ afterEach(() => {
 
 async function renderSettings(): Promise<void> {
   render(<GeneralSettings />);
-  await screen.findByRole("heading", { name: "联网搜索" });
+  await screen.findByRole("heading", { name: "通用" });
 }
 
 describe("GeneralSettings · 主题", () => {
@@ -83,6 +62,68 @@ describe("GeneralSettings · 主题", () => {
   });
 });
 
+describe("GeneralSettings · 字号", () => {
+  it("marks 默认 and writes the store on click", async () => {
+    await renderSettings();
+    const large = screen.getByRole("tab", { name: "大" });
+    expect(
+      screen.getByRole("tab", { name: "默认" }).getAttribute("aria-selected"),
+    ).toBe("true");
+    fireEvent.click(large);
+    expect(useUIStore.getState().fontSize).toBe("lg");
+  });
+});
+
+describe("GeneralSettings · 界面缩放", () => {
+  it("steps up and resets from the percent control", async () => {
+    await renderSettings();
+    fireEvent.click(screen.getByRole("button", { name: "放大界面" }));
+    expect(useUIStore.getState().zoom).toBe(1.1);
+    expect(
+      screen.getByRole("button", { name: "恢复默认缩放" }).textContent,
+    ).toBe("110%");
+    fireEvent.click(screen.getByRole("button", { name: "恢复默认缩放" }));
+    expect(useUIStore.getState().zoom).toBe(1);
+  });
+});
+
+describe("GeneralSettings · 发送", () => {
+  it("marks Enter 发送 and writes the store on click", async () => {
+    await renderSettings();
+    expect(
+      screen
+        .getByRole("tab", { name: "Enter 发送" })
+        .getAttribute("aria-selected"),
+    ).toBe("true");
+    fireEvent.click(screen.getByRole("tab", { name: "Enter 换行" }));
+    expect(useUIStore.getState().sendOnEnter).toBe(false);
+  });
+});
+
+describe("GeneralSettings · 系统通知", () => {
+  it("starts on and writes the switch", async () => {
+    await renderSettings();
+    const toggle = screen.getByRole("switch", { name: "系统通知" });
+    expect(toggle.getAttribute("aria-checked")).toBe("true");
+    fireEvent.click(toggle);
+    expect(useUIStore.getState().osNotifications).toBe(false);
+  });
+});
+
+describe("GeneralSettings · 窄屏", () => {
+  it("keeps 字号 and 发送, hides theme / zoom / OS notify / developer mode / search", async () => {
+    vi.mocked(useNarrowLayout).mockReturnValue(true);
+    await renderSettings();
+    expect(screen.getByRole("tab", { name: "默认" })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "Enter 发送" })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "联网搜索" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^浅色/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: "放大界面" })).toBeNull();
+    expect(screen.queryByRole("switch", { name: "系统通知" })).toBeNull();
+    expect(screen.queryByRole("switch", { name: "开发者模式" })).toBeNull();
+  });
+});
+
 describe("GeneralSettings · 开发者模式", () => {
   it("starts off and writes the switch", async () => {
     await renderSettings();
@@ -90,93 +131,5 @@ describe("GeneralSettings · 开发者模式", () => {
     expect(toggle.getAttribute("aria-checked")).toBe("false");
     fireEvent.click(toggle);
     expect(useUIStore.getState().developerMode).toBe(true);
-  });
-});
-
-describe("GeneralSettings · 联网搜索", () => {
-  it("shows the platform remainder and two empty slots", async () => {
-    await renderSettings();
-    const platform = screen.getByRole("button", { name: /^平台搜索/ });
-    expect(platform.getAttribute("aria-pressed")).toBe("true");
-    expect(platform.textContent).toContain("今日 3/40");
-    expect(platform.textContent).toContain("本月 12/400");
-    expect(screen.getByRole("button", { name: "连接开析" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "连接 SearXNG" })).toBeTruthy();
-  });
-
-  it("keeps a failed 开析 connect on the form", async () => {
-    const { ApiError } = await import("@/services/api");
-    vi.mocked(connectCleverSee).mockRejectedValue(
-      new ApiError(
-        422,
-        JSON.stringify({
-          error: { message: "API Key 不正确。到开析控制台核对或新建" },
-        }),
-      ),
-    );
-    await renderSettings();
-    fireEvent.click(screen.getByRole("button", { name: "连接开析" }));
-    fireEvent.change(screen.getByLabelText("API Key"), {
-      target: { value: "bad-key" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "连接开析" }));
-    expect((await screen.findByRole("alert")).textContent).toContain(
-      "API Key 不正确",
-    );
-    expect(connectCleverSee).toHaveBeenCalledWith("bad-key");
-    expect(screen.getByLabelText("API Key")).toBeTruthy();
-  });
-
-  it("selects 开析 after a successful connect response", async () => {
-    vi.mocked(getSearchConnection).mockResolvedValue(
-      connection({
-        selected: "platform",
-        cleversee: {
-          status: "connected",
-          base_url: "https://cloud-iqs.aliyuncs.com",
-          masked_key: "••••abcd",
-          message: null,
-        },
-      }),
-    );
-    vi.mocked(selectSearchEngine).mockResolvedValue(
-      connection({
-        selected: "cleversee",
-        cleversee: {
-          status: "connected",
-          base_url: "https://cloud-iqs.aliyuncs.com",
-          masked_key: "••••abcd",
-          message: null,
-        },
-      }),
-    );
-    await renderSettings();
-    fireEvent.click(screen.getByRole("button", { name: /^开析/ }));
-    await waitFor(() => {
-      expect(selectSearchEngine).toHaveBeenCalledWith("cleversee");
-    });
-    expect(
-      screen
-        .getByRole("button", { name: /^开析/ })
-        .getAttribute("aria-pressed"),
-    ).toBe("true");
-  });
-
-  it("shows the reconnect reason on the 开析 row", async () => {
-    vi.mocked(getSearchConnection).mockResolvedValue(
-      connection({
-        selected: "cleversee",
-        cleversee: {
-          status: "needs_reconnect",
-          base_url: "https://cloud-iqs.aliyuncs.com",
-          masked_key: "••••abcd",
-          message: "开析账户欠费",
-        },
-      }),
-    );
-    await renderSettings();
-    expect(screen.getByRole("button", { name: /^开析/ }).textContent).toContain(
-      "需要重新连接 · 开析账户欠费",
-    );
   });
 });

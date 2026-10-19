@@ -18,6 +18,7 @@ from agentcore.tools.registration import (
     ToolRegistration,
     ToolSurface,
 )
+from agentcore.workspace.desk_empty import EMPTY_DESK_FACT
 from agentcore.workspace.protocol import (
     AmbiguousMatch,
     NoMatch,
@@ -476,7 +477,12 @@ class FileWriteTool:
                 "properties": {
                     "file_path": {
                         "type": "string",
-                        "description": "工作区内的相对文件路径。",
+                        "description": (
+                            f"工作区相对 POSIX，或本机绝对路径。"
+                            f"{EMPTY_DESK_FACT}时第一层用"
+                            " `site/`（建站）、`app/`（新软件）、`src/`、`docs/`、"
+                            "`design/`、`game/`；套当前文件夹名或应用名当工程根 ≠ 建目录。"
+                        ),
                     },
                     "content": {
                         "type": "string",

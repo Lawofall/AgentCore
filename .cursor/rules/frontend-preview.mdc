@@ -7,7 +7,7 @@ alwaysApply: false
 
 桌面渲染层几乎就是个普通 Vite + React 网页：把仓库里那批 **conformance 向量**（`pnpm conformance` 同一份）经**真实** `dispatchSSEEvent` 回放进**真实**组件，即可离线复现每种 AI 态——零后端、零 LLM、零 token、永不 drift。**改完前端别再去跑真实 AI 看效果。**
 
-> 本页是离线预览与渲染冒烟**配方**，不是改完默认回路。**给人录产品演示**（真实运行 → 磁带 → 真实桌面壳按原节奏可控重放）是另一套 → [`demos/README.md`](/demos/README.md)。
+> 本页是离线预览与渲染冒烟**配方**，不是改完默认回路。**给人录产品演示**（真实运行 → 磁带 → 真实桌面壳按原节奏可控重放）是另一套 → [`demos/README.md`](/demos/README.md)。同一处界面要在真实窗口里拨几套已写好的改法 → `ui-schemes.mdc`。
 
 ## 三个入口
 

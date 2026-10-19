@@ -44,6 +44,7 @@ from agentcore.evals.recording_sink import RecordingSink
 from agentcore.evals.runner import load_cases
 from agentcore.evals.types import EvalCase, TurnOutcome
 from agentcore.runtime.pipeline import run_chat_pipeline
+from agentcore.runtime.turn.snapshot import ConversationSnapshot
 from agentcore.tools.sandbox.subprocess import SubprocessSandbox
 from agentcore.workspace.server import ServerWorkspace
 
@@ -197,6 +198,7 @@ async def _run_approvals_probe() -> None:
             sink=sink,
             user_id=_EVAL_USER_ID,
             backend=backend,
+            conversation=ConversationSnapshot.default(),
             approvals_enabled=True,
             profile_set=profiles,
             llm_credentials=creds,

@@ -28,15 +28,23 @@ alwaysApply: false
 - 标了 ⏳ 但代码已实现：就地改写成现状并标 ✅，留在 01–05。
 - 本地规划稿落地后：结论迁入 01–05，原文可删，在本地规划索引「已退役系列」记一行去向。决策理由写不进 01–05，说明尚未落地，留在本地 06。
 
+## 运营目录
+
+- `docs/06-运营/` 同样 gitignore、不入公开树。写现网供给、进货 / 实付、供应商身份、账号池成员、只给值班看的探测。
+- **禁止迁入 `01`–`05`**。这不是未落地提案，是永远不公开的配方。公开文只写「现网配方不在公开仓」；禁止指向 `docs/06-运营/` 的链接，代码注释同此。
+- 卖价（相对厂商官价的倍率、用户面「约官网 4 倍用量」）仍在公开专题。进货叙事只留本目录。
+- clone 不会带上这些文件；维护者磁盘或私有备份自备一份。
+
 ## 章节检查
 
 `pnpm check:doc-sections`（CI contracts 与 `release:gate`）只校验章节名与目标文 `## N、名` 逐字相等的复合指针。缩写或纯编号不在守卫内。`§9.12` 这类决策号不是章节号。
 
 ## 规则文件
 
-- **双轨镜像**：`.cursor/rules/*.mdc` 与 AgentCore 侧 `.agentcore/rules/*.md`（不在工作区树）并存。改一条行为规则两边同步。
-- 镜像只到语义与结构。宿主工具名各按宿主替换（Cursor 的 StrReplace / Read / Task ↔ AgentCore 侧 `edit` / `read` / `delegate`；`globs` + `alwaysApply` ↔ `apply:`）。
+- **真源**：`.cursor/rules/{关注点}.mdc`（英文短横线；frontmatter 含中文 description）。优先追加进已有文件，主题相关就别新建。
+- **AgentCore 镜像**：产品发现路径是 `AgentCore/rules/*.md`（gitignore `/AgentCore/`，不入仓）。改 `.cursor/rules` 后跑 `pnpm sync:rules`；`pnpm sync:rules:check` 对账（无镜像目录时只验变换）。勿手改生成篇。
+- 镜像只到语义与结构。宿主工具名各按宿主替换（Cursor 的 StrReplace / Read / Task ↔ AgentCore 侧 `edit` / `read` / `delegate`；`globs` + `alwaysApply` ↔ `apply:` / `paths:`）。
+- glob 按触发收窄：配色 = 产品 UI tsx/css；布局 = 页面 / 壳 / primitive / `ChatView`；跨端 = capabilities / 壳 / 页面 / `apps/mobile`。不要 `**/*.tsx` 通配。
 - docs 交叉引用以 `.cursor/rules/*.mdc` 为目标。
 - `.cursorignore`、`hooks.json` 无对侧对应物，靠提示词约束兜底。
 - `docs/`：目录名、文件名用中文；交叉引用用项目根相对路径。
-- `.cursor/rules/`：`{关注点}.mdc`（英文短横线），frontmatter 含中文 description。

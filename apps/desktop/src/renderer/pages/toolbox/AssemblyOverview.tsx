@@ -1,19 +1,18 @@
 import { modelConfigApiErrorMessage } from "@/components/llm/ModelKeyForm";
 import { ConfirmDialog, IconButton } from "@/components/ui";
 import { SimpleTooltip } from "@/components/ui/tooltip";
-import { foldedIntoPreset } from "@/lib/assemblyFold";
+import { isToolboxCapsule, officialHint } from "@/lib/assemblyLock";
 import { PROMPT_ALWAYS_LABEL } from "@/lib/promptShelfTile";
 import { conversationKeys, llmModelProfileKeys } from "@/lib/queryKeys";
 import { notifySuccess } from "@/lib/toast";
 import { cn } from "@/lib/utils";
-import { ModelAssemblySection } from "@/pages/toolbox/ModelAssemblySection";
 import { useEditingAssembly } from "@/pages/toolbox/useEditingAssembly";
 import {
   type LlmModelProfileView,
   deleteLlmModelProfile,
 } from "@/services/llmModelProfiles";
 import { useQueryClient } from "@tanstack/react-query";
-import { Plus, Star, Trash2 } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 
 export function toolOffLine(off: number): string {
@@ -24,12 +23,19 @@ export function envelopeOffLine(off: number): string {
   return off === 0 ? "都在" : `关了 ${off} 行`;
 }
 
+export function factoryOffLine(off: number, total: number): string {
+  if (total <= 0 || off <= 0) return "出厂 开";
+  if (off >= total) return "出厂 关";
+  return `出厂 关了 ${off} 本`;
+}
+
 export function assemblyPromptSummary(
   roster: string,
-  omitFactoryCatalog: boolean | null | undefined,
+  omittedCount: number,
+  total = omittedCount,
 ): string {
   if (roster === "加载中…" || roster === "没读到") return roster;
-  return `${roster} · ${omitFactoryCatalog ? "出厂 关" : "出厂 开"}`;
+  return `${roster} · ${factoryOffLine(omittedCount, total)}`;
 }
 
 export function promptRosterLine(counts: {
@@ -62,14 +68,12 @@ export function countPromptModes(documents: readonly { applyMode: string }[]): {
 }
 
 /**
- * Every assembly on one row. Preset and owned names are the same chip.
- * Another name switches which copy is being edited. The current name,
- * clicked again, renames in place.
- * New and delete are icon buttons on that same row, to the right of the names.
- * Model knobs sit under the names and write as they change.
- * With a conversation open, the star on the current chip adopts that copy
- * for later new conversations. The name still only switches this one.
- * `names` and those two actions stay in the sticky bar; `model` scrolls away.
+ * 完整 and owned names on one row. 极简 is not a capsule here; pick it in
+ * the composer. Another name switches which assembly is in use. Official
+ * chips stay recipes: click pins them, click again does nothing. An owned
+ * chip, clicked again, renames in place. New copies 完整. Delete is an
+ * icon on that same row. Picking a name switches this conversation, or the
+ * next new chat when none is open. Model lives in the composer.
  */
 export function AssemblyOverview({
   renderNames,
@@ -81,17 +85,8 @@ export function AssemblyOverview({
   renderNames?: (names: ReactNode, actions?: ReactNode) => ReactNode;
 }) {
   const queryClient = useQueryClient();
-  const {
-    profile,
-    profiles,
-    conversationId,
-    pending,
-    loading,
-    select,
-    star,
-    createFromCurrent,
-    rename,
-  } = useEditingAssembly();
+  const { profile, profiles, pending, loading, select, create, rename } =
+    useEditingAssembly();
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] =
     useState<LlmModelProfileView | null>(null);
@@ -112,26 +107,21 @@ export function AssemblyOverview({
   if (!profile) {
     const names = (
       <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-        <p className="text-sm text-muted-foreground">还没有装配。</p>
-        <CopyIconButton
-          label="新建一份"
+        <p className="text-sm text-muted-foreground">还没有能力。</p>
+        <AssemblyCreateButton
           disabled={pending}
-          onClick={() => void createFromCurrent()}
-        >
-          <Plus size={16} aria-hidden />
-        </CopyIconButton>
+          onClick={() => void create()}
+        />
       </div>
     );
     if (renderNames) return <div>{renderNames(names)}</div>;
     return names;
   }
 
-  const presets = profiles.filter((row) => row.kind === "system");
-  const mine = profiles.filter(
-    (row) => row.kind === "user" && !foldedIntoPreset(row, presets),
+  const presets = profiles.filter(
+    (row) => row.kind === "system" && isToolboxCapsule(row),
   );
-  const canAdopt = Boolean(conversationId) && !profile.is_default;
-
+  const mine = profiles.filter((row) => row.kind === "user");
   const confirmDelete = async () => {
     if (!pendingDelete) return;
     const target = pendingDelete;
@@ -166,64 +156,31 @@ export function AssemblyOverview({
       className="flex items-center gap-0.5"
       data-testid="assembly-copy-actions"
     >
-      <CopyIconButton
-        label="新建一份"
+      <AssemblyCreateButton
         disabled={chipPending}
-        onClick={() => void createFromCurrent()}
-      >
-        <Plus size={16} aria-hidden />
-      </CopyIconButton>
-      <CopyIconButton
-        label="删除这份"
-        disabled={deleting}
-        onClick={() => setPendingDelete(profile)}
-      >
-        <Trash2 size={16} aria-hidden />
-      </CopyIconButton>
+        onClick={() => void create()}
+      />
+      {profile.kind !== "system" ? (
+        <CopyIconButton
+          label="删除这份"
+          disabled={deleting}
+          onClick={() => setPendingDelete(profile)}
+        >
+          <Trash2 size={16} aria-hidden />
+        </CopyIconButton>
+      ) : null}
     </div>
   );
 
   const names = (
     <div className="flex min-w-48 flex-1 flex-wrap items-center gap-2">
-      {presets.map((row) => {
-        const covers = profiles.filter(
-          (item) => foldedIntoPreset(item, presets)?.id === row.id,
-        );
-        return (
-          <AssemblyNameChip
-            key={row.id}
-            row={row}
-            selected={
-              row.id === profile.id ||
-              covers.some((item) => item.id === profile.id)
-            }
-            starred={row.is_default || covers.some((item) => item.is_default)}
-            pending={chipPending}
-            face={chipIsFace(row, profile, presets)}
-            renaming={renaming}
-            renameNonce={renameNonce}
-            onBeginRename={() => setRenaming(true)}
-            onCommitRename={(name) => void commitRename(name)}
-            onCancelRename={() => setRenaming(false)}
-            onSelect={() => {
-              setRenaming(false);
-              void select(row.id);
-            }}
-            onAdopt={
-              canAdopt && chipIsFace(row, profile, presets)
-                ? () => void star(profile.id)
-                : undefined
-            }
-          />
-        );
-      })}
-      {mine.map((row) => (
+      {presets.map((row) => (
         <AssemblyNameChip
           key={row.id}
           row={row}
           selected={row.id === profile.id}
           pending={chipPending}
-          face={chipIsFace(row, profile, presets)}
+          face={row.id === profile.id}
           renaming={renaming}
           renameNonce={renameNonce}
           onBeginRename={() => setRenaming(true)}
@@ -233,21 +190,31 @@ export function AssemblyOverview({
             setRenaming(false);
             void select(row.id);
           }}
-          onAdopt={
-            canAdopt && chipIsFace(row, profile, presets)
-              ? () => void star(profile.id)
-              : undefined
-          }
+        />
+      ))}
+      {mine.map((row) => (
+        <AssemblyNameChip
+          key={row.id}
+          row={row}
+          selected={row.id === profile.id}
+          pending={chipPending}
+          face={row.id === profile.id}
+          renaming={renaming}
+          renameNonce={renameNonce}
+          onBeginRename={() => setRenaming(true)}
+          onCommitRename={(name) => void commitRename(name)}
+          onCancelRename={() => setRenaming(false)}
+          onSelect={() => {
+            setRenaming(false);
+            void select(row.id);
+          }}
         />
       ))}
     </div>
   );
 
-  const model = (
+  const deleteChrome = (
     <>
-      <div data-testid="assembly-model-block">
-        <ModelAssemblySection />
-      </div>
       {deleteError ? (
         <p className="mt-3 text-xs text-muted-foreground" role="alert">
           {deleteError}
@@ -259,11 +226,7 @@ export function AssemblyOverview({
           if (!open) setPendingDelete(null);
         }}
         title={`删除「${pendingDelete?.name ?? ""}」？`}
-        description={
-          pendingDelete
-            ? assemblyDeleteDescription(pendingDelete, profiles)
-            : ""
-        }
+        description={pendingDelete ? assemblyDeleteDescription() : ""}
         confirmLabel="删除"
         tone="danger"
         busy={deleting}
@@ -272,13 +235,17 @@ export function AssemblyOverview({
     </>
   );
 
+  const hint = officialHint(profile);
+  const hintLine = hint ? (
+    <p className="text-xs text-muted-foreground">{hint}</p>
+  ) : null;
+
   if (renderNames) {
     return (
       <div>
         {renderNames(names, actions)}
-        <div id="model" className="scroll-mt-24">
-          {model}
-        </div>
+        {hintLine ? <div className="pb-1">{hintLine}</div> : null}
+        {deleteChrome}
       </div>
     );
   }
@@ -292,10 +259,30 @@ export function AssemblyOverview({
         {names}
         <div className="ml-auto">{actions}</div>
       </div>
-      <div id="model" className="mt-3 scroll-mt-24">
-        {model}
-      </div>
+      {hintLine}
+      {deleteChrome}
     </div>
+  );
+}
+
+function AssemblyCreateButton({
+  disabled,
+  onClick,
+}: {
+  disabled?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <SimpleTooltip label="新建一份">
+      <IconButton
+        size="md"
+        aria-label="新建一份"
+        disabled={disabled}
+        onClick={onClick}
+      >
+        <Plus size={16} aria-hidden />
+      </IconButton>
+    </SimpleTooltip>
   );
 }
 
@@ -324,37 +311,8 @@ function CopyIconButton({
   );
 }
 
-function assemblyDeleteDescription(
-  row: LlmModelProfileView,
-  profiles: readonly LlmModelProfileView[],
-): string {
-  const presets = profiles.filter((item) => item.kind === "system");
-  const folded = Boolean(foldedIntoPreset(row, presets));
-  if (row.kind === "system" && row.is_default) {
-    return "从这排拿掉。星标改到剩下的另一份，还指着它的对话也改过去。";
-  }
-  if (row.kind === "system") {
-    return "从这排拿掉。还指着它的对话会改用星标那份。";
-  }
-  if (folded && row.is_default) {
-    return "预置还在这排。星标改到剩下的另一份，还指着它的对话也改过去。";
-  }
-  if (folded) {
-    return "预置还在这排。还指着它的对话会改用星标那份。";
-  }
-  if (row.is_default) {
-    return "星标改到剩下的另一份，还指着它的对话也改过去。";
-  }
-  return "还指着它的对话会改用星标那份。";
-}
-
-function chipIsFace(
-  row: LlmModelProfileView,
-  profile: LlmModelProfileView,
-  presets: readonly LlmModelProfileView[],
-): boolean {
-  if (row.id === profile.id) return true;
-  return foldedIntoPreset(profile, presets)?.id === row.id;
+function assemblyDeleteDescription(): string {
+  return "还指着它的对话会改用剩下的另一份。";
 }
 
 function AssemblyNameField({
@@ -391,7 +349,7 @@ function AssemblyNameField({
     <input
       ref={ref}
       value={value}
-      aria-label="装配名称"
+      aria-label="能力名称"
       onChange={(event) => setValue(event.target.value)}
       onKeyDown={(event) => {
         if (event.key === "Enter") {
@@ -420,8 +378,6 @@ function AssemblyNameChip({
   onCommitRename,
   onCancelRename,
   onSelect,
-  onAdopt,
-  starred,
 }: {
   row: LlmModelProfileView;
   selected: boolean;
@@ -433,35 +389,13 @@ function AssemblyNameChip({
   onCommitRename: (name: string) => void;
   onCancelRename: () => void;
   onSelect: () => void;
-  /** 当前这颗还不是星标时，点星才把以后新建改到这份。 */
-  onAdopt?: () => void;
-  starred?: boolean;
 }) {
-  const marked = starred ?? Boolean(row.is_default);
-  const adopt = Boolean(onAdopt) && !marked;
   const chipClass = cn(
     "inline-flex h-8 max-w-full items-center gap-1 rounded-full px-3 text-sm",
     selected
       ? "bg-accent text-accent-foreground"
       : "border border-border bg-card text-foreground hover:bg-muted",
   );
-  const starMark = marked ? (
-    <Star size={14} className="shrink-0 fill-current" aria-hidden />
-  ) : null;
-  const adoptStar =
-    adopt && onAdopt ? (
-      <SimpleTooltip label="以后新建也用这份">
-        <button
-          type="button"
-          aria-label="以后新建也用这份"
-          disabled={pending}
-          onClick={onAdopt}
-          className="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-inherit hover:bg-background/40 disabled:opacity-50"
-        >
-          <Star size={14} aria-hidden />
-        </button>
-      </SimpleTooltip>
-    ) : null;
   if (renaming && face) {
     return (
       <span className={chipClass}>
@@ -471,28 +405,6 @@ function AssemblyNameChip({
           onCommit={onCommitRename}
           onCancel={onCancelRename}
         />
-        {starMark}
-        {adoptStar}
-      </span>
-    );
-  }
-  if (adopt) {
-    return (
-      <span className={chipClass}>
-        <button
-          type="button"
-          aria-pressed={selected}
-          aria-label={row.name}
-          disabled={pending}
-          onClick={() => {
-            if (selected && face) onBeginRename();
-            else onSelect();
-          }}
-          className="min-w-0 truncate bg-transparent text-left text-inherit"
-        >
-          {row.name}
-        </button>
-        {adoptStar}
       </span>
     );
   }
@@ -500,16 +412,19 @@ function AssemblyNameChip({
     <button
       type="button"
       aria-pressed={selected}
-      aria-label={marked ? `${row.name}，新建对话用这份` : row.name}
+      aria-label={row.name}
       disabled={pending}
       onClick={() => {
+        if (row.kind === "system") {
+          if (!selected) onSelect();
+          return;
+        }
         if (selected && face) onBeginRename();
         else onSelect();
       }}
       className={chipClass}
     >
       <span className="truncate">{row.name}</span>
-      {starMark}
     </button>
   );
 }

@@ -1,8 +1,13 @@
 ---
-description: 配色 token 规范——写任何颜色（Tailwind 类或 CSS）时参考，只用语义 token、禁硬编码
+description: 配色 token 规范——写产品 UI 颜色（Tailwind 类或 CSS）时参考，只用语义 token、禁硬编码。协议测试 / 非 UI 包不带。
 globs:
-  - "**/*.tsx"
-  - "**/*.css"
+  - "apps/desktop/src/renderer/**/*.tsx"
+  - "apps/admin/src/**/*.tsx"
+  - "apps/website/src/**/*.tsx"
+  - "packages/design-tokens/**"
+  - "apps/desktop/src/renderer/**/*.css"
+  - "apps/admin/src/**/*.css"
+  - "apps/website/src/**/*.css"
 alwaysApply: false
 ---
 
@@ -14,9 +19,9 @@ alwaysApply: false
 
 | 层 | 语义 | 色 |
 |---|---|---|
-| A 用户面提示 | 横幅 / Toast / 表单失败行 | 蓝 `primary` = 需要你（去配置 / 拍板）；灰 `noticeChipNeutral` = 可恢复中断（限流 / 请稍候 / 发送失败）；红 `destructive` = 危险操作（删除 / 覆盖 / 拒绝）。输入框可发送与停止生成都走 `IconButton` `inverse`（前景实心：浅色近黑、暗色近白），不占用红、不占品牌蓝。空/不可发走实心 `muted`（禁幽灵 `default`）。**认路选中**走 accent 浅底，不走 inverse → [`UI-Pattern索引.md` · 认路选中](/docs/04-前端/UI-Pattern索引.md) |
+| A 用户面提示 | 横幅 / Toast / 表单失败行 | 蓝 `primary` = 需要你（去配置 / 拍板）；灰 `noticeChipNeutral` = 可恢复中断（限流 / 请稍候 / 发送失败）；红 `destructive` = 危险操作（删除 / 覆盖 / 拒绝）。输入框可发送与停止生成都走 `IconButton` `inverse`（前景实心：浅色近黑、暗色近白），不占用红、不占品牌蓝。空/不可发走实心 `muted`（禁幽灵 `default`）。**认路选中**走 accent 浅底，不走 inverse。侧栏三档实色：导航/文件夹 `sidebar-foreground`、对话标题 `sidebar-list`、辅字 `sidebar-muted`；选中只换底，不走 primary 蓝、不用 `/70` → [`UI-Pattern索引.md` · 认路选中](/docs/04-前端/UI-Pattern索引.md) |
 | B 执行态 | run / 工具 / 节点 | pending→muted、running→primary、completed→success、**failed→destructive 红点**。整卡用户提示走 A，禁因 failed 把横幅刷红 |
-| C 分类 | git 字母、风险高中低、截断、录音中、diff 删行 | 可用 `--warning` / 红当分类色，≠ 状态。**禁把 `--warning` token 改成灰** |
+| C 分类 | git 字母、风险高中低、截断、录音中、diff 行 | git 字母 / 风险可用 `--warning` 与红当分类色。diff 行底 `--diff-add` / `--diff-del`、槽 `--diff-add-gutter` / `--diff-del-gutter`、符号 `--diff-add-fg` / `--diff-del-fg`（GitHub Primer 浅洗；≠ 状态，禁借 success/destructive `/10`）。**禁把 `--warning` token 改成灰** |
 
 同形发送/回合提示：有配置 action → primary，否则 `noticeChipNeutral`。加载失败 / 表单 alert / 无 action 的 Toast：行内 muted（手机 `.error` 用 `--fg`），Toast 图标 muted。需要你（额度将尽 / 冲突说明条 / 公告 critical / 去配去建）：primary；覆盖/用云端选中态仍 destructive。`StatusTone` 不恢复 warning。分类色（git 删行、风险「致命」、录音）与执行态红点不收进用户面档。
 

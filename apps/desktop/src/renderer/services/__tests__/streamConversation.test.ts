@@ -8,6 +8,7 @@ import {
 import { formatLocalMoment } from "@/lib/recoveryMoment";
 import { captureCsrf, clearCsrfToken } from "@/services/api";
 import { useConversationStore } from "@/stores/conversation";
+import { useQueuedTurnsStore } from "@/stores/queuedTurns";
 import { MAX_RETRY_AFTER } from "@agentcore/contract-types";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as dispatchMod from "../sse/dispatch";
@@ -25,6 +26,11 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
   useConversationStore.setState({ currentConversationId: null, byId: {} });
+  useQueuedTurnsStore.setState({
+    byConversation: {},
+    authoritativeIds: {},
+    staleIds: {},
+  });
 });
 
 describe("describeStreamError", () => {
@@ -209,10 +215,10 @@ describe("errorActionForCode", () => {
       label: "去服务商",
       href: "/more/providers",
     });
-    // 平台额度耗尽补次级 CTA「接入自己的 Key」(成本配额与计费 §〇·六 F6).
+    // 平台额度耗尽主 CTA「去订阅」(成本配额与计费 §〇·六 F6).
     expect(errorActionForCode("QUOTA_EXCEEDED")).toEqual({
-      label: "接入自己的 Key",
-      href: "/more/providers",
+      label: "去订阅",
+      href: "/more/subscription",
     });
     expect(errorActionForCode(undefined)).toBeNull();
   });
@@ -347,6 +353,69 @@ describe("streamConversation (refused turn)", () => {
       turnCommit,
     });
     expect(turnCommit.committed).toBe(false);
+  });
+});
+
+describe("streamConversation · 传输终态 ≠ 占槽灯", () => {
+  const CID = "c-occupancy";
+
+  it("本条流已收到 message_end，排队仍占槽也不当掉线", async () => {
+    useConversationStore.getState().switchConversation(CID);
+    useConversationStore.getState().createAssistantMessage(CID);
+    useQueuedTurnsStore.getState().upsert({
+      queueId: "q1",
+      conversationId: CID,
+      content: "下一句",
+      position: 1,
+      queueDepth: 1,
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() =>
+        Promise.resolve(
+          new Response(
+            'data: {"type":"message_end","timestamp":"t","payload":{"finish_reason":"end_turn"}}\n\n',
+            { status: 200, headers: { "Content-Type": "text/event-stream" } },
+          ),
+        ),
+      ),
+    );
+
+    await expect(
+      streamConversation({
+        conversationId: CID,
+        content: "hi",
+        delivery: "steer",
+      }),
+    ).resolves.toBeUndefined();
+
+    const rt = useConversationStore.getState().byId[CID];
+    expect(rt?.isGenerating).toBe(true);
+    expect(rt?.error).toBeFalsy();
+  });
+
+  it("流结束但助手仍在写（无终态帧）仍是传输掉线", async () => {
+    useConversationStore.getState().switchConversation(CID);
+    useConversationStore.getState().createAssistantMessage(CID);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() =>
+        Promise.resolve(
+          new Response(
+            'data: {"type":"content_delta","timestamp":"t","payload":{"delta":"半"}}\n\n',
+            { status: 200, headers: { "Content-Type": "text/event-stream" } },
+          ),
+        ),
+      ),
+    );
+
+    const err = await streamConversation({
+      conversationId: CID,
+      content: "hi",
+      delivery: "steer",
+    }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(StreamError);
+    expect((err as StreamError).kind).toBe("network");
   });
 });
 
@@ -525,9 +594,6 @@ describe("attachConversation (实时重连续看 1b)", () => {
     const seen: string[] = [];
     vi.spyOn(dispatchMod, "dispatchSSEEvent").mockImplementation((event) => {
       seen.push(event.type);
-      if (event.type === "message_end") {
-        useConversationStore.getState().setGenerating(false, "c1");
-      }
     });
     vi.spyOn(dispatchMod, "flushPendingContent").mockImplementation(() => {});
     vi.spyOn(dispatchMod, "flushPendingFrames").mockImplementation(() => {});
@@ -561,6 +627,8 @@ describe("attachConversation (实时重连续看 1b)", () => {
       "run_output_delta",
       "message_end",
     ]);
+    // Occupancy lamp is not transport liveness: mocked fold 不关灯，终态帧仍算收口。
+    expect(useConversationStore.getState().byId.c1?.isGenerating).toBe(true);
   });
 
   it("does not fold catch-up if the stream ends before attach-caught-up", async () => {

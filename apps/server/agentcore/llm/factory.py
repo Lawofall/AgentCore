@@ -99,6 +99,7 @@ def build_provider(
         base_url=credentials.base_url,
         extra_headers=credentials.extra_headers,
         display_name=shown,
+        vendor_id=credentials.vendor_id,
     )
     return observe_provider(leaf)
 
@@ -116,6 +117,9 @@ def _vendor_extras() -> dict[str, LLMProvider]:
                 name=prefix,
                 api_key=api_key,
                 base_url=getattr(settings, url_attr),
+                vendor_id={"kimi": "moonshot", "zhipu": "zhipu", "doubao": "doubao"}.get(
+                    prefix, "custom"
+                ),
             )
         )
     return extras

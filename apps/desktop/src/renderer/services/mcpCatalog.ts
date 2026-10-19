@@ -1,3 +1,4 @@
+import { hasLocalMcp } from "@/lib/capabilities";
 import type { CapabilityTool } from "@/services/capabilities";
 
 /** One enabled MCP Server after `list_tools` — ready tools, or a failed handshake. */
@@ -64,6 +65,7 @@ function toCapabilityTool(
     resident: true,
     summary: fallback,
     blurb: "",
+    description_prefer: "",
     approval: "grantable",
     parameters: asObjectSchema(tool.inputSchema ?? tool.input_schema),
     available_to: ["ceo", "worker"],
@@ -118,8 +120,8 @@ export function parseMcpListToolsValue(
 
 /** Load enabled MCP tools from this machine. Missing `mcpApi` → `null` (Web). */
 export async function listMcpCatalog(): Promise<McpCatalogServer[] | null> {
-  const api = typeof window !== "undefined" ? window.mcpApi : undefined;
-  if (!api?.runOp) return null;
+  if (!hasLocalMcp() || !window.mcpApi?.runOp) return null;
+  const api = window.mcpApi;
   const res = await api.runOp({ op: "list_tools" });
   if (!res.ok) {
     throw new Error(res.error.detail || "列出已接上的工具失败");

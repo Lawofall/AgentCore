@@ -24,18 +24,19 @@ export async function runPowerShell(
 export async function runPowerShellEncoded(
   script: string,
   timeoutMs = 12_000,
+  opts: { sta?: boolean; interactive?: boolean } = {},
 ): Promise<string> {
   const encoded = Buffer.from(script, "utf16le").toString("base64");
-  const { stdout } = await execFileAsync(
-    "powershell.exe",
-    ["-NoProfile", "-NonInteractive", "-EncodedCommand", encoded],
-    {
-      timeout: timeoutMs,
-      windowsHide: true,
-      encoding: "utf8",
-      maxBuffer: 2_000_000,
-    },
-  );
+  const args = ["-NoProfile"];
+  if (!opts.interactive) args.push("-NonInteractive");
+  if (opts.sta) args.push("-STA");
+  args.push("-EncodedCommand", encoded);
+  const { stdout } = await execFileAsync("powershell.exe", args, {
+    timeout: timeoutMs,
+    windowsHide: !opts.interactive,
+    encoding: "utf8",
+    maxBuffer: 2_000_000,
+  });
   return (stdout || "").trim();
 }
 

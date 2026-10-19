@@ -25,7 +25,6 @@ from agentcore.sidecar import protocol
 from agentcore.sidecar.server_pkg.turns import (
     parse_client_turn_ids,
     rpc_agent_mentions,
-    rpc_table_selection,
 )
 
 
@@ -104,7 +103,6 @@ class DeliveryMixin:
                     "userMessage": item.content,
                     "agentMentions": list(item.agent_mentions),
                     "attachments": list(item.attachments),
-                    "tableSelection": list(item.table_selection),
                 },
             )
         )
@@ -142,7 +140,6 @@ class DeliveryMixin:
                     "delivery": params.get("delivery"),
                     "attachments": _rpc_attachment_dicts(params),
                     "agent_mentions": rpc_agent_mentions(params),
-                    "table_selection": rpc_table_selection(params),
                 }
             )
         except ValidationError as e:
@@ -217,7 +214,6 @@ class DeliveryMixin:
                 user_id=self._user_id,
                 attachments=att_dicts,
                 agent_mentions=mention_dicts,
-                table_selection=list(body.table_selection),
                 persist_attachments_fn=None,
                 wait_for_start=False,
                 require_live=True,

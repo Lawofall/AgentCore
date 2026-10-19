@@ -7,9 +7,9 @@ export const APP_PATHS = {
   files: "/files",
   toolbox: {
     root: "/toolbox",
-    /** 装配「总」节：换份、星标、摘要。 */
+    /** 装配「总」节：换份、摘要。 */
     overview: "/toolbox/overview",
-    /** 装配「模型」节。 */
+    /** 旧装配「模型」节书签；落到货架首页。模型在输入框改。 */
     model: "/toolbox/model",
     /** 装配「工具」节。旧 `/toolbox/mine/tools` 仍收向交代。 */
     toolSwitches: "/toolbox/tools",
@@ -31,7 +31,7 @@ export const APP_PATHS = {
     tools: "/toolbox/mine/tools",
     guidelines: "/toolbox/mine/skills",
     store: "/toolbox/market",
-    /** 本机 MCP。 */
+    /** MCP 插头。 */
     mcp: "/toolbox/mcp",
     /** 旧书签，路由收向提示词。 */
     automations: {
@@ -48,13 +48,17 @@ export const APP_PATHS = {
   },
   more: {
     model: "/more/model",
+    models: "/more/models",
     providers: "/more/providers",
+    search: "/more/search",
     usage: "/more/usage",
     general: "/more/general",
     shortcuts: "/more/shortcuts",
     /** Legacy; `#/more/notices` redirects to the IM official chat. */
     notices: "/more/notices",
     about: "/more/about",
+    subscription: "/more/subscription",
+    /** Legacy bookmark; router redirects to subscription. */
     sponsor: "/more/sponsor",
     legal: {
       terms: "/more/legal/terms",

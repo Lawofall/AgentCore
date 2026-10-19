@@ -50,6 +50,12 @@ export const llmProviderKeys = {
   list: ["llm-providers", "list"] as const,
 };
 
+/** 账号远程 MCP 插头（`GET /v1/users/me/mcp-servers`）。 */
+export const mcpServerKeys = {
+  all: ["mcp-servers"] as const,
+  list: ["mcp-servers", "list"] as const,
+};
+
 /** 设置·Git 凭据（`GET /v1/users/me/git-credentials` · G3）。 */
 export const gitCredentialKeys = {
   all: ["git-credentials"] as const,

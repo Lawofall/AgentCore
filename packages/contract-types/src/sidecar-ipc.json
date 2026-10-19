@@ -37,10 +37,7 @@
       "accountAuth",
       "workspacesAuth",
       "browserBridge",
-      "permissionAxes",
-      "folderId",
-      "localRootId",
-      "localSubpath"
+      "session"
     ],
     "required": [
       "rootId",
@@ -48,7 +45,8 @@
       "messageId",
       "traceId",
       "decision",
-      "note"
+      "note",
+      "session"
     ]
   },
   "resumeRpcParams": {
@@ -65,17 +63,15 @@
       "accountAuth",
       "workspacesAuth",
       "browserBridge",
-      "permissionAxes",
-      "folderId",
-      "localRootId",
-      "localSubpath"
+      "session"
     ],
     "required": [
       "messageId",
       "conversationId",
       "traceId",
       "decision",
-      "note"
+      "note",
+      "session"
     ]
   },
   "inference": {

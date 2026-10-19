@@ -3,7 +3,9 @@
 Pins the money math: input is split by cache hit/miss, output includes
 reasoning, everything is integer nano-CNY, and an unknown model degrades to
 glm-5.2 instead of crashing. Curated CNY cards: glm-5.2 (bigmodel.cn) /
-doubao-seed turbo (火山 0–32K). Flash = official DeepSeek CNY (peak/off-peak).
+glm-5.3 / glm-5.3-flash / kimi-k3 / doubao-seed turbo (火山 0–32K).
+Flash platform sell = official × 0.25; Claude × 0.3; GPT-6 × 0.18;
+GLM-5.3 / K3 platform sell = official × 2.
 """
 
 from datetime import UTC, datetime
@@ -13,11 +15,19 @@ from structlog.testing import capture_logs
 
 from agentcore.config import settings
 from agentcore.llm.pricing import (
+    CLAUDE_FABLE_51,
+    CLAUDE_OPUS_46,
+    CLAUDE_OPUS_55,
     DOUBAO_SEED_TURBO,
+    GPT_6_1_SOL,
+    GPT_6_ASTRA,
     NANO_PER_CNY,
     PLATFORM_GPT_4O,
     PLATFORM_RELAY_GLM_52,
+    PLATFORM_RELAY_GLM_53,
+    PLATFORM_RELAY_GLM_53_FLASH,
     PLATFORM_RELAY_GROK_45,
+    PLATFORM_RELAY_KIMI_K3,
     PLATFORM_RELAY_KIMI_K25,
     cache_savings,
     calculate_cost,
@@ -26,7 +36,9 @@ from agentcore.llm.pricing import (
     nano_to_yuan,
     pricing_for_model,
     project_cache_miss_tokens,
+    quota_multiplier_for,
     reconcile_cache_miss_tokens,
+    sell_multiplier_for,
 )
 from agentcore.llm.profiles import (
     DEEPSEEK_V4_FLASH,
@@ -258,21 +270,111 @@ def test_zero_usage_is_zero_cost():
     assert (cost.input, cost.cached, cost.output, cost.total) == (0, 0, 0, 0)
 
 
-def test_byok_uses_same_curated_card_not_community():
+def test_byok_flash_keeps_official_card_not_community():
     usage = _usage(input_tokens=1_000_000, cache_miss_tokens=1_000_000, output_tokens=1_000_000)
     byok = calculate_cost(OPENCODE_GO_V41_FLASH, usage, billing_mode="byok")
     platform = calculate_cost(OPENCODE_GO_V41_FLASH, usage, billing_mode="platform")
     assert byok.pricing_source == "curated"
     assert byok.credential_source == "user"
     assert byok.currency == "CNY"
-    assert byok.total == platform.total
+    assert byok.total == platform.total * 4
     assert platform.pricing_source == "curated"
     user = calculate_cost(OPENCODE_GO_V41_FLASH, usage, credential_source="user")
     assert user.pricing_source == "curated"
-    assert user.total == platform.total
+    assert user.total == byok.total
     assert calculate_cost(
         OPENCODE_GO_V41_FLASH, usage, credential_source="platform"
     ).pricing_source == ("curated")
+
+
+def test_flash_sell_multiplier_platform_only():
+    assert sell_multiplier_for(DEEPSEEK_V4_FLASH, credential_source="platform") == (
+        sell_multiplier_for(OPENCODE_GO_V41_FLASH, credential_source="vendor")
+    )
+    assert str(sell_multiplier_for(DEEPSEEK_V4_FLASH, credential_source="platform")) == (
+        "0.25"
+    )
+    assert str(sell_multiplier_for(DEEPSEEK_V4_FLASH, credential_source="user")) == "1"
+    assert str(sell_multiplier_for(PLATFORM_RELAY_GLM_52, credential_source="platform")) == (
+        "1"
+    )
+    assert str(sell_multiplier_for(PLATFORM_RELAY_GLM_53, credential_source="platform")) == (
+        "2"
+    )
+    assert str(
+        sell_multiplier_for(PLATFORM_RELAY_GLM_53_FLASH, credential_source="vendor")
+    ) == "2"
+    assert str(sell_multiplier_for(PLATFORM_RELAY_KIMI_K3, credential_source="platform")) == (
+        "2"
+    )
+    assert str(sell_multiplier_for(PLATFORM_RELAY_GLM_53, credential_source="user")) == "1"
+    assert str(sell_multiplier_for(CLAUDE_OPUS_55, credential_source="platform")) == "0.3"
+    assert str(sell_multiplier_for(CLAUDE_OPUS_46, credential_source="platform")) == "0.3"
+    assert str(sell_multiplier_for(CLAUDE_FABLE_51, credential_source="platform")) == "0.3"
+    assert str(sell_multiplier_for(GPT_6_ASTRA, credential_source="platform")) == "0.18"
+    assert str(sell_multiplier_for(GPT_6_1_SOL, credential_source="platform")) == "0.18"
+    assert str(sell_multiplier_for(CLAUDE_OPUS_55, credential_source="user")) == "1"
+
+
+def test_quota_multiplier_vs_flash_off_peak():
+    assert str(
+        quota_multiplier_for(DEEPSEEK_V41_FLASH, credential_source="platform")
+    ) == "1"
+    assert str(quota_multiplier_for(CLAUDE_OPUS_55, credential_source="platform")) == (
+        "41"
+    )
+    assert str(quota_multiplier_for(CLAUDE_OPUS_46, credential_source="platform")) == (
+        "52"
+    )
+    assert str(quota_multiplier_for(CLAUDE_FABLE_51, credential_source="platform")) == (
+        "104"
+    )
+    assert str(quota_multiplier_for(GPT_6_ASTRA, credential_source="platform")) == "62"
+    assert str(quota_multiplier_for(GPT_6_1_SOL, credential_source="platform")) == "12"
+    assert str(quota_multiplier_for(PLATFORM_RELAY_GLM_53, credential_source="platform")) == (
+        "58"
+    )
+    assert str(
+        quota_multiplier_for(PLATFORM_RELAY_GLM_53_FLASH, credential_source="platform")
+    ) == "6"
+    assert str(quota_multiplier_for(PLATFORM_RELAY_KIMI_K3, credential_source="platform")) == (
+        "192"
+    )
+    assert quota_multiplier_for(DEEPSEEK_V41_FLASH, credential_source="user") is None
+    assert quota_multiplier_for(PLATFORM_RELAY_GROK_45, credential_source="platform") is (
+        None
+    )
+
+
+def test_claude_gpt_platform_sell_cards():
+    at = datetime(2026, 8, 18, 12, 0, tzinfo=UTC)
+    usage = _usage(
+        input_tokens=1_000_000,
+        cache_miss_tokens=1_000_000,
+        output_tokens=1_000_000,
+    )
+    opus = calculate_cost(
+        CLAUDE_OPUS_55, usage, credential_source="platform", at=at
+    )
+    assert opus.input == 8_640_000_000  # ¥8.64
+    assert opus.output == 43_200_000_000  # ¥43.2
+    assert opus.pricing_source == "curated"
+    byok = calculate_cost(
+        CLAUDE_OPUS_55, usage, credential_source="user", at=at
+    )
+    assert byok.input == 28_800_000_000
+    astra = calculate_cost(
+        GPT_6_ASTRA, usage, credential_source="platform", at=at
+    )
+    assert astra.input == 12_960_000_000  # ¥12.96
+    assert astra.output == 64_800_000_000  # ¥64.8
+    fable_hit = calculate_cost(
+        CLAUDE_FABLE_51,
+        _usage(input_tokens=1_000_000, cache_hit_tokens=1_000_000),
+        credential_source="platform",
+        at=at,
+    )
+    assert fable_hit.input == 540_000_000  # ¥0.54 cache read
 
 
 def test_pricing_for_model_user_returns_curated_or_none():
@@ -291,7 +393,7 @@ def test_small_token_counts_round_half_up():
 
 
 def test_deepseek_flash_official_cny():
-    """Flash 名义价 = DeepSeek 中文官价（谷 ¥0.02 / ¥1 / ¥4）。"""
+    """Flash 平台卖价 = 官网 × 0.25；BYOK 仍按官网。"""
     at = datetime(2026, 8, 18, 12, 0, tzinfo=UTC)
     usage = _usage(
         input_tokens=1_000_000,
@@ -301,8 +403,8 @@ def test_deepseek_flash_official_cny():
     flash = calculate_cost(
         DEEPSEEK_V4_FLASH, usage, credential_source="platform", at=at
     )
-    assert flash.input == 1_000_000_000  # ¥1
-    assert flash.output == 4_000_000_000  # ¥4
+    assert flash.input == 250_000_000  # 卖价 ¥0.25
+    assert flash.output == 1_000_000_000  # 卖价 ¥1
     assert flash.pricing_source == "curated"
     hit = calculate_cost(
         DEEPSEEK_V4_FLASH,
@@ -310,7 +412,7 @@ def test_deepseek_flash_official_cny():
         credential_source="platform",
         at=at,
     )
-    assert hit.cached == 20_000_000  # ¥0.02
+    assert hit.cached == 5_000_000  # 卖价 ¥0.005
     # Zen free SKU meters at official Flash (upstream free; product quota anti-abuse).
     free = calculate_cost(
         DEEPSEEK_V4_FLASH_FREE, usage, credential_source="platform", at=at
@@ -329,13 +431,15 @@ def test_deepseek_flash_official_cny():
         DEEPSEEK_V41_FLASH, usage, credential_source="user", at=at
     )
     assert official.pricing_source == "curated"
-    assert official.total == flash.total
+    assert official.input == 1_000_000_000
+    assert official.output == 4_000_000_000
+    assert official.total == flash.total * 4
     assert official.credential_source == "user"
     go_user = calculate_cost(
         OPENCODE_GO_V41_FLASH, usage, credential_source="user", at=at
     )
     assert go_user.pricing_source == "curated"
-    assert go_user.total == flash.total
+    assert go_user.total == official.total
     assert go_user.credential_source == "user"
     # Retired Pro: no product card. Platform falls back to glm; user is unpriced.
     pro_platform = calculate_cost(DEEPSEEK_V4_PRO, usage, credential_source="platform")
@@ -359,8 +463,8 @@ def test_deepseek_flash_peak_is_double_off_peak():
         credential_source="platform",
         at=datetime(2026, 8, 18, 2, 0, tzinfo=UTC),
     )
-    assert off.input == 1_000_000_000
-    assert peak.input == 2_000_000_000
+    assert off.input == 250_000_000
+    assert peak.input == 500_000_000
     assert peak.input == off.input * 2
 
 
@@ -378,16 +482,18 @@ def test_deepseek_flash_weekend_is_off_peak():
         credential_source="platform",
         at=datetime(2026, 8, 18, 12, 0, tzinfo=UTC),
     )
-    assert saturday_peak_hour.input == weekday_off.input == 1_000_000_000
+    assert saturday_peak_hour.input == weekday_off.input == 250_000_000
 
 
-def test_flash_go_cost_multiplier_does_not_scale_cny_card(monkeypatch):
-    usage = _usage(input_tokens=1_000_000, cache_miss_tokens=1_000_000)
-    at = datetime(2026, 8, 18, 12, 0, tzinfo=UTC)
-    one = calculate_cost(DEEPSEEK_V4_FLASH, usage, credential_source="platform", at=at)
-    monkeypatch.setattr(settings, "go_cost_multiplier", "4")
-    four = calculate_cost(DEEPSEEK_V4_FLASH, usage, credential_source="platform", at=at)
-    assert four.input == one.input
+def test_flash_peak_hours_are_half_open_utc_windows_on_weekdays():
+    from agentcore.llm.pricing import _is_flash_peak
+
+    assert _is_flash_peak(datetime(2026, 8, 18, 0, 59, tzinfo=UTC)) is False
+    assert _is_flash_peak(datetime(2026, 8, 18, 1, 0, tzinfo=UTC)) is True
+    assert _is_flash_peak(datetime(2026, 8, 18, 3, 59, tzinfo=UTC)) is True
+    assert _is_flash_peak(datetime(2026, 8, 18, 4, 0, tzinfo=UTC)) is False
+    assert _is_flash_peak(datetime(2026, 8, 18, 6, 0, tzinfo=UTC)) is True
+    assert _is_flash_peak(datetime(2026, 8, 18, 10, 0, tzinfo=UTC)) is False
 
 
 def test_non_deepseek_usd_curated_still_withdrawn():
@@ -401,6 +507,12 @@ def test_non_deepseek_usd_curated_still_withdrawn():
     assert not has_curated_pricing(PLATFORM_RELAY_GROK_45)
     assert not has_curated_pricing("qwen-vl-max")
     assert has_curated_pricing(PLATFORM_RELAY_GLM_52)
+    assert has_curated_pricing(PLATFORM_RELAY_GLM_53)
+    assert has_curated_pricing(PLATFORM_RELAY_GLM_53_FLASH)
+    assert has_curated_pricing(PLATFORM_RELAY_KIMI_K3)
+    assert has_curated_pricing(CLAUDE_OPUS_55)
+    assert has_curated_pricing(GPT_6_ASTRA)
+    assert has_curated_pricing(GPT_6_1_SOL)
     # Alias catalog ids (upstream_model remap) do not get their own curated card.
     assert not has_curated_pricing("glm-5.2-alt")
     assert has_curated_pricing(DOUBAO_SEED_TURBO)
@@ -435,6 +547,33 @@ def test_kimi_k25_relay_vision_cny_list_price():
     assert cost.total == cost.input + cost.output
     assert cost.pricing_source == "curated"
     assert cost.currency == "CNY"
+
+
+def test_glm_53_and_kimi_k3_platform_sell_double_official():
+    usage = _usage(
+        input_tokens=1_000_000,
+        cache_miss_tokens=1_000_000,
+        output_tokens=1_000_000,
+    )
+    glm = calculate_cost(PLATFORM_RELAY_GLM_53, usage, credential_source="platform")
+    assert glm.input == 16_000_000_000  # 官网 ¥8 ×2
+    assert glm.output == 56_000_000_000  # 官网 ¥28 ×2
+    byok = calculate_cost(PLATFORM_RELAY_GLM_53, usage, credential_source="user")
+    assert byok.input == 8_000_000_000
+    assert byok.output == 28_000_000_000
+    assert glm.total == byok.total * 2
+
+    flash = calculate_cost(
+        PLATFORM_RELAY_GLM_53_FLASH, usage, credential_source="platform"
+    )
+    assert flash.input == 1_600_000_000  # ¥0.8 ×2
+    assert flash.output == 5_600_000_000  # ¥2.8 ×2
+
+    kimi = calculate_cost(PLATFORM_RELAY_KIMI_K3, usage, credential_source="platform")
+    assert kimi.input == 40_000_000_000  # ¥20 ×2
+    assert kimi.output == 200_000_000_000  # ¥100 ×2
+    kimi_user = calculate_cost(PLATFORM_RELAY_KIMI_K3, usage, credential_source="user")
+    assert kimi.total == kimi_user.total * 2
 
 
 def test_nano_per_cny_scale():

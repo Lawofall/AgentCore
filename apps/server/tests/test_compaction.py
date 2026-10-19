@@ -1817,8 +1817,19 @@ async def test_quota_change_and_key_change_are_the_two_things_that_retire_it():
 
         svc = LlmProviderService(MagicMock())
         svc._repo = MagicMock()
-        svc._repo.update = AsyncMock(return_value=MagicMock(status="active"))
-        svc._repo.get = AsyncMock(return_value=MagicMock())
+        row = MagicMock(
+            status="active",
+            vendor_id="custom",
+            base_url="https://api.example/v1",
+            label="p1",
+            id="p1",
+            api_key_enc=b"",
+            supports_tools=None,
+            created_at=None,
+            updated_at=None,
+        )
+        svc._repo.update = AsyncMock(return_value=row)
+        svc._repo.get = AsyncMock(return_value=row)
         # 改标签不是换钥匙：上游会怎么答没变，不该退休一堵仍然成立的墙。
         await svc.update_provider("u1", "p1", label="新名字", fields_set={"label"})
         assert allowance_epoch("u1") == 1

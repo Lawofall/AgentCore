@@ -256,20 +256,6 @@ class MessageRepository:
         assert row is not None
         return row
 
-    async def set_followups(
-        self, message_id: str, *, conversation_id: str, followups: list[str]
-    ) -> None:
-        """Update ``messages.followups`` (historical / admin; live mint path retired).
-
-        Scoped by conversation_id (defense in depth); a no-match id is a harmless no-op.
-        """
-        await self._session.execute(
-            update(Message)
-            .where(Message.id == message_id, Message.conversation_id == conversation_id)
-            .values(followups=followups)
-        )
-        await self._session.commit()
-
     async def set_baseline_snapshot_id(
         self, message_id: str, *, conversation_id: str, snapshot_id: str
     ) -> None:
@@ -288,7 +274,7 @@ class MessageRepository:
     async def set_cost(self, message_id: str, *, conversation_id: str, cost: dict) -> None:
         """Backfill the turn's cost snapshot onto an existing assistant row (P2 DERIVED).
 
-        Same finalize-tail pattern as :meth:`set_followups`: the ledger write happens in the
+        Same finalize-tail pattern as :meth:`merge_usage`: the ledger write happens in the
         same session as the assistant upsert, then this targeted UPDATE stamps the
         ``message_end.cost`` shape (nano-CNY components + currency) so reload footers do not
         need a second round-trip. Scoped by conversation_id; a no-match id is a no-op.
@@ -333,7 +319,7 @@ class MessageRepository:
         Backs 克隆对话: the target is a freshly-created empty conversation. Copies
         that row and every earlier row in render order (``created_at`` verbatim) and
         content-level fields (role / content / reasoning / usage / attachments /
-        agent_mentions / citations / followups / cost). Later turns stay on the source.
+        agent_mentions / citations / cost). Later turns stay on the source.
 
         Returns ``None`` if ``until_message_id`` is not in the source (caller 404s).
 
@@ -359,7 +345,6 @@ class MessageRepository:
                 agent_mentions=list(r.agent_mentions or []),
                 citations=list(r.citations or []),
                 evidence_ledger=list(r.evidence_ledger or []),
-                followups=list(r.followups or []),
                 cost=dict(r.cost) if r.cost else None,
                 created_at=r.created_at,
             )

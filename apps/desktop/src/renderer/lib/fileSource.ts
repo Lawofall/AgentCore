@@ -75,10 +75,9 @@ export interface FileSourceCaps {
   /** 面板内文本编辑经 `readForEdit` / `writeText` 回写（带写前 CAS，见二者注释）。 */
   edit: boolean;
   /**
-   * 轴3 快照（备份 / 版本 / 恢复）对该源可用（云端工作区为真，本地源 / 只读协作为假）。
-   * 对话工作区面板与文件中枢都据此门控版本 / 软删区入口（见 WorkspacePanel、
-   * fileWorkbench/WorkspaceSection）——服务端对本机工作区一律 409，故先行门控，
-   * 不让用户点进一个必然失败的动作。
+   * 云端轴3 快照 REST（命名版本 + 软删区）对该源可用。本地源 / 只读协作为假：
+   * 服务端对本机一律 409，不能让用户点进必然失败的云端动作。
+   * 本机命名版本不走这枚能力位，由文件中枢按 `location === "local"` 另开门（sidecar）。
    */
   snapshots: boolean;
 }

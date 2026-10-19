@@ -17,7 +17,6 @@ from agentcore.config.platform import parse_platform_model_credentials
 from agentcore.db.base import async_session_factory
 from agentcore.db.models.billing import CostCall
 from agentcore.db.models.platform import PlatformCredential
-from agentcore.llm.byok_provider_presets import is_opencode_go_base_url
 from agentcore.llm.credentials import derive_platform_credential_id
 from agentcore.llm.platform_credential_service import (
     _master_key_encryptor,
@@ -98,7 +97,7 @@ async def probe_pool() -> None:
         f"env_fp={key_fp(env_key) if env_key else '-'} "
         f"env_cred_id={derive_platform_credential_id(env_key, env_url) if env_key else '-'}"
     )
-    print(f"env_is_go={is_opencode_go_base_url(env_url)}")
+    print(f"env_base_url={env_url!r}")
 
     async with async_session_factory() as session:
         loaded = await reload_platform_credential_pool(session)
@@ -116,12 +115,11 @@ async def probe_pool() -> None:
             member = _member_from_row(row, enc=enc)
             runtime = account_runtime_for_admin(row.id)
             rec = get_pool_state_store().get(row.id)
-            go = is_opencode_go_base_url(row.base_url)
             created = row.created_at.isoformat() if row.created_at else None
             if member is None:
                 print(
                     f"  member id={row.id} label={row.label!r} enabled={row.enabled} "
-                    f"day={row.subscription_day} go={go} base={row.base_url!r} created={created} "
+                    f"day={row.subscription_day} base={row.base_url!r} created={created} "
                     f"DECRYPT_FAILED status={runtime.status} recovery={runtime.recovery_at} "
                     f"limit={runtime.limit_name}"
                 )
@@ -134,7 +132,7 @@ async def probe_pool() -> None:
             )
             print(
                 f"  member id={row.id} label={row.label!r} enabled={row.enabled} "
-                f"day={row.subscription_day} go={go} base={row.base_url!r} created={created} "
+                f"day={row.subscription_day} base={row.base_url!r} created={created} "
                 f"last4={last4(member.api_key)} fp={key_fp(member.api_key)} same_as_env={same_as_env} "
                 f"status={runtime.status} recovery={runtime.recovery_at} limit={runtime.limit_name} "
                 f"store={None if rec is None else rec.status}"

@@ -58,7 +58,6 @@ const TOOL_LABEL: Record<string, string> = {
   md_to_docx: "Export Word",
   md_to_pdf: "Export PDF",
   md_export: "Export document",
-  read_image: "Read image",
   code_diagnostics: "Check types",
   delegate: "Delegate",
   replan: "Replan",

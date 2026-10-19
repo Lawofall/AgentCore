@@ -1,5 +1,6 @@
 import { InlineInput } from "@/components/files/FileTreeInline";
 import { ASSEMBLY_CARD_GRID_CLASS, Badge, CatalogTile } from "@/components/ui";
+import { Switch } from "@/components/ui/Switch";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -31,12 +32,12 @@ export type PromptDropDest =
   | { kind: "root" }
   | { kind: "folder"; folder: PromptRailFolder };
 
-/** Assembly flag for the three factory catalog rows. The rows stay visible when off. */
+/** Per-name omit list for official HOW rows. The cards stay visible when off. */
 export type FactoryCatalogControl = {
-  present: boolean;
+  omitted: readonly string[];
   canToggle: boolean;
   pending?: boolean;
-  onPresentChange: (present: boolean) => void;
+  onToggle: (name: string, on: boolean) => void;
 };
 
 function countMeta(count: number): string | undefined {
@@ -158,7 +159,7 @@ export function PromptOverview({
   const looseHot =
     dropDest?.kind === "folder" && dropDest.folder.id === otherFolder.id;
   const alwaysHot = dropDest?.kind === "root";
-  const factoryDim = Boolean(factoryControl && !factoryControl.present);
+  const factoryOmitted = new Set(factoryControl?.omitted ?? []);
   const hasGrid =
     showFactory ||
     alwaysRows.length > 0 ||
@@ -338,26 +339,48 @@ export function PromptOverview({
             <div className={cn(showStrips && "mt-3", ASSEMBLY_CARD_GRID_CLASS)}>
               {showFactory ? (
                 <div className="contents" data-testid="prompt-rail-factory">
-                  {factoryRows.map(({ item, copy }) => (
-                    <CatalogTile
-                      key={item.id}
-                      density="compact"
-                      accessoryPlacement="description"
-                      title={copy.title}
-                      description={copy.description}
-                      accessory={
-                        <Badge tone="muted" pill>
-                          官方
-                        </Badge>
-                      }
-                      onClick={(event) => onOpenItem(item.id, event)}
-                      className={cn(
-                        factoryDim && "opacity-50",
-                        selectedId === item.id &&
-                          "border-foreground/20 bg-muted/50",
-                      )}
-                    />
-                  ))}
+                  {factoryRows.map(({ item, copy }) => {
+                    const name = item.skill.name;
+                    const off = factoryOmitted.has(name);
+                    const showSwitch = Boolean(factoryControl?.canToggle);
+                    const official = (
+                      <Badge tone="muted" pill>
+                        官方
+                      </Badge>
+                    );
+                    return (
+                      <CatalogTile
+                        key={item.id}
+                        density="compact"
+                        accessoryPlacement={
+                          showSwitch ? "corner" : "description"
+                        }
+                        title={copy.title}
+                        description={copy.description}
+                        mark={showSwitch ? official : undefined}
+                        accessory={
+                          showSwitch ? (
+                            <Switch
+                              checked={!off}
+                              disabled={Boolean(factoryControl?.pending)}
+                              label={copy.title}
+                              onCheckedChange={(on) =>
+                                factoryControl?.onToggle(name, on)
+                              }
+                            />
+                          ) : (
+                            official
+                          )
+                        }
+                        dim={off}
+                        onClick={(event) => onOpenItem(item.id, event)}
+                        className={cn(
+                          selectedId === item.id &&
+                            "border-foreground/20 bg-muted/50",
+                        )}
+                      />
+                    );
+                  })}
                 </div>
               ) : null}
               {alwaysRows.map((row) => mineCard(row.item, row.chars))}

@@ -98,7 +98,6 @@ from agentcore.llm.provider.wire_dialect import (
     effective_reasoning_effort,
     resolve_wire_dialect,
 )
-from agentcore.llm.sub2api_probe import probe_sub2api_diagnosis_result
 from agentcore.llm.tool_arguments import coerce_openai_tool_arguments
 
 logger = get_logger(__name__)
@@ -1129,7 +1128,7 @@ class OpenAICompatibleProvider:
                     yield LLMChunk(aborted=True)
                     return
                 if not e.retryable or not self._can_retry_attempt(attempt):
-                    await self._finalize_upstream_error(e, attempt)
+                    self._finalize_upstream_error(e, attempt)
                 if yielded_ephemeral:
                     yield LLMChunk(stream_reset=True)
                     yielded_ephemeral = False
@@ -1303,6 +1302,8 @@ class OpenAICompatibleProvider:
             payload["temperature"] = request.temperature
         dialect.apply_token_limit(payload, request.max_tokens)
         if request.tools:
+            # Completions never stamps vendor ``defer_loading`` — the opening
+            # table is byte-stable (DeepSeek prefix cache; OpenCode unconfirmed).
             payload["tools"] = request.tools
             payload["tool_choice"] = request.tool_choice
         if stream:
@@ -1330,35 +1331,6 @@ class OpenAICompatibleProvider:
                 if effort:
                     payload["reasoning_effort"] = effort
         return payload
-
-    async def _log_sub2api_diagnosis(self, err: LLMUpstreamError) -> LLMUpstreamError:
-        """Record why the operator's Sub2API relay 503'd — log surface only.
-
-        Everything the probe reports (OAuth expiry, the 5h window, an account
-        address) belongs to the *operator's* upstream accounts. In platform mode
-        the user has no key of their own, so none of it is theirs to act on:
-        on the bubble it sent people off to re-login ChatGPT and hunt for a
-        binding screen this product does not have. The user keeps the honest
-        「上游模型服务暂时不可用」sentence; ops read the diagnosis here.
-        """
-        from agentcore.config.settings import settings
-
-        status = err.details.get("upstream_status", 0)
-        if settings.billing_mode != "platform" or status != 503:
-            return err
-
-        probe = await probe_sub2api_diagnosis_result()
-        if probe is None:
-            return err
-
-        logger.warning(
-            "llm.upstream_error",
-            provider=self._name,
-            status_code=status,
-            sub2api_diagnosis=probe.diagnosis,
-            sub2api_account=probe.account_email_masked,
-        )
-        return err
 
     def _raise_for_status(
         self,
@@ -1689,16 +1661,15 @@ class OpenAICompatibleProvider:
         await asyncio.sleep(wait)
         return backoff * _BACKOFF_MULTIPLIER
 
-    async def _finalize_upstream_error(
+    def _finalize_upstream_error(
         self, err: LLMUpstreamError, attempt: int
-    ) -> LLMUpstreamError:
-        final = upstream_error(
+    ) -> None:
+        raise upstream_error(
             err.message,
             status=err.details.get("upstream_status", 500),
             body=err.details.get("upstream_body_preview"),
             retry_attempts=attempt + 1,
-        )
-        raise await self._log_sub2api_diagnosis(final) from err
+        ) from err
 
     async def _request_with_retry(
         self, payload: dict, *, scenario: str = "chat", patience: float | None = None
@@ -1757,7 +1728,7 @@ class OpenAICompatibleProvider:
             except LLMUpstreamError as e:
                 last_error = e
                 if not e.retryable or not self._can_retry_attempt(attempt):
-                    await self._finalize_upstream_error(e, attempt)
+                    self._finalize_upstream_error(e, attempt)
                 backoff = await self._sleep_before_retry(
                     attempt=attempt,
                     backoff=backoff,
@@ -1896,21 +1867,20 @@ class OpenAICompatibleProvider:
         if not text:
             raise LLMError(
                 f"{self._display_name} 连通测试返回空响应。"
-                "请检查 Base URL（自定义地址通常需含 /v1）与 API Key。"
+                "请确认 Base URL 是 API 根（控制台域名会补 /v1）与 API Key。"
             )
         lowered = text[:2000].lower()
         if "<html" in lowered or "<!doctype" in lowered or '<div id="root"' in lowered:
             raise LLMError(
                 f"{self._display_name} 连通测试返回了网页而非模型接口。"
-                "请检查 Base URL（自定义地址通常需含 /v1，"
-                "例如 https://api.example.com/v1）。"
+                "请确认 Base URL 是 API 根（控制台域名会补 /v1）。"
             )
         try:
             data = json.loads(text)
         except json.JSONDecodeError as e:
             raise LLMError(
                 f"{self._display_name} 连通测试响应不是合法 JSON。"
-                "请检查 Base URL（自定义地址通常需含 /v1）。"
+                "请确认 Base URL 是 API 根（控制台域名会补 /v1）。"
             ) from e
         if not isinstance(data, dict):
             raise LLMError(f"{self._display_name} 连通测试响应格式无效（非对象）")

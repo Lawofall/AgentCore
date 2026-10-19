@@ -1316,17 +1316,9 @@ async def test_production_crash_factory_base_prompt_lists_system_skills(monkeypa
         async def get_by_id_unscoped(self, _cid):
             return SimpleNamespace(folder_id=None)
 
-    class _FakeBoardRepo:
-        def __init__(self, _session):
-            pass
-
-        async def get_by_conversation_id(self, *_a, **_k):
-            return None
-
     backend = SimpleNamespace(location="server")
     monkeypatch.setattr(crash_mod, "async_session_factory", lambda: _FakeSession())
     monkeypatch.setattr(crash_mod, "ConversationRepository", _FakeConvRepo)
-    monkeypatch.setattr(crash_mod, "TableRepository", _FakeBoardRepo)
     monkeypatch.setattr(
         crash_mod, "resolve_local_binding", AsyncMock(return_value=None)
     )
@@ -1335,9 +1327,6 @@ async def test_production_crash_factory_base_prompt_lists_system_skills(monkeypa
     )
     monkeypatch.setattr(
         crash_mod, "resolve_profile_set", AsyncMock(return_value=object())
-    )
-    monkeypatch.setattr(
-        crash_mod, "resolve_permission_axes", AsyncMock(return_value=None)
     )
     monkeypatch.setattr(crash_mod, "turn_profiles_for_turn", lambda *_a, **_k: object())
     monkeypatch.setattr(crash_mod, "bind_credential_pricing_context", lambda *_a: None)

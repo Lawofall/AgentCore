@@ -32,6 +32,7 @@ from agentcore.runtime.turn.interrupt import (
     normalize_interrupt_reason,
 )
 from agentcore.runtime.turn.runs import TurnRun, turn_runs
+from agentcore.runtime.turn.snapshot import ConversationSnapshot
 
 
 @pytest.mark.asyncio
@@ -96,7 +97,7 @@ async def test_user_stop_releases_lease_not_orphan(monkeypatch):
                 conversation_id=conversation_id,
                 user_message="hi",
                 user_id="u1",
-                folder_id=None,
+                conversation=ConversationSnapshot.default(),
                 sink=sink,
                 history=[],
                 attachments=None,
@@ -172,7 +173,7 @@ async def test_user_stop_close_failure_orphans_lease(monkeypatch):
                 conversation_id=conversation_id,
                 user_message="hi",
                 user_id="u1",
-                folder_id=None,
+                conversation=ConversationSnapshot.default(),
                 sink=sink,
                 history=[],
                 attachments=None,
@@ -381,7 +382,7 @@ async def test_process_kill_orphans_without_user_stop_close(monkeypatch):
             conversation_id=conversation_id,
             user_message="hi",
             user_id="u1",
-            folder_id=None,
+            conversation=ConversationSnapshot.default(),
             sink=sink,
             history=[],
             attachments=None,
@@ -445,7 +446,7 @@ async def test_shutdown_salvage_releases_lease_not_orphan(monkeypatch):
                 conversation_id=conversation_id,
                 user_message="hi",
                 user_id="u1",
-                folder_id=None,
+                conversation=ConversationSnapshot.default(),
                 sink=sink,
                 history=[],
                 attachments=None,

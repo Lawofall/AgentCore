@@ -1286,7 +1286,8 @@ export interface WorkspaceOpRequiredPayload {
 /** Transport-only client-tool request: mount a local directory for file tools.
  * Path transport exception — may carry `path` / `well_known`+`target_name` for
  * desktop resolve; success result must not include abs. ``mode`` is omitted
- * on silent readonly; ``organize`` / ``attach_rw`` confirm. ``root_id``
+ * on readonly; ``organize`` / ``attach_rw`` request a write upgrade.
+ * Confirm vs silent is the conversation boundary on desktop. ``root_id``
  * upgrades an existing session root (no picker).
  * NOT journaled. */
 export interface ExternalMountRequiredPayload {

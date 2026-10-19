@@ -261,6 +261,20 @@ export function chatDisplayName(chat: ChatSummary): string {
   return chat.title || "群聊";
 }
 
+/**
+ * Thread-header second line.
+ * Groups show roster size. Live headcount stays on the admin overview.
+ */
+export function chatHeaderSubtitle(
+  chat: ChatSummary,
+  memberCount: number,
+): string | null {
+  if (chat.type === "dm") return chat.peer?.online ? "在线" : "离线";
+  if (chat.type === "official") return "官方广播";
+  if (chat.type === "group" && memberCount > 0) return `${memberCount} 名成员`;
+  return null;
+}
+
 /** Site-wide official broadcast chat id from a loaded chat list, if present. */
 export function findOfficialChatId(
   chats: readonly ChatSummary[],

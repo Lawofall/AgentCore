@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * 「我的文件」的版本面板 —— 列出云端文件夹的留存版本，并能回滚到其中一个。
+ * 文件页的版本面板 —— 云端文件夹走 REST 快照，本机文件夹走 sidecar。
  *
  * 回滚前的确认必须照实说 overlay 的边界
  * （新建文件不删、未进包的目录不还原），不许加码成「完整还原」。
@@ -17,6 +17,17 @@ vi.mock("@/services/workspaces", () => ({
   wsDownloadSnapshot: vi.fn(),
 }));
 
+vi.mock("@/services/localWorkspaceVersions", () => ({
+  listLocalVersions: vi.fn(),
+  createLocalVersion: vi.fn(),
+  restoreLocalVersion: vi.fn(),
+}));
+
+import {
+  createLocalVersion,
+  listLocalVersions,
+  restoreLocalVersion,
+} from "@/services/localWorkspaceVersions";
 import {
   wsCreateSnapshot,
   wsListSnapshots,
@@ -29,7 +40,31 @@ afterEach(() => vi.restoreAllMocks());
 function renderPanel() {
   return render(
     <TooltipProvider>
-      <WorkspaceVersionsPanel wsId="folder:f1" name="季度报告" />
+      <WorkspaceVersionsPanel
+        ws={{
+          wsId: "folder:f1",
+          name: "季度报告",
+          location: "cloud",
+          rootId: null,
+          subpath: "",
+        }}
+      />
+    </TooltipProvider>,
+  );
+}
+
+function renderLocalPanel() {
+  return render(
+    <TooltipProvider>
+      <WorkspaceVersionsPanel
+        ws={{
+          wsId: "folder:f2",
+          name: "本机稿",
+          location: "local",
+          rootId: "root-1",
+          subpath: "",
+        }}
+      />
     </TooltipProvider>,
   );
 }
@@ -87,6 +122,54 @@ describe("文件页的版本面板", () => {
       expect(wsCreateSnapshot).toHaveBeenCalledWith("folder:f1", "定稿"),
     );
     await waitFor(() => expect(wsListSnapshots).toHaveBeenCalledTimes(2));
+  });
+
+  it("本机文件夹走 sidecar 列表 / 留版本 / 恢复，不打云端 REST", async () => {
+    vi.mocked(listLocalVersions).mockResolvedValue([
+      {
+        versionId: "v-local",
+        name: "改前留一版",
+        createdAt: "2026-08-01T03:00:00Z",
+        sizeBytes: 2048,
+      },
+    ]);
+    vi.mocked(restoreLocalVersion).mockResolvedValue({
+      versionId: "v-local",
+      name: "改前留一版",
+      createdAt: "2026-08-01T03:00:00Z",
+      sizeBytes: 2048,
+    });
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    renderLocalPanel();
+
+    expect(await screen.findByText("改前留一版")).toBeTruthy();
+    expect(listLocalVersions).toHaveBeenCalledWith({
+      rootId: "root-1",
+      subpath: "",
+    });
+    expect(wsListSnapshots).not.toHaveBeenCalled();
+    expect(screen.queryByLabelText("下载这个版本 (zip)")).toBeNull();
+
+    fireEvent.click(screen.getByLabelText("恢复到这个版本"));
+    expect(confirm.mock.calls[0][0]).toContain("尽最大努力");
+    await waitFor(() =>
+      expect(restoreLocalVersion).toHaveBeenCalledWith(
+        { rootId: "root-1", subpath: "" },
+        "v-local",
+      ),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "留版本" }));
+    fireEvent.change(screen.getByLabelText("版本名"), {
+      target: { value: "定稿" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "保存" }));
+    await waitFor(() =>
+      expect(createLocalVersion).toHaveBeenCalledWith(
+        { rootId: "root-1", subpath: "" },
+        "定稿",
+      ),
+    );
   });
 
   it("拉不到版本时说出来并可重试，而不是假装为空", async () => {

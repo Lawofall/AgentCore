@@ -37,12 +37,13 @@ from agentcore.sidecar.server_pkg.turns import (
     _emit_user_stop_message_end,
     _ensure_cancelled_turn_end,
 )
+from tests.sidecar_session import sidecar_session
 
 _CLIENT_TURN_IDS = {
     "userMessageId": "11111111-1111-4111-8111-111111111111",
     "messageId": "22222222-2222-4222-8222-222222222222",
     "traceId": "a" * 32,
-    "folderId": None,
+    "session": sidecar_session(),
 }
 
 
@@ -748,6 +749,7 @@ async def test_resume_user_stop_emits_message_end_cancelled(
                 "decision": "continue",
                 "userMessageId": "u1",
                 "traceId": "a" * 32,
+                "session": sidecar_session(),
             },
         )
     )
@@ -811,6 +813,7 @@ async def test_resume_cancel_rpc_does_not_wait_for_hanging_pump(
                 "decision": "continue",
                 "userMessageId": "u1",
                 "traceId": "a" * 32,
+                "session": sidecar_session(),
             },
         )
     )
@@ -923,6 +926,7 @@ async def test_resume_cancelled_without_rpc_is_turn_interrupted(
                 "decision": "continue",
                 "userMessageId": "u1",
                 "traceId": "a" * 32,
+                "session": sidecar_session(),
             },
         )
     )

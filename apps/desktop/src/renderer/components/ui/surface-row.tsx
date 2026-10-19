@@ -20,7 +20,7 @@ const variantClass: Record<SurfaceRowVariant, string> = {
   default:
     "flex items-center rounded-lg text-sm transition-colors hover:bg-accent",
   sidebar:
-    "group flex h-9 w-full items-center gap-2 rounded-lg px-3 text-sm transition-colors text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground",
+    "group flex h-9 w-full items-center gap-2 rounded-lg px-3 text-sm transition-colors text-sidebar-foreground hover:bg-sidebar-accent/50",
   file: "group flex items-center rounded-lg pr-1 text-xs max-md:text-sm hover:bg-accent",
   settings:
     "flex h-9 w-full items-center gap-3 rounded-lg px-3 text-sm transition-colors text-muted-foreground hover:bg-accent hover:text-accent-foreground",
@@ -28,7 +28,9 @@ const variantClass: Record<SurfaceRowVariant, string> = {
 
 /** List row chrome — sidebar nav / conversations, file tree rows. The `sidebar`
  * variant's h-9 is the desktop-layout 导航项 exception; conversation-list rows
- * override it to h-8 so二级内容 doesn't carry nav-level height. */
+ * override it to h-8 so二级内容 doesn't carry nav-level height. Resting ink is
+ * `sidebar-foreground` (nav / folders). Conversation titles set `sidebar-list`
+ * on the label; hover/active only lift the accent wash. */
 export function SurfaceRow({
   variant = "default",
   active = false,

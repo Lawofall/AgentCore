@@ -11,7 +11,22 @@ import {
   within,
 } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("@/services/mcpServers", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/services/mcpServers")>();
+  return {
+    ...actual,
+    listMcpServers: vi.fn(),
+    createMcpServer: vi.fn(),
+    updateMcpServer: vi.fn(),
+    deleteMcpServer: vi.fn(),
+    testMcpServer: vi.fn(),
+    startMcpOAuth: vi.fn(),
+  };
+});
+
+import { createMcpServer, listMcpServers } from "@/services/mcpServers";
 
 const FS: McpServerListItem = {
   id: "fs",
@@ -61,17 +76,57 @@ function renderPage(path: string = APP_PATHS.toolbox.mcp) {
   );
 }
 
+beforeEach(() => {
+  vi.mocked(listMcpServers).mockResolvedValue({ data: [], total: 0 });
+});
+
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  vi.clearAllMocks();
 });
 
 describe("MCP 栏", () => {
-  it("没有本机通道时不假装已接上", () => {
+  it("没有本机通道时仍可接远程插头", async () => {
     renderPage();
     expect(screen.queryByRole("navigation", { name: "工具箱" })).toBeNull();
-    expect(screen.getByText("MCP 只在桌面本机可用。")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "添加 MCP" })).toBeNull();
+    expect(await screen.findByText("还没有 MCP。")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "添加 MCP" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "从 JSON 导入" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "添加 MCP" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(
+      within(dialog).getByRole("heading", { name: "新建 MCP" }),
+    ).toBeTruthy();
+    expect(within(dialog).getByLabelText("地址")).toBeTruthy();
+    expect(within(dialog).queryByLabelText("命令")).toBeNull();
+  });
+
+  it("列出账号远程插头并标需登录", async () => {
+    vi.mocked(listMcpServers).mockResolvedValue({
+      data: [
+        {
+          id: "linear",
+          name: "Linear",
+          url: "https://mcp.linear.app/mcp",
+          auth_kind: "oauth",
+          status: "needs_auth",
+          has_token: false,
+          last_error: "",
+          created_at: "2026-01-01T00:00:00.000Z",
+          updated_at: "2026-01-01T00:00:00.000Z",
+        },
+      ],
+      total: 1,
+    });
+    renderPage();
+    const list = await screen.findByTestId("mcp-list");
+    expect(within(list).getByRole("button", { name: "Linear" })).toBeTruthy();
+    expect(within(list).getByText("需登录")).toBeTruthy();
+    fireEvent.click(within(list).getByRole("button", { name: "Linear" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByLabelText("地址")).toBeTruthy();
+    expect(within(dialog).getByRole("button", { name: "登录" })).toBeTruthy();
   });
 
   it("列出 Server，不铺报出的动作", async () => {
@@ -110,6 +165,8 @@ describe("MCP 栏", () => {
     renderPage();
     fireEvent.click(await screen.findByRole("button", { name: "添加 MCP" }));
     expect(screen.getByRole("heading", { name: "新建 MCP" })).toBeTruthy();
+    expect(screen.getByRole("tablist", { name: "接线" })).toBeTruthy();
+    expect(screen.getByLabelText("命令")).toBeTruthy();
   });
 
   it("节标题与添加 MCP 同一行", async () => {
@@ -118,6 +175,28 @@ describe("MCP 栏", () => {
     const add = await screen.findByRole("button", { name: "添加 MCP" });
     const title = screen.getByRole("heading", { name: "MCP" });
     expect(title.parentElement).toBe(add.parentElement?.parentElement);
+  });
+
+  it("从 JSON 导入一条远程插头填进表", async () => {
+    renderPage();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "从 JSON 导入" }),
+    );
+    const importer = await screen.findByTestId("mcp-import-dialog");
+    fireEvent.change(within(importer).getByLabelText("MCP JSON"), {
+      target: {
+        value: '{"mcpServers":{"linear":{"url":"https://mcp.linear.app/mcp"}}}',
+      },
+    });
+    fireEvent.click(within(importer).getByRole("button", { name: "导入" }));
+    const dialog = await screen.findByTestId("mcp-dialog");
+    expect(
+      within(dialog).getByRole("heading", { name: "新建 MCP" }),
+    ).toBeTruthy();
+    expect(
+      (within(dialog).getByLabelText("地址") as HTMLInputElement).value,
+    ).toBe("https://mcp.linear.app/mcp");
+    expect(createMcpServer).not.toHaveBeenCalled();
   });
 
   it("listServers 失败时诚实说明", async () => {

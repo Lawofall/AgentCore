@@ -54,8 +54,8 @@ Design (mirrors the offline memory consolidation pattern):
   exact-prefix cache (runtime/resolve/prompt.py) — the one thing this must never do.
 
 Robust by construction: credentials follow this conversation's chat payer via
-``run_compaction_llm`` (explicit background-slot BYOK still wins; platform chat
-still quota-gated + one BYOK retry on platform auth reject), the pass is gated
+``run_compaction_llm`` (platform chat still quota-gated + one BYOK retry on
+platform auth reject), the pass is gated
 so a trivial fold never spends an LLM call, and ANY failure (LLM down, timeout,
 empty output, quota skip) leaves the stored state untouched and returns without
 raising — post-turn compaction is best-effort enrichment. Near-ceiling that
@@ -897,7 +897,16 @@ async def _assembly_context_budget(session: object, conversation_id: str) -> int
         from agentcore.db.repositories import ConversationRepository
 
         conv = await ConversationRepository(session).get_by_id_unscoped(conversation_id)  # type: ignore[arg-type]
-        aid = getattr(conv, "assembly_id", None) if conv is not None else None
+        if conv is None:
+            return None
+        override = getattr(conv, "model_override", None)
+        if isinstance(override, dict):
+            budget = override.get("context_budget")
+            if isinstance(budget, int) and not isinstance(budget, bool) and budget > 0:
+                return budget
+            if "main" in override:
+                return None
+        aid = getattr(conv, "assembly_id", None)
         if not aid:
             return None
         row = await session.get(LlmModelProfile, aid)  # type: ignore[attr-defined]

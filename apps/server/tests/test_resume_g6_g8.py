@@ -23,6 +23,7 @@ from agentcore.runtime.pipeline.resume import pipeline as resume_mod
 from agentcore.runtime.pipeline.resume.recover_path import RecoveredResume
 from agentcore.runtime.pipeline.resume.rehydrate import RehydratedTurnState
 from agentcore.runtime.suspension import AskUserSuspension
+from agentcore.runtime.turn.snapshot import ConversationSnapshot
 from agentcore.workspace.protocol import WorkspaceBackend
 
 
@@ -195,7 +196,6 @@ def _patch_resume_terminal(monkeypatch, *, pre_pause: str) -> EventSink:
         chat_tools=MagicMock(),
         base_tool_context=SimpleNamespace(execution_id="exec1"),
         approval_gate=None,
-        vision_cost_sink=[],
     )
     llm = MagicMock()
     llm.close = AsyncMock()
@@ -247,6 +247,7 @@ async def test_resume_sets_reinjection_and_reset_skips_process_timeline(monkeypa
         note="收口",
         sink=sink,
         backend=MagicMock(spec=WorkspaceBackend),
+        conversation=ConversationSnapshot.default(),
     )
     assert result["finish_reason"]  # terminal path completed
     assert sink._content_reset_reinjection == pre_pause + "\n\n"
@@ -276,6 +277,7 @@ async def test_resume_empty_pre_pause_does_not_set_reinjection(monkeypatch):
         note="只收口",
         sink=sink,
         backend=MagicMock(spec=WorkspaceBackend),
+        conversation=ConversationSnapshot.default(),
     )
     assert sink._content_reset_reinjection is None
 

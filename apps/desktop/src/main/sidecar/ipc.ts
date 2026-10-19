@@ -118,7 +118,6 @@ export function registerSidecarIpc(): void {
           "messageId",
         ],
         ["subpath", "userId"],
-        ["folderId", "localRootId", "localSubpath"],
       );
       const workspaceRoot = await liveWorkspaceRoot(req.rootId, req.subpath);
       return manager.startTurn(e.sender, req, workspaceRoot);
@@ -309,7 +308,6 @@ export function registerSidecarIpc(): void {
           "note",
         ],
         ["subpath", "userMessageId", "userId"],
-        ["folderId", "localRootId", "localSubpath"],
       );
       const workspaceRoot = await liveWorkspaceRoot(req.rootId, req.subpath);
       return manager.resume(e.sender, req, workspaceRoot, req.inference);

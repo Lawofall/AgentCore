@@ -186,7 +186,7 @@ def test_grep_schema_teaches_omit_path_when_unsure():
     assert "不确定时省略" not in path
     assert "不要猜测" not in path
     assert "禁止猜测" not in path
-    assert "Desktop" not in path
+    assert "本机绝对路径" in path
     files_only = schema.parameters["properties"]["files_only"]["description"]
     assert files_only == "只回文件路径与匹配数。"
     assert "而非" not in files_only

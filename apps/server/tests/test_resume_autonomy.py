@@ -4,9 +4,9 @@
 ``autonomy_policy`` 硬编码为 ``FIRST_GRANT``：挂起期间改了设置的用户，续跑照旧按旧档跑。
 本文件钉住修后的两条语义（驱动 REAL ``resume_chat_pipeline``，只换 LLM 与 ApprovalGate 记录桩）：
 
-- 调用方解析出的非默认档（云端 ``conversation/turns.py`` 经 ``resolve_permission_axes``；
-  sidecar 经每回合 ``autonomyPolicy`` 参数）原样进 ``ApprovalGate``；
-- 调用方缺省时回退 ``first_grant``（与 ``run_chat_pipeline`` 相同的回退，行为不变）。
+- 调用方快照里的非默认档（云端 ``ConversationSnapshot.from_row``；sidecar RPC ``session``）
+  原样进 ``ApprovalGate``；
+- 调用方用 ``ConversationSnapshot.default()`` 时与 ``run_chat_pipeline`` 相同的默认边界。
 """
 
 from __future__ import annotations
@@ -23,6 +23,7 @@ from agentcore.runtime.events import EventSink, EventType, FinishReason
 from agentcore.runtime.facts import LlmCallFact, RoundBoundaryFact, TurnStartedFact
 from agentcore.runtime.pipeline.resume import pipeline as resume_pipeline_mod
 from agentcore.runtime.suspension import AskUserSuspension
+from agentcore.runtime.turn.snapshot import ConversationSnapshot
 from agentcore.tools.sandbox.subprocess import SubprocessSandbox
 from agentcore.workspace.server import ServerWorkspace
 from tests.llm_helpers import make_turn_profiles
@@ -138,6 +139,7 @@ def _backend() -> ServerWorkspace:
 
 
 async def _run_resume(**kwargs: Any) -> dict:
+    kwargs.setdefault("conversation", ConversationSnapshot.default())
     return await pipeline.resume_chat_pipeline(
         suspension=_ask_frame(),
         decision=CheckpointDecision.CONTINUE,
@@ -153,19 +155,25 @@ async def test_resume_gate_carries_callers_permission_axes(monkeypatch):
     """续跑沿用调用方解析的非默认档——挂起期间改设置，续跑立即生效。"""
     _patch_seams(monkeypatch)
 
-    result = await _run_resume(permission_axes=WorkspaceBoundary.READ)
+    result = await _run_resume(
+        conversation=ConversationSnapshot.default(
+            permission_axes=WorkspaceBoundary.READ
+        )
+    )
 
     assert result["finish_reason"] == FinishReason.END_TURN
     assert len(_RecordingGate.instances) == 1
     assert _RecordingGate.instances[0]["permission_axes"] is WorkspaceBoundary.READ
 
 
-async def test_resume_gate_defaults_to_less_interrupt_when_caller_omits(monkeypatch):
-    """调用方缺省（旧调用点 / 解析失败）⇒ 与 run_chat_pipeline 相同的少打断默认。"""
+async def test_resume_gate_defaults_when_caller_uses_snapshot_default(monkeypatch):
+    """调用方用 ConversationSnapshot.default() ⇒ 与 run_chat_pipeline 相同的默认边界。"""
     _patch_seams(monkeypatch)
 
     result = await _run_resume()
 
     assert result["finish_reason"] == FinishReason.END_TURN
     assert len(_RecordingGate.instances) == 1
-    assert _RecordingGate.instances[0]["permission_axes"] is WorkspaceBoundary.FOLDER
+    assert (
+        _RecordingGate.instances[0]["permission_axes"] is WorkspaceBoundary.COMPUTER
+    )

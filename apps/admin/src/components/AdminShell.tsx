@@ -25,7 +25,7 @@ import { toast } from "sonner";
 
 /**
  * Five operator doors: 总览 / 供给 / 对话 / 用户 / 运营.
- * Inner rooms (额度|成本, 名册|审计|内测群, 公告|商店) are page tabs, not sidebar rows.
+ * Inner rooms (额度|成本|兑换码, 名册|审计|内测群, 公告|商店) are page tabs, not sidebar rows.
  */
 export type AdminTab =
   | "overview"
@@ -56,7 +56,7 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
         label: "供给",
         icon: Wallet,
         path: "/quota",
-        match: ["/quota", "/analytics"],
+        match: ["/quota", "/analytics", "/redemption-codes"],
       },
       {
         id: "conversations",

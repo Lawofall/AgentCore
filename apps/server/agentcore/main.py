@@ -19,7 +19,6 @@ from agentcore.api.routes import (
     conversations,
     demo_tape,
     devices,
-    docs,
     documents,
     envelope_switches,
     favicon,
@@ -30,6 +29,7 @@ from agentcore.api.routes import (
     inference,
     llm_model_profiles,
     llm_providers,
+    mcp_servers,
     messages,
     model_catalog,
     notices,
@@ -37,11 +37,11 @@ from agentcore.api.routes import (
     realtime,
     search,
     search_providers,
+    seats,
     sharing,
     skill_catalog,
     skill_store,
     system,
-    tables,
     tool_switches,
     usage,
     users,
@@ -376,6 +376,12 @@ async def lifespan(app: FastAPI):
     # path; this only catches the disconnected remainder. days<=0 disables.
     stream_state_retention_task = asyncio.create_task(stream_state_retention_loop())
 
+    seat_sweep_task: asyncio.Task | None = None
+    if settings.seat_sweep_interval_seconds > 0:
+        from agentcore.billing.seat_sweep import seat_sweep_loop
+
+        seat_sweep_task = asyncio.create_task(seat_sweep_loop())
+
     # Durable RUNNING lease sweeper (crash recover): claim heartbeat-expired leases and
     # redrive unfinished DAG via recover_turn. The boot sweep is awaited here, before
     # the unstarted FIFO is reloaded, so a recovering turn still owns the slot.
@@ -500,6 +506,10 @@ async def lifespan(app: FastAPI):
             stream_state_retention_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await stream_state_retention_task
+            if seat_sweep_task is not None:
+                seat_sweep_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await seat_sweep_task
             pool_refresh_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await pool_refresh_task
@@ -615,7 +625,6 @@ async def agentcore_error_handler(request, exc: AgentCoreError):
 
 
 app.include_router(system.router)
-app.include_router(tables.router, prefix="/v1")
 app.include_router(admin.router, prefix="/v1")
 app.include_router(account.router, prefix="/v1")
 app.include_router(auth.router, prefix="/v1")
@@ -626,13 +635,13 @@ app.include_router(capabilities.router, prefix="/v1")
 app.include_router(conversations.router, prefix="/v1")
 app.include_router(demo_tape.router, prefix="/v1")
 app.include_router(devices.router, prefix="/v1")
-app.include_router(docs.router, prefix="/v1")
 app.include_router(documents.router, prefix="/v1")
 app.include_router(favicon.router, prefix="/v1")
 app.include_router(files.router, prefix="/v1")
 app.include_router(folders.router, prefix="/v1")
 app.include_router(fulfill.router, prefix="/v1")
 app.include_router(git_credentials.router, prefix="/v1")
+app.include_router(mcp_servers.router, prefix="/v1")
 app.include_router(notices.router, prefix="/v1")
 app.include_router(preview.router, prefix="/v1")
 app.include_router(inference.router, prefix="/v1")
@@ -645,10 +654,10 @@ app.include_router(search.router, prefix="/v1")
 app.include_router(search_providers.router, prefix="/v1")
 app.include_router(skill_catalog.router, prefix="/v1")
 app.include_router(skill_store.router, prefix="/v1")
-# Public shares: conversation manage under /v1, plus /shared/{token} (no auth)
-# which also serves frozen 文档 snapshots minted at /v1/docs/{id}/shares.
+# Public shares: conversation manage under /v1, plus /shared/{token} (no auth).
 app.include_router(sharing.router, prefix="/v1")
 app.include_router(sharing.public_router)
+app.include_router(seats.router, prefix="/v1")
 app.include_router(usage.router, prefix="/v1")
 app.include_router(users.router, prefix="/v1")
 app.include_router(workspaces.router, prefix="/v1")

@@ -59,6 +59,13 @@ vi.mock("../settleAttachments", () => ({
   settleAttachments: vi.fn(async () => ({ ok: true, outgoing: [] })),
 }));
 
+import { upsertConversationFront } from "@/hooks/useConversations";
+import {
+  __resetComposerDelegateModeForTests,
+  getComposerDraftDelegateMode,
+  rememberDelegateSelection,
+  setComposerDraftDelegateMode,
+} from "@/lib/composerDelegateMode";
 import { __resetDraftRequestIdsForTests } from "@/lib/draftRequestId";
 import { notifyError } from "@/lib/toast";
 import { api } from "@/services/api";
@@ -220,6 +227,8 @@ beforeEach(() => {
     draftWorkspaceIntent: { kind: "quick_cloud" },
   });
   setComposerDraftDisabledTools(null);
+  __resetComposerDelegateModeForTests();
+  vi.mocked(upsertConversationFront).mockClear();
   __resetEnvelopeSwitchStoresForTests();
 });
 
@@ -240,9 +249,40 @@ describe("useComposerSend 草稿首发建会话", () => {
     expect(post.mock.calls[0][1]).toMatchObject({
       folder_id: null,
       local_container_root_id: "root-default",
+      delegate_mode: false,
     });
     expect(post.mock.calls[0][1]).not.toHaveProperty("disabled_tools");
     expect(post.mock.calls[0][1]).not.toHaveProperty("omitted_projections");
+  });
+
+  it("草稿委派开时建会话带上，下次新建仍开", async () => {
+    setComposerDraftDelegateMode(true);
+    post.mockResolvedValue({ id: NEW_CONV, delegate_mode: true } as never);
+    seedDraft();
+    const { result } = renderHook(() => useSendHarness());
+
+    await act(async () => {
+      await result.current.send.handleSend();
+    });
+
+    expect(post.mock.calls[0][1]).toMatchObject({ delegate_mode: true });
+    expect(getComposerDraftDelegateMode()).toBe(true);
+    expect(upsertConversationFront).toHaveBeenCalledWith(
+      expect.objectContaining({ id: NEW_CONV, delegateMode: true }),
+    );
+  });
+
+  it("没拨过这场时，建会话跟上次选用", async () => {
+    rememberDelegateSelection(true);
+    post.mockResolvedValue({ id: NEW_CONV, delegate_mode: true } as never);
+    seedDraft();
+    const { result } = renderHook(() => useSendHarness());
+
+    await act(async () => {
+      await result.current.send.handleSend();
+    });
+
+    expect(post.mock.calls[0][1]).toMatchObject({ delegate_mode: true });
   });
 
   it("工具和信封写在装配上，建会话不再带名单", async () => {

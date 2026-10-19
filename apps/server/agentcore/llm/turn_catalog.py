@@ -98,6 +98,7 @@ def _entry_from_wire(row: dict[str, Any]) -> ModelCatalogEntry:
         provider_label=_optional_str(row.get("provider_label")),
         unavailable_reason=_reason_from_wire(row.get("unavailable_reason")),
         reasoning_effort=_effort_from_wire(row.get("reasoning_effort")),
+        custom=bool(row.get("custom", False)),
     )
 
 
@@ -174,10 +175,12 @@ async def load_turn_model_catalog(user_id: str) -> ModelCatalog:
         raise TurnCatalogUnavailableError("no_user")
 
     from agentcore.db.base import async_session_factory
+    from agentcore.db.repositories import UserRepository
     from agentcore.llm.catalog import resolve_model_catalog
 
     async with async_session_factory() as session:
-        return await resolve_model_catalog(session, uid)
+        refs = await UserRepository(session).enabled_model_refs(uid)
+        return await resolve_model_catalog(session, uid, enabled_refs=refs)
 
 
 async def require_turn_model_catalog(

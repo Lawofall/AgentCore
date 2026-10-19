@@ -84,6 +84,39 @@ describe("grantNeedsConfirm", () => {
       }),
     ).toBe(true);
   });
+
+  it("computer and full skip folder dialogs including write upgrades", () => {
+    const invented = {
+      mode: "readonly" as const,
+      haveMode: undefined,
+      wellKnown: null,
+      absUnderInbox: false,
+    };
+    expect(grantNeedsConfirm({ ...invented, boundary: "computer" })).toBe(
+      false,
+    );
+    expect(grantNeedsConfirm({ ...invented, boundary: "full" })).toBe(false);
+    expect(grantNeedsConfirm({ ...invented, boundary: "folder" })).toBe(true);
+    expect(grantNeedsConfirm({ ...invented, boundary: "read" })).toBe(true);
+    expect(
+      grantNeedsConfirm({
+        mode: "attach_rw",
+        haveMode: "readonly",
+        wellKnown: "desktop",
+        absUnderInbox: true,
+        boundary: "computer",
+      }),
+    ).toBe(false);
+    expect(
+      grantNeedsConfirm({
+        mode: "organize",
+        haveMode: undefined,
+        wellKnown: null,
+        absUnderInbox: false,
+        boundary: "full",
+      }),
+    ).toBe(false);
+  });
 });
 
 describe("absIsUnderAnyRoot", () => {

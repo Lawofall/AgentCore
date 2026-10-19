@@ -13,13 +13,28 @@ import {
   snapshotDisplayTitle,
   visibleSnapshots,
 } from "@/components/workspace/snapshotDisplay";
+import type { WorkspaceVersion } from "@/services/localWorkspaceVersions";
 import type { WorkspaceSnapshot } from "@/services/workspace";
+import type { WorkspaceInfo } from "@/services/workspaces";
 
 /**
- * 版本住在哪里。产品 UI 只走云端工作区 id（「我的文件」）；
- * 本机命名版本无产品入口（sidecar / 盘上 API 仍在）。
+ * 版本住在哪里。云端走工作区快照 REST；本机走 sidecar / 盘上 `AgentCore/versions`。
+ * 同一块「版本」面板，两条后端，不拿云端 REST 去打本机（409）。
  */
-export type VersionSource = { origin: "cloudWs"; wsId: string };
+export type VersionSource =
+  | { origin: "cloudWs"; wsId: string }
+  | { origin: "localWs"; rootId: string; subpath: string };
+
+/** 文件页当前这张桌 → 版本源；本机根还没绑上则没有入口。 */
+export function versionSourceFromWorkspace(
+  ws: Pick<WorkspaceInfo, "location" | "wsId" | "rootId" | "subpath">,
+): VersionSource | null {
+  if (ws.location === "cloud") return { origin: "cloudWs", wsId: ws.wsId };
+  if (ws.rootId) {
+    return { origin: "localWs", rootId: ws.rootId, subpath: ws.subpath };
+  }
+  return null;
+}
 
 /** 用户主动打的锚点（version）或系统交接存档（archive）。 */
 export interface VersionTimelineEntry {
@@ -52,4 +67,18 @@ export function snapshotTimelineEntries(
     });
   }
   return out;
+}
+
+/** 本机命名版本列表 → 可见条目（没有交接存档这一档）。 */
+export function localVersionTimelineEntries(
+  versions: readonly WorkspaceVersion[],
+): VersionTimelineEntry[] {
+  return versions.map((version) => ({
+    kind: "version",
+    id: version.versionId,
+    title: version.name,
+    rawLabel: null,
+    sizeBytes: version.sizeBytes,
+    at: version.createdAt,
+  }));
 }

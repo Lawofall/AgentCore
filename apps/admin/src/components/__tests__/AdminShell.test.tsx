@@ -51,6 +51,7 @@ function renderShell(path: string, element: React.ReactNode = <div>页面内容<
           <Route path="/replay/:id" element={element} />
           <Route path="/quota" element={element} />
           <Route path="/analytics/cost" element={element} />
+          <Route path="/redemption-codes" element={element} />
           <Route path="/store" element={element} />
           <Route path="/notices" element={element} />
           <Route path="/audit" element={element} />
@@ -98,6 +99,11 @@ describe("AdminShell navigation", () => {
 
   it("keeps 供给 lit on the cost room", () => {
     renderShell("/analytics/cost");
+    expect(currentNavLabel()).toBe("供给");
+  });
+
+  it("keeps 供给 lit on the redemption-code room", () => {
+    renderShell("/redemption-codes");
     expect(currentNavLabel()).toBe("供给");
   });
 

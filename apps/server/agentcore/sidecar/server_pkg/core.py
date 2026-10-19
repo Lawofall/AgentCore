@@ -19,6 +19,7 @@ from agentcore.llm.credentials import (
     LLMCredentials,
 )
 from agentcore.runtime.suspension import TurnSuspension
+from agentcore.runtime.turn.snapshot import ConversationSnapshot
 from agentcore.sidecar import protocol
 from agentcore.sidecar.fulfill_bridge import SidecarFulfillBridge
 from agentcore.sidecar.paused_store import LocalPausedTurnStore
@@ -84,10 +85,10 @@ class SidecarServer(HandlerMixin, DeliveryMixin, TurnExecutionMixin):
         # Workspaces narrow-ticket creds for unbound cloud-desk file HTTP; per turn.
         self._workspaces_creds: WorkspacesCredentials | None = None
         self._approvals_enabled = True
-        # Initialize-seeded default. Per-turn refresh writes ``_permission_axes_by_conv``
+        # Initialize-seeded default. Per-turn ``session`` writes ``_session_by_conv``
         # so harvest reads this conversation, not the process-level last write.
         self._permission_axes: WorkspaceBoundary = DEFAULT_PERMISSION_AXES
-        self._permission_axes_by_conv: dict[str, WorkspaceBoundary] = {}
+        self._session_by_conv: dict[str, ConversationSnapshot] = {}
         # The local durable-pause store (§8.6 paused-turn port, local impl), set from
         # ``initialize``'s ``dataDir``. ``None`` ⇒ no data dir ⇒ pauses stay in-memory.
         self._paused_store: LocalPausedTurnStore | None = None
@@ -312,13 +313,35 @@ class SidecarServer(HandlerMixin, DeliveryMixin, TurnExecutionMixin):
             return None
         return list(self._turn_history[cid])
 
+    def stamp_conversation_snapshot(
+        self, conversation_id: str, snapshot: ConversationSnapshot
+    ) -> None:
+        """Remember the turn's session snapshot for harvest / pipeline (no session DB)."""
+        cid = (conversation_id or "").strip()
+        if not cid:
+            return
+        self._session_by_conv[cid] = snapshot
+        self.stamp_folder_scope(
+            cid,
+            folder_id=snapshot.folder_id,
+            binding_injected=snapshot.folder_binding_injected,
+            local_root_id=snapshot.folder_local_root_id,
+            local_subpath=snapshot.folder_local_subpath or "",
+        )
+
+    def conversation_snapshot_for(
+        self, conversation_id: str
+    ) -> ConversationSnapshot | None:
+        cid = (conversation_id or "").strip()
+        if not cid:
+            return None
+        return self._session_by_conv.get(cid)
+
     def permission_axes_for(self, conversation_id: str) -> WorkspaceBoundary:
         """Per-conversation axes, else the initialize default (never another conv's last)."""
-        cid = (conversation_id or "").strip()
-        if cid:
-            bag = self._permission_axes_by_conv.get(cid)
-            if bag is not None:
-                return bag
+        bag = self.conversation_snapshot_for(conversation_id)
+        if bag is not None:
+            return bag.permission_axes
         return self._permission_axes
 
     def busy_reason_for_resume(
@@ -515,7 +538,7 @@ class SidecarServer(HandlerMixin, DeliveryMixin, TurnExecutionMixin):
             self._fulfill_bridge = SidecarFulfillBridge(self._send)
         self._fulfill_bridge.bind_user(self._user_id)
 
-    def _declare_fulfill_root(self, params: dict[str, Any]) -> None:
+    def _declare_fulfill_root(self, snapshot: ConversationSnapshot) -> None:
         """Declare this turn's ``localRootId`` on the fulfiller session.
 
         Root-scoped ``workspace`` frames (a worker desk bound to the turn's local
@@ -529,8 +552,7 @@ class SidecarServer(HandlerMixin, DeliveryMixin, TurnExecutionMixin):
         resolves a root this call never sees; those declare themselves as their
         workspace is built (``agentcore.fulfill.local_roots``).
         """
-        raw = params.get("localRootId")
-        root = str(raw).strip() if isinstance(raw, str) else ""
+        root = (snapshot.folder_local_root_id or "").strip()
         if root and self._fulfill_bridge is not None:
             self._fulfill_bridge.declare_root(root)
 

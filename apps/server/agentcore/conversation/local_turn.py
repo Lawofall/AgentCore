@@ -286,7 +286,6 @@ async def _persist_local_turn(
                 "user_message_id": user_message_id,
                 "assistant_message_id": None,
                 "title": None,
-                "followups": None,
                 "noop": True,
             }
         result = await get_cloud_store().finalize(

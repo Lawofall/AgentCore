@@ -119,7 +119,7 @@ export function draftEnvelopeBoard(): EnvelopeSwitchboard {
       {
         id: "boundary",
         label: "边界",
-        summary: "信封报只看、这个文件夹或这台电脑。关掉不改这道边界。",
+        summary: "信封报只看、本文件夹、这台电脑或完全权限。关掉不改这道边界。",
         off: false,
       },
       {

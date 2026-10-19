@@ -63,10 +63,8 @@ class SkillConsultSource:
 
     async def list_directory(self, user_id: str) -> Sequence[ConsultDirectoryEntry]:
         del user_id
-        from agentcore.assembly.bind import current_omit_factory_catalog
+        from agentcore.runtime.skills.factory_switches import include_factory_skill
 
-        if current_omit_factory_catalog():
-            return []
         names = set(self.tool_names)
         return [
             ConsultDirectoryEntry(
@@ -76,16 +74,17 @@ class SkillConsultSource:
                 group=skill.group,
             )
             for skill in self.registry.available(names, audience=self.audience)
+            if include_factory_skill(skill.name)
         ]
 
     async def fetch_by_name(self, user_id: str, name: str) -> str | None:
         del user_id
-        from agentcore.assembly.bind import current_omit_factory_catalog
+        from agentcore.runtime.skills.factory_switches import include_factory_skill
 
-        if current_omit_factory_catalog():
-            return None
         key = name.strip()
         if not key:
+            return None
+        if not include_factory_skill(key):
             return None
         names = set(self.tool_names)
         prefix = PRODUCT_HELP_NAME + PRODUCT_HELP_SECTION_SEP
@@ -169,11 +168,7 @@ class ToolConsultSource:
         key = resolved
         if not has_consult_how(key):
             return None
-        enabled = [
-            n
-            for n in self.registry.names
-            if n in family_of(key, registry=self.registry)
-        ]
+        enabled = [n for n in self.registry.names if n in family_of(key, registry=self.registry)]
         tool = self.registry.get(key)
         return render_tool_consult_body(
             key,

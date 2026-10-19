@@ -13,20 +13,22 @@ import {
   Input,
   PageHeader,
   SectionLabel,
-  SegmentedControl,
   Select,
 } from "@/components/ui";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { useLlmModelProfiles } from "@/hooks/useLlmModelProfiles";
 import { useLlmProviders } from "@/hooks/useLlmProviders";
 import { useModels } from "@/hooks/useModels";
+import {
+  catalogComposerKnobs,
+  restoreComposerKnobs,
+} from "@/lib/composerModelProfile";
 import { contextBudgetLabel, contextBudgetSteps } from "@/lib/contextBudget";
 import {
   type DefaultProviderGroup,
   buildDefaultProviderGroups,
   decodePointer,
   encodePointer,
-  isPlatformGroupId,
   pointerValue,
 } from "@/lib/llmDefaults";
 import { useNarrowLayoutState } from "@/lib/narrowLayout";
@@ -54,6 +56,7 @@ import {
 import type { LlmProviderView } from "@/services/llmProviders";
 import {
   type ModelCatalogItem,
+  catalogEnabledRefs,
   catalogReasoningEffort,
 } from "@/services/models";
 import { useQueryClient } from "@tanstack/react-query";
@@ -76,6 +79,7 @@ import {
   useLocation,
   useNavigate,
 } from "react-router-dom";
+import { ComposerModelShelf } from "./ComposerModelShelf";
 import { ProfileModelSelect, canChooseFromGroups } from "./ProfileModelSelect";
 
 /** 保存响应当次 reminders；列表/详情不带回，仅会话内按组合 id 挂住。 */
@@ -95,13 +99,13 @@ function notifyUnlessWarnings(
   notifySuccess(message);
 }
 
-/** 从分组取第一个可选 BYOK 槽，用于新建种子。不计遗留平台 / 孤儿组。 */
+/** 从分组取第一个可选目录槽（平台优先，因其排在最前）。不计孤儿 / 手填。 */
 function firstSlotFromGroups(
   groups: DefaultProviderGroup[],
 ): ModelProfileSlot | null {
   for (const g of groups) {
-    if (isPlatformGroupId(g.providerId) || g.orphan) continue;
-    const m = g.models.find((opt) => opt.available !== false);
+    if (g.orphan) continue;
+    const m = g.models.find((opt) => opt.available !== false && !opt.custom);
     if (!m) continue;
     return decodePointer(encodePointer(g.providerId, m.model));
   }
@@ -109,7 +113,7 @@ function firstSlotFromGroups(
 }
 
 /**
- * 无可选模型时的引导。装配拣选器只出 BYOK，一律接到服务商。
+ * 无可选模型时的引导。无平台目录且无 BYOK 渠道时接到服务商。
  */
 function NoAvailableModelsGuide({ className }: { className?: string }) {
   return (
@@ -129,12 +133,12 @@ function NoAvailableModelsGuide({ className }: { className?: string }) {
 /**
  * 模型组合 (/more/model) — 账号默认组合 + 组合 CRUD。
  *
- * 组合 = `{ main, worker?, background?, vision? }`；账号默认组合与会话引用见
+ * 组合 = `{ main, worker? }`；账号默认组合与会话引用见
  * `/v1/users/me/assemblies`。凭据与测连见 `/more/providers`。
- * `vision` 槽 API 仍在、设置页不再编辑（图走当前主模型）。
+ * 图走当前主模型。
  */
 
-/** 宽屏装配在工具箱。窄屏没有工具箱路由，设置里是同一页货架。 */
+/** 宽屏能力在工具箱。窄屏没有工具箱路由，设置里是同一页货架。 */
 export function ModelSettingsRoute() {
   const { isNarrow } = useNarrowLayoutState();
   const { pathname } = useLocation();
@@ -173,7 +177,7 @@ export function ModelSettings({ embedded = false }: { embedded?: boolean }) {
       {embedded ? (
         <SectionLabel className="mb-1">模型</SectionLabel>
       ) : (
-        <PageHeader title="装配" />
+        <PageHeader title="能力" />
       )}
 
       <SettingsStack>
@@ -226,8 +230,8 @@ function EmptyProfilesCta() {
 }
 
 /**
- * 模型组合列表 + 编辑：主必填；组队队员 / 后台收进「高级 · 其他模型」
- * （有覆盖时默认展开）。组队/后台空 = 跟随主模型。
+ * 模型组合列表 + 编辑：主必填；组队队员收进「高级 · 其他模型」
+ * （有覆盖时默认展开）。组队空 = 跟随主模型。
  * 系统预置不可删，可设默认 / 复制为用户组合；用户组合可新建 / 改名 / 删。
  */
 function ModelProfilesSection({
@@ -291,22 +295,20 @@ function ModelProfilesSection({
 
   const seedMain = (): ModelProfileSlot | null => {
     const cur = catalog?.current;
+    if (cur?.id && cur.origin === "platform") {
+      const listed = catalogModels.some(
+        (m) =>
+          m.origin === "platform" && m.id === cur.id && m.available !== false,
+      );
+      if (listed) {
+        return { origin: "platform", provider_id: null, model: cur.id };
+      }
+    }
     if (cur?.id && cur.origin === "byok" && cur.provider_id) {
       return {
         origin: "byok",
         provider_id: cur.provider_id,
         model: cur.id,
-      };
-    }
-    const first = catalogModels.find(
-      (m) =>
-        m.available !== false && m.origin === "byok" && Boolean(m.provider_id),
-    );
-    if (first?.provider_id) {
-      return {
-        origin: "byok",
-        provider_id: first.provider_id,
-        model: first.id,
       };
     }
     return firstSlotFromGroups(seedGroups);
@@ -353,14 +355,13 @@ function ModelProfilesSection({
       const created = await createLlmModelProfile({
         name: `${profile.name} 副本`,
         set_as_default: false,
+        origin: "full",
       });
       const updated = profile.main
         ? await updateLlmModelProfile(created.id, {
             name: `${profile.name} 副本`,
             main: profile.main,
             worker: profile.worker ?? null,
-            background: profile.background ?? null,
-            vision: profile.vision ?? null,
             reasoning_effort: profile.reasoning_effort ?? null,
             context_budget: profile.context_budget ?? null,
           })
@@ -392,13 +393,12 @@ function ModelProfilesSection({
       const created = await createLlmModelProfile({
         name: draft.name.trim() || "未命名组合",
         set_as_default: false,
+        origin: "full",
       });
       const updated = await updateLlmModelProfile(created.id, {
         name: draft.name.trim() || "未命名组合",
         main: draft.main,
         worker: draft.worker,
-        background: draft.background,
-        vision: draft.vision,
         reasoning_effort: draft.reasoning_effort,
         context_budget: draft.context_budget,
       });
@@ -425,8 +425,6 @@ function ModelProfilesSection({
         name,
         main: draft.main,
         worker: draft.worker,
-        background: draft.background,
-        vision: draft.vision,
         reasoning_effort: draft.reasoning_effort,
         context_budget: draft.context_budget,
       });
@@ -475,8 +473,6 @@ function ModelProfilesSection({
                 name: "未命名组合",
                 main: seedMain(),
                 worker: null,
-                background: null,
-                vision: null,
                 reasoning_effort: null,
                 context_budget: null,
               }}
@@ -498,8 +494,6 @@ function ModelProfilesSection({
                   name: profile.name,
                   main: profile.main ?? null,
                   worker: profile.worker ?? null,
-                  background: profile.background ?? null,
-                  vision: profile.vision ?? null,
                   reasoning_effort: profile.reasoning_effort ?? null,
                   context_budget: profile.context_budget ?? null,
                 }}
@@ -564,14 +558,9 @@ export type ProfileDraft = {
   name: string;
   main: ModelProfileSlot | null;
   worker: ModelProfileSlot | null;
-  background: ModelProfileSlot | null;
-  vision: ModelProfileSlot | null;
   reasoning_effort: string | null;
   context_budget: number | null;
 };
-
-/** Four short tokens fit one segmented track. More than that uses the same select as a model slot. */
-const SEGMENTED_CHOICE_MAX = 4;
 
 function ProfileChoiceControl({
   id,
@@ -580,7 +569,6 @@ function ProfileChoiceControl({
   onChange,
   items,
   disabled,
-  asSelect = false,
 }: {
   id: string;
   label: string;
@@ -588,54 +576,34 @@ function ProfileChoiceControl({
   onChange: (value: string) => void;
   items: readonly { value: string; label: string }[];
   disabled?: boolean;
-  /** Toolbox row: always a select, even when the tokens would fit a track. */
-  asSelect?: boolean;
 }) {
-  if (asSelect || items.length > SEGMENTED_CHOICE_MAX) {
-    return (
-      <Select
-        id={id}
-        aria-label={label}
-        value={value}
-        disabled={disabled}
-        onChange={(event) => onChange(event.target.value)}
-      >
-        {items.map((item) => (
-          <option key={item.value} value={item.value}>
-            {item.label}
-          </option>
-        ))}
-      </Select>
-    );
-  }
   return (
-    <SegmentedControl
+    <Select
+      id={id}
       aria-label={label}
       value={value}
-      onChange={onChange}
-      items={items}
-      fit
-    />
+      disabled={disabled}
+      onChange={(event) => onChange(event.target.value)}
+    >
+      {items.map((item) => (
+        <option key={item.value} value={item.value}>
+          {item.label}
+        </option>
+      ))}
+    </Select>
   );
 }
 
 function hasAdvancedSlotOverrides(
-  draft: Pick<ProfileDraft, "worker" | "background">,
+  draft: Pick<ProfileDraft, "worker">,
 ): boolean {
-  return Boolean(draft.worker || draft.background);
+  return Boolean(draft.worker);
 }
 
 /** 高级区收起时的一行摘要。 */
-function advancedSlotsSummary(
-  worker: ModelProfileSlot | null,
-  background: ModelProfileSlot | null,
-): string {
-  if (!worker && !background) {
-    return "组队/后台：跟随主模型";
-  }
-  const workerLabel = worker?.model ?? "跟随主模型";
-  const backgroundLabel = background?.model ?? "跟随主模型";
-  return `组队：${workerLabel} · 后台：${backgroundLabel}`;
+function advancedSlotsSummary(worker: ModelProfileSlot | null): string {
+  if (!worker) return "组队队员：跟随主模型";
+  return `组队队员：${worker.model}`;
 }
 
 function ProfileSaveWarnings({
@@ -794,6 +762,7 @@ export function ProfileEditor({
   showCancel = true,
   framed = true,
   surface = "card",
+  shelfLayout = "columns",
 }: {
   title: string;
   providers: LlmProviderView[];
@@ -808,14 +777,14 @@ export function ProfileEditor({
   showTitle?: boolean;
   showCancel?: boolean;
   framed?: boolean;
-  /** `shelf` is the toolbox model block: no name, knobs in rows, save on change. */
+  /** `shelf` is the composer model block: catalog plus the checked model's knobs, save on change. */
   surface?: "card" | "shelf";
+  /** Composer shelf: two panes, or one column inside「＋」. */
+  shelfLayout?: "columns" | "stack";
 }) {
   const [name, setName] = useState(initial.name);
   const [main, setMain] = useState(initial.main);
   const [worker, setWorker] = useState(initial.worker);
-  const [background, setBackground] = useState(initial.background);
-  const [vision] = useState(initial.vision);
   const [reasoningEffort, setReasoningEffort] = useState(
     initial.reasoning_effort,
   );
@@ -834,16 +803,8 @@ export function ProfileEditor({
 
   // 只 fold-in 当前编辑组合的槽位，避免跨组合污染建议。
   const groups = useMemo(
-    () =>
-      buildDefaultProviderGroups(
-        providers,
-        catalog,
-        main,
-        worker,
-        background,
-        vision,
-      ),
-    [providers, catalog, main, worker, background, vision],
+    () => buildDefaultProviderGroups(providers, catalog, main, worker),
+    [providers, catalog, main, worker],
   );
 
   const canChoose = canChooseFromGroups(groups);
@@ -858,8 +819,6 @@ export function ProfileEditor({
     name: string;
     main: ModelProfileSlot | null;
     worker: ModelProfileSlot | null;
-    background: ModelProfileSlot | null;
-    vision: ModelProfileSlot | null;
     reasoningEffort: string | null;
     contextBudget: number | null;
   };
@@ -879,8 +838,6 @@ export function ProfileEditor({
       name: state.name,
       main: state.main,
       worker: state.worker,
-      background: state.background,
-      vision: state.vision,
       reasoning_effort: spec ? selectedEffort : null,
       context_budget:
         steps &&
@@ -891,6 +848,16 @@ export function ProfileEditor({
     };
   };
 
+  const incomingSignature = JSON.stringify(
+    draftFrom({
+      name: initial.name,
+      main: initial.main,
+      worker: initial.worker,
+      reasoningEffort: initial.reasoning_effort,
+      contextBudget: initial.context_budget,
+    }),
+  );
+
   const onSaveRef = useRef(onSave);
   onSaveRef.current = onSave;
   const lastQueued = useRef<string | null>(null);
@@ -899,20 +866,22 @@ export function ProfileEditor({
   const shelfSeeded = useRef(false);
   if (shelf && !shelfSeeded.current) {
     shelfSeeded.current = true;
-    const signature = JSON.stringify(
-      draftFrom({
-        name: initial.name,
-        main: initial.main,
-        worker: initial.worker,
-        background: initial.background,
-        vision: initial.vision,
-        reasoningEffort: initial.reasoning_effort,
-        contextBudget: initial.context_budget,
-      }),
-    );
-    lastQueued.current = signature;
-    lastOk.current = signature;
+    lastQueued.current = incomingSignature;
+    lastOk.current = incomingSignature;
   }
+
+  useEffect(() => {
+    if (!shelf) return;
+    if (incomingSignature === lastQueued.current) return;
+    if (lastQueued.current !== lastOk.current) return;
+    setName(initial.name);
+    setMain(initial.main);
+    setWorker(initial.worker);
+    setReasoningEffort(initial.reasoning_effort);
+    setContextBudget(initial.context_budget);
+    lastQueued.current = incomingSignature;
+    lastOk.current = incomingSignature;
+  }, [shelf, incomingSignature, initial]);
 
   const persistShelf = (state: EditorSnap) => {
     const draft = draftFrom(state);
@@ -939,17 +908,24 @@ export function ProfileEditor({
 
   const applyMain = (next: ModelProfileSlot | null) => {
     const spec = catalogReasoningEffort(next, catalogModels);
-    const nextEffort =
-      spec && reasoningEffort && spec.options.includes(reasoningEffort)
-        ? reasoningEffort
-        : null;
     const steps = contextBudgetSteps(
       catalogContextLength(catalogModels, { slot: next }),
     );
-    const nextBudget =
-      steps &&
-      contextBudget != null &&
-      steps.slice(0, -1).includes(contextBudget)
+    const restored = restoreComposerKnobs(
+      next,
+      catalogComposerKnobs(catalog),
+      catalogModels,
+    );
+    const nextEffort = shelf
+      ? restored.reasoning_effort
+      : spec && reasoningEffort && spec.options.includes(reasoningEffort)
+        ? reasoningEffort
+        : null;
+    const nextBudget = shelf
+      ? restored.context_budget
+      : steps &&
+          contextBudget != null &&
+          steps.slice(0, -1).includes(contextBudget)
         ? contextBudget
         : null;
     setMain(next);
@@ -960,8 +936,6 @@ export function ProfileEditor({
         name,
         main: next,
         worker,
-        background,
-        vision,
         reasoningEffort: nextEffort,
         contextBudget: nextBudget,
       });
@@ -977,8 +951,6 @@ export function ProfileEditor({
           name,
           main,
           worker,
-          background,
-          vision,
           reasoningEffort,
           contextBudget,
         }),
@@ -999,28 +971,48 @@ export function ProfileEditor({
     fieldClassName?: string,
     compactTrigger?: boolean,
     wideMenu?: boolean,
-  ) => (
-    <SettingField
-      className={fieldClassName}
-      label={label}
-      htmlFor={id}
-      hint={hint}
-      hintPlacement={hint ? "label" : "below"}
-    >
+    menuPlacement?: "below" | "above",
+    rowLabel?: string,
+  ) =>
+    rowLabel ? (
       <ProfileModelSelect
         id={id}
-        labelledBy={`${id}-label`}
-        describedBy={hint ? `${id}-hint` : undefined}
+        rowLabel={rowLabel}
         groups={groups}
         value={pointerValue(value)}
+        hiddenRefs={catalog?.hidden_refs}
+        enabledRefs={catalogEnabledRefs(catalog)}
         disabled={busy || (!canChoose && !value)}
         followLabel="跟随主模型"
-        compactTrigger={compactTrigger}
         wideMenu={wideMenu}
+        menuPlacement={menuPlacement}
         onChange={(next) => onChange(decodePointer(next))}
       />
-    </SettingField>
-  );
+    ) : (
+      <SettingField
+        className={fieldClassName}
+        label={label}
+        htmlFor={id}
+        hint={hint}
+        layout="inline"
+      >
+        <ProfileModelSelect
+          id={id}
+          labelledBy={`${id}-label`}
+          describedBy={hint ? `${id}-hint` : undefined}
+          groups={groups}
+          value={pointerValue(value)}
+          hiddenRefs={catalog?.hidden_refs}
+          enabledRefs={catalogEnabledRefs(catalog)}
+          disabled={busy || (!canChoose && !value)}
+          followLabel="跟随主模型"
+          compactTrigger={compactTrigger}
+          wideMenu={wideMenu}
+          menuPlacement={menuPlacement}
+          onChange={(next) => onChange(decodePointer(next))}
+        />
+      </SettingField>
+    );
 
   const effortValue =
     effortSpec &&
@@ -1041,8 +1033,6 @@ export function ProfileEditor({
       name,
       main,
       worker,
-      background,
-      vision,
       reasoningEffort,
       contextBudget,
       ...patch,
@@ -1053,8 +1043,56 @@ export function ProfileEditor({
     if (patch.contextBudget !== undefined)
       setContextBudget(patch.contextBudget);
     if (patch.worker !== undefined) setWorker(patch.worker);
-    if (patch.background !== undefined) setBackground(patch.background);
     persistShelf(next);
+  };
+
+  const tunePreview = (
+    slot: ModelProfileSlot,
+    patch: { reasoningEffort?: string | null; contextBudget?: number | null },
+  ) => {
+    const spec = catalogReasoningEffort(slot, catalogModels);
+    const steps = contextBudgetSteps(
+      catalogContextLength(catalogModels, { slot }),
+    );
+    const same = pointerValue(slot) === pointerValue(main);
+    const restored = restoreComposerKnobs(
+      slot,
+      catalogComposerKnobs(catalog),
+      catalogModels,
+    );
+    const nextEffort =
+      patch.reasoningEffort !== undefined
+        ? patch.reasoningEffort && spec?.options.includes(patch.reasoningEffort)
+          ? patch.reasoningEffort
+          : null
+        : same &&
+            spec &&
+            reasoningEffort &&
+            spec.options.includes(reasoningEffort)
+          ? reasoningEffort
+          : restored.reasoning_effort;
+    const nextBudget =
+      patch.contextBudget !== undefined
+        ? patch.contextBudget != null &&
+          steps?.slice(0, -1).includes(patch.contextBudget)
+          ? patch.contextBudget
+          : null
+        : same &&
+            steps &&
+            contextBudget != null &&
+            steps.slice(0, -1).includes(contextBudget)
+          ? contextBudget
+          : restored.context_budget;
+    setMain(slot);
+    setReasoningEffort(nextEffort);
+    setContextBudget(nextBudget);
+    persistShelf({
+      name,
+      main: slot,
+      worker,
+      reasoningEffort: nextEffort,
+      contextBudget: nextBudget,
+    });
   };
 
   const messages = (
@@ -1067,102 +1105,61 @@ export function ProfileEditor({
   );
 
   if (shelf) {
+    const effortItems = effortSpec
+      ? effortSpec.options.map((token) => ({ value: token, label: token }))
+      : null;
+    const budgetItems = budgetSteps
+      ? budgetSteps.map((step) => ({
+          value: String(step),
+          label: contextBudgetLabel(step),
+        }))
+      : null;
     return (
-      <div className="space-y-4">
-        <div
-          className="flex flex-wrap items-start gap-4"
-          data-testid="assembly-model-row"
-        >
-          <SettingField
-            className="min-w-64 flex-1"
-            label="主模型"
-            htmlFor="profile-main"
-          >
-            <ProfileModelSelect
-              id="profile-main"
-              labelledBy="profile-main-label"
-              groups={groups}
-              value={pointerValue(main)}
-              disabled={busy}
-              compactTrigger
-              onChange={(value) => applyMain(decodePointer(value))}
-            />
-            {showEmptyGuide && <NoAvailableModelsGuide className="mt-2" />}
-          </SettingField>
-          <div
-            className="flex w-max max-w-full shrink-0 flex-wrap items-start gap-4"
-            data-testid="assembly-model-shorts"
-          >
-            {effortSpec ? (
-              <SettingField
-                className="w-28 shrink-0"
-                label="思考强度"
-                htmlFor="profile-reasoning-effort"
-              >
-                <ProfileChoiceControl
-                  id="profile-reasoning-effort"
-                  label="思考强度"
-                  value={effortValue}
-                  disabled={busy}
-                  asSelect
-                  onChange={(token) => commitShelf({ reasoningEffort: token })}
-                  items={effortSpec.options.map((token) => ({
-                    value: token,
-                    label: token,
-                  }))}
-                />
-              </SettingField>
-            ) : null}
-            {budgetSteps ? (
-              <SettingField
-                className="w-32 shrink-0"
-                label="上下文长度"
-                htmlFor="profile-context-budget"
-              >
-                <ProfileChoiceControl
-                  id="profile-context-budget"
-                  label="上下文长度"
-                  value={budgetValue}
-                  disabled={busy}
-                  asSelect
-                  onChange={(token) => {
-                    const picked = Number(token);
-                    const windowStep = budgetSteps[budgetSteps.length - 1];
-                    commitShelf({
-                      contextBudget: picked === windowStep ? null : picked,
-                    });
-                  }}
-                  items={budgetSteps.map((step) => ({
-                    value: String(step),
-                    label: contextBudgetLabel(step),
-                  }))}
-                />
-              </SettingField>
-            ) : null}
-            {renderSlot(
-              "profile-worker",
-              "组队队员",
-              undefined,
-              worker,
-              (next) => commitShelf({ worker: next }),
-              "w-44 shrink-0",
-              true,
-              true,
-            )}
-            {renderSlot(
-              "profile-background",
-              "后台任务",
-              undefined,
-              background,
-              (next) => commitShelf({ background: next }),
-              "w-36 shrink-0",
-              true,
-              true,
-            )}
-          </div>
-        </div>
-        {messages}
-      </div>
+      <ComposerModelShelf
+        layout={shelfLayout}
+        groups={groups}
+        main={main}
+        hiddenRefs={catalog?.hidden_refs}
+        enabledRefs={catalogEnabledRefs(catalog)}
+        busy={busy}
+        effort={
+          effortSpec && effortItems
+            ? {
+                id: "profile-reasoning-effort",
+                label: "思考强度",
+                value: effortValue,
+                items: effortItems,
+                onChange: (token) => commitShelf({ reasoningEffort: token }),
+              }
+            : null
+        }
+        budget={
+          budgetSteps && budgetItems
+            ? {
+                id: "profile-context-budget",
+                label: "上下文长度",
+                value: budgetValue,
+                items: budgetItems,
+                onChange: (token) => {
+                  const picked = Number(token);
+                  const windowStep = budgetSteps[budgetSteps.length - 1];
+                  commitShelf({
+                    contextBudget: picked === windowStep ? null : picked,
+                  });
+                },
+              }
+            : null
+        }
+        catalogModels={catalogModels}
+        modelKnobs={catalogComposerKnobs(catalog)}
+        worker={worker}
+        followLabel="跟随主模型"
+        onPickMain={applyMain}
+        onPickWorker={(next) => commitShelf({ worker: next })}
+        onTune={tunePreview}
+        messages={messages}
+        empty={showEmptyGuide ? <NoAvailableModelsGuide /> : null}
+      />
     );
   }
 
@@ -1179,7 +1176,7 @@ export function ProfileEditor({
       ) : null}
 
       <div className="max-w-md space-y-4">
-        <SettingField label="名称" htmlFor="profile-name">
+        <SettingField label="名称" htmlFor="profile-name" layout="inline">
           <Input
             id="profile-name"
             value={name}
@@ -1190,8 +1187,8 @@ export function ProfileEditor({
         <SettingField
           label="主模型"
           htmlFor="profile-main"
+          layout="inline"
           hint="必填，下一回合生效"
-          hintPlacement="label"
         >
           <ProfileModelSelect
             id="profile-main"
@@ -1199,6 +1196,8 @@ export function ProfileEditor({
             describedBy="profile-main-hint"
             groups={groups}
             value={pointerValue(main)}
+            hiddenRefs={catalog?.hidden_refs}
+            enabledRefs={catalogEnabledRefs(catalog)}
             disabled={busy}
             onChange={(value) => applyMain(decodePointer(value))}
           />
@@ -1208,8 +1207,8 @@ export function ProfileEditor({
           <SettingField
             label="思考强度"
             htmlFor="profile-reasoning-effort"
+            layout="inline"
             hint="厂商档位，对本组合聊天与组队队员生效"
-            hintPlacement="label"
           >
             <ProfileChoiceControl
               id="profile-reasoning-effort"
@@ -1264,7 +1263,7 @@ export function ProfileEditor({
             </span>
             {!advancedOpen && (
               <span className="mt-0.5 block truncate text-xs text-muted-foreground">
-                {advancedSlotsSummary(worker, background)}
+                {advancedSlotsSummary(worker)}
               </span>
             )}
           </span>
@@ -1284,13 +1283,6 @@ export function ProfileEditor({
               "协作时队员使用",
               worker,
               setWorker,
-            )}
-            {renderSlot(
-              "profile-background",
-              "后台任务",
-              "标题等",
-              background,
-              setBackground,
             )}
           </div>
         )}

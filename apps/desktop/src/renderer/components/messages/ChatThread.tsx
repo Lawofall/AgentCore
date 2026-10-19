@@ -34,6 +34,7 @@ import {
   buildReplySnapshot,
   chatCircleAvatarUrl,
   chatDisplayName,
+  chatHeaderSubtitle,
   isGroupModeratorRole,
   memberGovernanceBadge,
 } from "./chatDisplay";
@@ -130,24 +131,14 @@ export function ChatThread({ chatId }: Props) {
     useStickToBottom(chatId);
 
   const name = chat ? chatDisplayName(chat) : "";
-  const memberCount = isGroup && members.length > 0 ? members.length : null;
-  const onlineCount = isGroup ? members.filter((m) => m.online).length : null;
   const peerOnline = chat?.type === "dm" ? !!chat.peer?.online : false;
   const hasMessages = messages.length > 0;
   // viewer.state === pending means someone opened this dm with us and we have
   // not replied yet — a message request (replying accepts it, 消息IM.md §五).
   const isRequest = chat?.state === "pending";
-
-  let headerSubtitle: string | null = null;
-  if (chat?.type === "dm") {
-    headerSubtitle = peerOnline ? "在线" : "离线";
-  } else if (isOfficial) {
-    headerSubtitle = "官方广播";
-  } else if (isGroup && members.length > 0) {
-    headerSubtitle = `${onlineCount} 人在线`;
-  } else if (memberCount) {
-    headerSubtitle = `${memberCount} 名成员`;
-  }
+  const headerSubtitle = chat
+    ? chatHeaderSubtitle(chat, isGroup ? members.length : 0)
+    : null;
 
   const resolveSenderLabel = useCallback(
     (message: ChatMessageDetail): string => {

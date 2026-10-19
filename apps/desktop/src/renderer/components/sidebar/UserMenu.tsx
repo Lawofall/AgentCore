@@ -85,7 +85,7 @@ export function UserMenu() {
         ) : (
           <>
             {avatar}
-            <span className="flex-1 truncate text-sm text-sidebar-foreground/80">
+            <span className="flex-1 truncate text-sm text-sidebar-foreground">
               {displayName}
             </span>
             <SimpleTooltip label="登出">

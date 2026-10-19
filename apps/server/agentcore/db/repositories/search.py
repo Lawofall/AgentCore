@@ -61,6 +61,7 @@ class UserSearchProviderRepository:
         api_key_enc: bytes | None,
         status: str = "connected",
         detail: str | None = None,
+        source: str = "provider",
         commit: bool = True,
     ) -> UserSearchProvider:
         row = UserSearchProvider(
@@ -72,6 +73,7 @@ class UserSearchProviderRepository:
             api_key_enc=api_key_enc,
             status=status,
             detail=detail,
+            source=source,
         )
         self._session.add(row)
         await commit_or_flush(self._session, commit=commit)
@@ -87,6 +89,7 @@ class UserSearchProviderRepository:
         base_url: str,
         api_key_enc: bytes | None,
         clear_key: bool = False,
+        source: str = "provider",
         commit: bool = True,
     ) -> UserSearchProvider | None:
         row = await self.get(provider_id, user_id=user_id)
@@ -95,6 +98,7 @@ class UserSearchProviderRepository:
         row.label = label
         row.base_url = base_url
         row.api_key_enc = None if clear_key else api_key_enc
+        row.source = source
         row.status = "connected"
         row.detail = None
         await commit_or_flush(self._session, commit=commit)

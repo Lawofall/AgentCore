@@ -8,6 +8,7 @@ import {
   __resetEnvelopeSwitchStoresForTests,
   draftEnvelopeBoard,
 } from "@/services/envelopeSwitches";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   cleanup,
   fireEvent,
@@ -15,6 +16,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
+import type { ReactElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/services/api", () => ({
@@ -24,8 +26,20 @@ vi.mock("@/lib/toast", () => ({
   notifyError: vi.fn(),
   notifySuccess: vi.fn(),
 }));
+vi.mock("@/lib/assemblyWrite", () => ({
+  refreshAssembliesAfterWrite: vi.fn(async () => undefined),
+}));
 
 import { EnvelopeSwitchList } from "../EnvelopeSwitchList";
+
+function renderSwitches(ui: ReactElement) {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return render(
+    <QueryClientProvider client={client}>{ui}</QueryClientProvider>,
+  );
+}
 
 const get = vi.mocked(api.get);
 const put = vi.mocked(api.put);
@@ -80,8 +94,8 @@ describe("EnvelopeSwitchList", () => {
     ]);
   });
 
-  it("没这场时拨开关写星标装配", async () => {
-    render(<EnvelopeSwitchList scope="draft" />);
+  it("没这场时拨开关写下次新建会用的这份", async () => {
+    renderSwitches(<EnvelopeSwitchList scope="draft" />);
     fireEvent.click(await screen.findByRole("switch", { name: "日期" }));
     await waitFor(() => {
       expect(put).toHaveBeenCalledWith("/v1/users/me/envelope-switches", {
@@ -91,7 +105,7 @@ describe("EnvelopeSwitchList", () => {
   });
 
   it("已有这场时拨开关写这场", async () => {
-    render(
+    renderSwitches(
       <EnvelopeSwitchList
         scope="conversation"
         conversationId="c1"
@@ -109,7 +123,7 @@ describe("EnvelopeSwitchList", () => {
   });
 
   it("有这场时开关下写这一轮不换", async () => {
-    render(
+    renderSwitches(
       <EnvelopeSwitchList
         scope="conversation"
         conversationId="c1"
@@ -124,7 +138,7 @@ describe("EnvelopeSwitchList", () => {
   });
 
   it("都开时全部关闭把当前行写入拒绝表", async () => {
-    render(<EnvelopeSwitchList scope="draft" showBulk />);
+    renderSwitches(<EnvelopeSwitchList scope="draft" showBulk />);
     await waitFor(() => {
       expect(screen.getByRole("switch", { name: "日期" })).toBeTruthy();
       expect(screen.getByRole("switch", { name: "执行" })).toBeTruthy();
@@ -139,9 +153,19 @@ describe("EnvelopeSwitchList", () => {
     });
   });
 
+  it("官方完整锁定时不拨、不出现全部开关", async () => {
+    renderSwitches(
+      <EnvelopeSwitchList scope="draft" showBulk locked heading="信封" />,
+    );
+    expect(await screen.findByRole("switch", { name: "日期" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "全部关闭" })).toBeNull();
+    fireEvent.click(screen.getByRole("switch", { name: "日期" }));
+    expect(put).not.toHaveBeenCalled();
+  });
+
   it("有开有关时两颗都在，打开清空拒绝表", async () => {
     get.mockResolvedValue(board(["runtime_date"]));
-    render(
+    renderSwitches(
       <EnvelopeSwitchList scope="conversation" conversationId="c1" showBulk />,
     );
     expect(
@@ -159,7 +183,7 @@ describe("EnvelopeSwitchList", () => {
 
   it("都关时只出全部打开", async () => {
     get.mockResolvedValue(board(["runtime_date", "execution"]));
-    render(<EnvelopeSwitchList scope="draft" showBulk />);
+    renderSwitches(<EnvelopeSwitchList scope="draft" showBulk />);
     expect(
       await screen.findByRole("button", { name: "全部打开" }),
     ).toBeTruthy();
@@ -167,7 +191,7 @@ describe("EnvelopeSwitchList", () => {
   });
 
   it("不传 showBulk 时名单顶上没有总按钮", async () => {
-    render(<EnvelopeSwitchList scope="draft" />);
+    renderSwitches(<EnvelopeSwitchList scope="draft" />);
     await screen.findByRole("switch", { name: "日期" });
     expect(screen.queryByRole("button", { name: "全部关闭" })).toBeNull();
     expect(screen.queryByRole("button", { name: "全部打开" })).toBeNull();

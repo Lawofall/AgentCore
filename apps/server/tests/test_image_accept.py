@@ -48,10 +48,21 @@ def test_openai_family_prefix_sku_boundary():
     assert model_accepts_images("gpt-4o-custom-build") is True
     assert model_accepts_images("gpt-4.1") is True
     assert model_accepts_images("gpt-4.1-mini") is True
+    assert model_accepts_images("gpt-5") is True
+    assert model_accepts_images("gpt-5.6-luna") is True
+    assert model_accepts_images("gpt-6-astra") is True
     # No SKU boundary after the family id.
     assert model_accepts_images("gpt-4omni") is False
     assert model_accepts_images("gpt-4.10") is False
     assert model_accepts_images("mystery-4o-clone") is False
+
+
+def test_claude_family_prefix():
+    assert model_accepts_images("claude") is True
+    assert model_accepts_images("claude-opus-4-6") is True
+    assert model_accepts_images("claude-opus-5-5") is True
+    assert model_accepts_images("claude-fable-5.1") is True
+    assert model_accepts_images("mystery-claude") is False
 
 
 def test_moonshot_exact_not_k2_family():
@@ -60,6 +71,20 @@ def test_moonshot_exact_not_k2_family():
     assert model_accepts_images("kimi-k3") is True
     assert model_accepts_images("kimi-k2") is False
     assert model_accepts_images("kimi-k2.6-preview") is False
+
+
+def test_glm_53_flash_exact_not_glm_53():
+    assert model_accepts_images("glm-5.3-flash") is True
+    assert model_accepts_images("glm-5.3-flashx") is True
+    assert model_accepts_images("glm-5.3") is False
+    assert model_accepts_images("glm-5.2") is False
+
+
+def test_declared_unknown_id_until_rejected():
+    assert model_accepts_images("my-vl") is False
+    assert model_accepts_images("my-vl", declared=True) is True
+    note_images_rejected("my-vl")
+    assert model_accepts_images("my-vl", declared=True) is False
 
 
 def test_glm_4v_and_qwen_vl_prefix():

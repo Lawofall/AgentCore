@@ -1,8 +1,7 @@
 """Cloud web search for the on-machine sidecar.
 
-Platform SearXNG, CleverSee, and keyed own SearXNG run here so the desktop
-never holds a search key and the platform count cannot be skipped. A keyless
-own SearXNG is called from the sidecar and does not use this route.
+Platform SearXNG and DeepSeek run here so the desktop never holds a search
+key and the platform count cannot be skipped.
 """
 
 from __future__ import annotations
@@ -14,7 +13,6 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, field_validator
 
 from agentcore.api.routes.inference.token import inference_user
-from agentcore.api.schemas import StatusResponse
 from agentcore.conversation.inference_rate_limit import enforce_inference_proxy_rate_limit
 from agentcore.core.error_codes import ErrorCode
 from agentcore.core.errors import QuotaExceededError
@@ -27,14 +25,14 @@ from agentcore.llm.credentials import (
     INFERENCE_MESSAGE_HEADER,
     INFERENCE_TRACE_HEADER,
 )
-from agentcore.tools.builtin.web.provider_service import note_own_search_failure
-from agentcore.tools.builtin.web.search_backend import DEFAULT_MAX_RESULTS, get_search_backend
-from agentcore.tools.builtin.web.search_choice import (
+from agentcore.search.choice import (
     SearchRouteView,
     SearchTarget,
     load_search_target,
     route_from_target,
 )
+from agentcore.search.connection import note_own_search_failure
+from agentcore.tools.builtin.web.search_backend import DEFAULT_MAX_RESULTS, get_search_backend
 from agentcore.tools.builtin.web.search_dispatch import dispatch_search
 from agentcore.tools.builtin.web.search_quota import (
     admit_platform_search,
@@ -104,6 +102,14 @@ async def inference_web_search(
     user: User = Depends(inference_user),
 ) -> InferenceWebSearchResponse | JSONResponse:
     """Run server-side web search for a sidecar turn (account index; no client keys)."""
+    return await _inference_web_search(body, request, user)
+
+
+async def _inference_web_search(
+    body: InferenceWebSearchRequest,
+    request: Request,
+    user: User,
+) -> InferenceWebSearchResponse | JSONResponse:
     conversation_id = request.headers.get(INFERENCE_CONVERSATION_HEADER) or None
     message_id = request.headers.get(INFERENCE_MESSAGE_HEADER) or None
     trace_id = request.headers.get(INFERENCE_TRACE_HEADER) or None
@@ -197,21 +203,9 @@ async def inference_web_search(
         )
 
 
-class SearchConnectionFailureRequest(BaseModel):
-    message: str = Field(default="", max_length=300)
-
-
-@router.post("/inference/search_connection/failure", response_model=StatusResponse)
-async def inference_search_connection_failure(
-    body: SearchConnectionFailureRequest,
-    user: User = Depends(inference_user),
-) -> StatusResponse:
-    """Sidecar report: the keyless SearXNG it called just failed."""
-    await note_own_search_failure(user.user_id, body.message)
-    return StatusResponse()
-
-
 @router.get("/inference/search_route", response_model=SearchRouteView)
-async def inference_search_route(user: User = Depends(inference_user)) -> SearchRouteView:
+async def inference_search_route(
+    user: User = Depends(inference_user),
+) -> SearchRouteView:
     """Sidecar-visible search route (inference JWT). Never includes an API key."""
     return route_from_target(await load_search_target(user.user_id))

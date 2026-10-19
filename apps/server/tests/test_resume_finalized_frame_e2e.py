@@ -40,6 +40,7 @@ from agentcore.runtime.suspension import (
     captain_transcript,
     suspension_from_json,
 )
+from agentcore.runtime.turn.snapshot import ConversationSnapshot
 from agentcore.tools.builtin.ask_user import AskUserTool
 from agentcore.tools.protocol import ToolContext
 from agentcore.tools.registry import ToolRegistry
@@ -233,6 +234,7 @@ async def test_finalized_ask_user_frame_resumes_to_completion(monkeypatch):
         selected=[],
         sink=EventSink(),
         backend=_backend(),
+        conversation=ConversationSnapshot.default(),
     )
 
     # The turn CONTINUED off the finalized frame and finished cleanly.

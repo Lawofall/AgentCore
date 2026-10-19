@@ -1,23 +1,23 @@
-"""User default boundary — seeds new-conversation permission only."""
+"""Last-picked boundary — silent account fallback for new conversations."""
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
 from agentcore.api.dependencies import AuthUser, get_user_repo
-from agentcore.core.types import WorkspaceBoundary
+from agentcore.core.types import DEFAULT_PERMISSION_AXES, WorkspaceBoundary
 from agentcore.db.repositories import UserRepository
 
 router = APIRouter(prefix="/users/me/autonomy", tags=["autonomy"])
 
 
 class AutonomyView(BaseModel):
-    policy: WorkspaceBoundary = WorkspaceBoundary.FOLDER
+    policy: WorkspaceBoundary = DEFAULT_PERMISSION_AXES
 
 
 class AutonomyUpdate(BaseModel):
     policy: WorkspaceBoundary = Field(
         ...,
-        description="New-session default boundary: read | folder | computer",
+        description="New-session default boundary: read | folder | computer | full",
     )
 
 
@@ -27,11 +27,11 @@ async def get_autonomy(
     users: UserRepository = Depends(get_user_repo),
 ) -> AutonomyView:
     row = await users.get_by_id(user.user_id)
-    raw = (row.autonomy_policy if row else None) or WorkspaceBoundary.FOLDER.value
+    raw = (row.autonomy_policy if row else None) or DEFAULT_PERMISSION_AXES.value
     try:
         return AutonomyView(policy=WorkspaceBoundary(raw))
     except ValueError:
-        return AutonomyView(policy=WorkspaceBoundary.FOLDER)
+        return AutonomyView(policy=DEFAULT_PERMISSION_AXES)
 
 
 @router.put("", response_model=AutonomyView)

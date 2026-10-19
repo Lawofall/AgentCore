@@ -1,5 +1,13 @@
-import { hasLocalFiles } from "@/lib/capabilities";
+import { hasLocalFiles, hasWindowControls } from "@/lib/capabilities";
 import { setComposerChannelPreference } from "@/lib/composerChannelPreference";
+import {
+  CURRENT_SCHEME_ID,
+  getSchemeId,
+  listSchemeGroups,
+  listSchemes,
+  setSchemeId,
+  setSchemePanelOpen,
+} from "@/lib/devSchemes";
 import { isNarrowHiddenPaletteId } from "@/lib/narrowProduct";
 import { startNewConversation } from "@/lib/newConversation";
 import { pickAndOpenLocalFolder } from "@/lib/openLocalFolder";
@@ -19,18 +27,23 @@ import { useShareStore } from "@/stores/share";
 import { useSidebarStore } from "@/stores/sidebar";
 import { useUIStore } from "@/stores/ui";
 import {
+  WINDOW_FRAME_PRESETS,
+  type WindowFramePreset,
+} from "@shared/window-contract";
+import {
   BarChart3,
   BookOpen,
   Clapperboard,
   CloudUpload,
   Cpu,
+  CreditCard,
   Download,
   Files,
   FlaskConical,
   FolderKey,
   GitBranch,
+  Globe,
   HardDrive,
-  Heart,
   Info,
   KeyRound,
   Keyboard,
@@ -41,6 +54,8 @@ import {
   Moon,
   PanelLeft,
   Plus,
+  RotateCcw,
+  Scan,
   ScrollText,
   Settings,
   Share2,
@@ -51,18 +66,26 @@ import {
   Unplug,
   UserCog,
   Workflow,
+  ZoomIn,
+  ZoomOut,
 } from "lucide-react";
 import type { NavigateFunction } from "react-router-dom";
 
 /** Command palette sub-sections (Tier 2). Rendered in this fixed order, each as
  * its own group so actions stay scannable next to the entity search results. */
-export type CommandCategory = "操作" | "前往" | "主题";
+export type CommandCategory = "操作" | "前往" | "主题" | "开发";
 
 export const COMMAND_CATEGORY_ORDER: CommandCategory[] = [
   "操作",
   "前往",
   "主题",
 ];
+
+export function paletteCategoryOrder(): CommandCategory[] {
+  return import.meta.env.DEV
+    ? [...COMMAND_CATEGORY_ORDER, "开发"]
+    : COMMAND_CATEGORY_ORDER;
+}
 
 export interface PaletteCommand {
   id: string;
@@ -96,6 +119,8 @@ export interface CommandContext {
   restrictNarrow?: boolean;
   /** Hide dark / system theme (窄屏 / Capacitor 仅浅色). */
   forceLightTheme?: boolean;
+  /** Dev-only 窗口拍摄比例当前值，用于命令 hint。 */
+  framePreset?: WindowFramePreset;
 }
 
 /**
@@ -113,6 +138,7 @@ export function buildPaletteCommands(ctx: CommandContext): PaletteCommand[] {
     demoTapes = [],
     restrictNarrow = false,
     forceLightTheme = false,
+    framePreset,
   } = ctx;
   const go = (path: string) => () => navigate(path);
 
@@ -178,6 +204,33 @@ export function buildPaletteCommands(ctx: CommandContext): PaletteCommand[] {
       keywords: ["sidebar", "toggle", "celan", "shoouqi"],
       shortcut: chord("b"),
       run: () => useSidebarStore.getState().toggleCollapsed(),
+    },
+    {
+      id: "zoom-in",
+      title: "放大界面",
+      category: "操作",
+      icon: ZoomIn,
+      keywords: ["zoom", "in", "scale", "fangda", "suofang"],
+      shortcut: chord("="),
+      run: () => useUIStore.getState().nudgeZoom(1),
+    },
+    {
+      id: "zoom-out",
+      title: "缩小界面",
+      category: "操作",
+      icon: ZoomOut,
+      keywords: ["zoom", "out", "scale", "suoxiao", "suofang"],
+      shortcut: chord("-"),
+      run: () => useUIStore.getState().nudgeZoom(-1),
+    },
+    {
+      id: "zoom-reset",
+      title: "恢复默认缩放",
+      category: "操作",
+      icon: RotateCcw,
+      keywords: ["zoom", "reset", "default", "huifu", "moren"],
+      shortcut: chord("0"),
+      run: () => useUIStore.getState().resetZoom(),
     },
     {
       // Acts on the open conversation (导出对话). A draft has no server id yet, so
@@ -445,19 +498,36 @@ export function buildPaletteCommands(ctx: CommandContext): PaletteCommand[] {
     },
     {
       id: "nav-settings-model",
-      title: "设置 · 装配",
+      title: "能力",
       category: "前往",
       icon: Cpu,
       keywords: [
         "settings",
         "model",
         "moxing",
-        "zuhe",
-        "组合",
+        "nengli",
+        "能力",
         "装配",
         "zhuangpei",
+        "toolbox",
       ],
       run: go("/more/model"),
+    },
+    {
+      id: "nav-settings-models",
+      title: "设置 · 模型",
+      category: "前往",
+      icon: Cpu,
+      keywords: [
+        "settings",
+        "models",
+        "moxing",
+        "picker",
+        "隐藏",
+        "yincang",
+        "模型",
+      ],
+      run: go("/more/models"),
     },
     {
       id: "nav-settings-providers",
@@ -474,6 +544,23 @@ export function buildPaletteCommands(ctx: CommandContext): PaletteCommand[] {
         "服务商",
       ],
       run: go("/more/providers"),
+    },
+    {
+      id: "nav-settings-search",
+      title: "设置 · 联网搜索",
+      category: "前往",
+      icon: Globe,
+      keywords: [
+        "settings",
+        "search",
+        "web",
+        "deepseek",
+        "lianwang",
+        "sousuo",
+        "联网",
+        "搜索",
+      ],
+      run: go("/more/search"),
     },
     {
       id: "nav-settings-account",
@@ -515,6 +602,14 @@ export function buildPaletteCommands(ctx: CommandContext): PaletteCommand[] {
         "waiguan",
         "外观",
         "主题",
+        "字号",
+        "缩放",
+        "zoom",
+        "font",
+        "发送",
+        "通知",
+        "enter",
+        "send",
       ],
       run: go("/more/general"),
     },
@@ -535,12 +630,21 @@ export function buildPaletteCommands(ctx: CommandContext): PaletteCommand[] {
       run: go("/more/about"),
     },
     {
-      id: "nav-settings-sponsor",
-      title: "设置 · 赞助",
+      id: "nav-settings-subscription",
+      title: "设置 · 订阅",
       category: "前往",
-      icon: Heart,
-      keywords: ["settings", "sponsor", "donate", "zhanzu", "weixin", "alipay"],
-      run: go("/more/sponsor"),
+      icon: CreditCard,
+      keywords: [
+        "settings",
+        "subscription",
+        "dingyue",
+        "redeem",
+        "duihuan",
+        "兑换",
+        "赞助",
+        "购买",
+      ],
+      run: go("/more/subscription"),
     },
 
     // ---- 主题 (theme) ----
@@ -595,6 +699,89 @@ export function buildPaletteCommands(ctx: CommandContext): PaletteCommand[] {
       hint: "离线回放 AI 态",
       run: go("/preview"),
     });
+    const pickScheme = (group: string, id: string) => {
+      setSchemeId(group, id);
+      setSchemePanelOpen(true);
+    };
+    commands.push({
+      id: "dev-scheme-open",
+      title: "界面方案",
+      category: "开发",
+      icon: FlaskConical,
+      keywords: ["scheme", "fangan", "kaiguan", "switch"],
+      hint: "右上角面板",
+      shortcut: chord("."),
+      run: () => setSchemePanelOpen(true),
+    });
+    for (const group of listSchemeGroups()) {
+      const active = getSchemeId(group.id);
+      commands.push({
+        id: `dev-scheme-${group.id}-current`,
+        title: `${group.label}：现行`,
+        category: "开发",
+        icon: FlaskConical,
+        keywords: ["scheme", "fangan", "xianxing", group.id],
+        hint: active === CURRENT_SCHEME_ID ? "当前" : undefined,
+        shortcut: chord("."),
+        run: () => pickScheme(group.id, CURRENT_SCHEME_ID),
+      });
+      for (const scheme of listSchemes(group.id)) {
+        commands.push({
+          id: `dev-scheme-${scheme.group}-${scheme.id}`,
+          title: `${group.label}：${scheme.label}`,
+          category: "开发",
+          icon: FlaskConical,
+          keywords: ["scheme", "fangan", scheme.id, scheme.label],
+          hint: active === scheme.id ? "当前" : undefined,
+          shortcut: chord("."),
+          run: () => pickScheme(scheme.group, scheme.id),
+        });
+      }
+    }
+    if (hasWindowControls()) {
+      const applyFrame = (preset: WindowFramePreset) => {
+        if (typeof window === "undefined") return;
+        void window.windowApi?.applyFramePreset?.(preset);
+      };
+      commands.push({
+        id: "dev-window-frame-free",
+        title: "窗口拍摄：自由缩放",
+        category: "开发",
+        icon: Scan,
+        keywords: [
+          "obs",
+          "frame",
+          "aspect",
+          "paishe",
+          "bili",
+          "luping",
+          "free",
+          "ziyou",
+        ],
+        hint: framePreset === "free" ? "当前" : undefined,
+        run: () => applyFrame("free"),
+      });
+      for (const preset of WINDOW_FRAME_PRESETS) {
+        commands.push({
+          id: `dev-window-frame-${preset.id}`,
+          title: `窗口拍摄：${preset.label}`,
+          category: "开发",
+          icon: Scan,
+          keywords: [
+            "obs",
+            "frame",
+            "aspect",
+            "paishe",
+            "bili",
+            "luping",
+            preset.id,
+            preset.label,
+          ],
+          hint: framePreset === preset.id ? "当前" : undefined,
+          run: () => applyFrame(preset.id),
+        });
+      }
+    }
   }
 
   return commands.filter(

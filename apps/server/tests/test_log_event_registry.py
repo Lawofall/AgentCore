@@ -201,7 +201,7 @@ def test_catalog_check_flags_missing_emit_name(monkeypatch, capsys):
 
 
 def test_catalog_emit_names_match_registry():
-    """Emit-site names ∪ HISTORICAL_COMPAT must equal catalog names (order/text may drift)."""
+    """Emit-site names must equal catalog names (order/text may drift)."""
     mod = _load_sync_log_event_registry()
     scanned = mod.scan_events()
     events, dead = mod.planned_catalog(scanned)

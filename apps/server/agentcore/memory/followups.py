@@ -1,12 +1,7 @@
-"""Journal helpers shared by stage_card / research_first (chips mint retired).
+"""Journal helpers shared by research_first.
 
-CEO→user「下一步」quick-reply chips are fully offline: no LLM mint, no
-``followups_generated`` / ``followups_unavailable`` emit, no ``set_followups`` on
-new turns. ``messages.followups`` column remains for historical rows.
-
-``select_motion_card_from_journal`` stays — leftover cards / research-chain
-detection still need the last compliant worker ``motion_card``. Persist no longer
-auto-emits a stage card from it.
+``select_motion_card_from_journal`` picks the last compliant worker
+``motion_card``. Persist does not auto-emit a stage card from it.
 """
 
 from __future__ import annotations

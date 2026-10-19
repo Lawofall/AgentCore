@@ -9,7 +9,12 @@ Token fields use the ledger short keys (matching cost_events.tokens /
 RunState.usage), distinct from message_end's legacy ``*_tokens`` SSE shape.
 """
 
-from pydantic import BaseModel
+from datetime import datetime
+from typing import Literal
+
+from pydantic import BaseModel, Field
+
+from .seats import SeatStatus
 
 
 class CostBreakdown(BaseModel):
@@ -121,7 +126,7 @@ class QuotaStatus(BaseModel):
 
 
 class ModelCostLine(BaseModel):
-    """One model's call-level spend over a window — admin per-model payroll.
+    """One model's call-level spend over a window (account 用量 / admin 看板).
 
     Aggregated from ``cost_calls`` (``GROUP BY model``), never from
     ``cost_events.model`` (that column only records the run's first call; multi-model
@@ -138,26 +143,81 @@ class ModelCostLine(BaseModel):
 
 
 class DailyCost(BaseModel):
-    """One UTC day's total spend — a point in the dashboard 7-day trend (§7.3D)."""
+    """One UTC day's total spend — a point in the dashboard trend sparkline."""
 
     # ISO date (YYYY-MM-DD) of the UTC calendar day.
     date: str
     cost_total: int
 
 
+class SearchQuotaStatus(BaseModel):
+    """Platform search uses in the same UTC day / month windows as the cost meters.
+
+    ``0`` on a limit means that window is unlimited. Own DeepSeek search does not
+    count. Reset instants stay on the search-connection payload.
+    """
+
+    daily_used: int
+    daily_limit: int
+    monthly_used: int
+    monthly_limit: int
+
+
+UsageActivityWindow = Literal["today", "7d", "month"]
+UsageActivityKind = Literal["conversation", "assist"]
+
+
+class UsageActivityLine(BaseModel):
+    """One conversation (or account-level AI 改写) in the usage activity list."""
+
+    conversation_id: str | None = None
+    kind: UsageActivityKind
+    title: str
+    deleted: bool = False
+    models: list[str] = Field(default_factory=list)
+    usage: UsageBreakdown
+    cost: CostBreakdown
+    estimated_cost: CostBreakdown | None = None
+    last_at: datetime
+    turns: int
+
+
+class UsageActivityPage(BaseModel):
+    """Paginated conversation spend (``GET /usage/activity``).
+
+    ``usage`` / ``cost`` / ``estimated_cost`` are the filtered window totals
+    (every matching conversation, not the current page). ``total`` is the
+    conversation-row count for that same filter.
+    """
+
+    data: list[UsageActivityLine]
+    total: int
+    usage: UsageBreakdown
+    cost: CostBreakdown
+    estimated_cost: CostBreakdown | None = None
+    page: int
+    page_size: int
+    window: UsageActivityWindow
+    model: str | None = None
+
+
 class UsageSummary(BaseModel):
     """Account dashboard payload (``GET /usage/summary``).
 
     Money fields are nano-CNY; ``CostBreakdown.cny_total`` is already yuan.
-    API no longer ships an FX rate.
+    API no longer ships an FX rate. Activity rows are a separate list endpoint.
     """
 
     today: UsageWindow
     month: UsageWindow
-    # Last 7 UTC days incl today, oldest-first, zero-filled — the trend sparkline.
+    # Last 30 UTC days incl today, oldest-first, zero-filled — the trend sparkline.
     recent_daily_cost: list[DailyCost]
     quota: QuotaStatus
+    search: SearchQuotaStatus
+    # This month's call-level mix (cost_calls). Empty when nothing was billed.
+    month_by_model: list[ModelCostLine] = Field(default_factory=list)
     # Billing mode (config.billing_mode). In "byok" the platform quota is dormant
     # (the turn runs on the user's own key), so the client reframes the quota meters
     # as「自带 Key 不限额」and presents cost as the user's own DeepSeek spend.
     billing_mode: str
+    seat: SeatStatus

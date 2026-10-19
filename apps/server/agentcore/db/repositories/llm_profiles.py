@@ -53,12 +53,6 @@ class LlmModelProfileRepository:
         worker_origin: str | None = None,
         worker_provider_id: str | None = None,
         worker_model: str | None = None,
-        background_origin: str | None = None,
-        background_provider_id: str | None = None,
-        background_model: str | None = None,
-        vision_origin: str | None = None,
-        vision_provider_id: str | None = None,
-        vision_model: str | None = None,
         reasoning_effort: str | None = None,
     ) -> LlmModelProfile:
         row = LlmModelProfile(
@@ -71,12 +65,6 @@ class LlmModelProfileRepository:
             worker_origin=worker_origin,
             worker_provider_id=worker_provider_id,
             worker_model=worker_model,
-            background_origin=background_origin,
-            background_provider_id=background_provider_id,
-            background_model=background_model,
-            vision_origin=vision_origin,
-            vision_provider_id=vision_provider_id,
-            vision_model=vision_model,
             reasoning_effort=reasoning_effort,
         )
         self._session.add(row)
@@ -91,7 +79,7 @@ class LlmModelProfileRepository:
         user_id: str,
         name: str | object = _UNSET,
         enabled_mcp_server_ids: list | object = _UNSET,
-        omit_factory_catalog: bool | object = _UNSET,
+        omitted_factory_skills: list | object = _UNSET,
         recipe: str | None | object = _UNSET,
         omit_desk_rules: bool | object = _UNSET,
         main_origin: str | object = _UNSET,
@@ -100,12 +88,6 @@ class LlmModelProfileRepository:
         worker_origin: str | None | object = _UNSET,
         worker_provider_id: str | None | object = _UNSET,
         worker_model: str | None | object = _UNSET,
-        background_origin: str | None | object = _UNSET,
-        background_provider_id: str | None | object = _UNSET,
-        background_model: str | None | object = _UNSET,
-        vision_origin: str | None | object = _UNSET,
-        vision_provider_id: str | None | object = _UNSET,
-        vision_model: str | None | object = _UNSET,
         reasoning_effort: str | None | object = _UNSET,
         context_budget: int | None | object = _UNSET,
     ) -> LlmModelProfile | None:
@@ -116,8 +98,8 @@ class LlmModelProfileRepository:
             row.name = str(name)
         if enabled_mcp_server_ids is not _UNSET:
             row.enabled_mcp_server_ids = list(cast(list[object], enabled_mcp_server_ids))
-        if omit_factory_catalog is not _UNSET:
-            row.omit_factory_catalog = bool(omit_factory_catalog)
+        if omitted_factory_skills is not _UNSET:
+            row.omitted_factory_skills = list(cast(list[object], omitted_factory_skills))
         if recipe is not _UNSET:
             row.recipe = None if recipe is None else str(recipe)
         if omit_desk_rules is not _UNSET:
@@ -131,39 +113,13 @@ class LlmModelProfileRepository:
         if worker_origin is not _UNSET:
             row.worker_origin = None if worker_origin is None else str(worker_origin)
         if worker_provider_id is not _UNSET:
-            row.worker_provider_id = (
-                None if worker_provider_id is None else str(worker_provider_id)
-            )
+            row.worker_provider_id = None if worker_provider_id is None else str(worker_provider_id)
         if worker_model is not _UNSET:
             row.worker_model = None if worker_model is None else str(worker_model)
-        if background_origin is not _UNSET:
-            row.background_origin = (
-                None if background_origin is None else str(background_origin)
-            )
-        if background_provider_id is not _UNSET:
-            row.background_provider_id = (
-                None if background_provider_id is None else str(background_provider_id)
-            )
-        if background_model is not _UNSET:
-            row.background_model = (
-                None if background_model is None else str(background_model)
-            )
-        if vision_origin is not _UNSET:
-            row.vision_origin = None if vision_origin is None else str(vision_origin)
-        if vision_provider_id is not _UNSET:
-            row.vision_provider_id = (
-                None if vision_provider_id is None else str(vision_provider_id)
-            )
-        if vision_model is not _UNSET:
-            row.vision_model = None if vision_model is None else str(vision_model)
         if reasoning_effort is not _UNSET:
-            row.reasoning_effort = (
-                None if reasoning_effort is None else str(reasoning_effort)
-            )
+            row.reasoning_effort = None if reasoning_effort is None else str(reasoning_effort)
         if context_budget is not _UNSET:
-            row.context_budget = (
-                None if context_budget is None else int(cast(int, context_budget))
-            )
+            row.context_budget = None if context_budget is None else int(cast(int, context_budget))
         await self._session.commit()
         await self._session.refresh(row)
         return row
@@ -186,7 +142,7 @@ class LlmModelProfileRepository:
         return int(getattr(result, "rowcount", 0) or 0)
 
     async def clear_provider_refs(self, user_id: str, provider_id: str) -> None:
-        """Clear worker / background / vision pins that reference a deleted BYOK provider."""
+        """Clear worker pins that reference a deleted BYOK provider."""
         rows = await self.list_for_user(user_id, include_implicit=True)
         changed = False
         for row in rows:
@@ -194,16 +150,6 @@ class LlmModelProfileRepository:
                 row.worker_origin = None
                 row.worker_provider_id = None
                 row.worker_model = None
-                changed = True
-            if row.background_provider_id == provider_id:
-                row.background_origin = None
-                row.background_provider_id = None
-                row.background_model = None
-                changed = True
-            if row.vision_provider_id == provider_id:
-                row.vision_origin = None
-                row.vision_provider_id = None
-                row.vision_model = None
                 changed = True
         if changed:
             await self._session.commit()

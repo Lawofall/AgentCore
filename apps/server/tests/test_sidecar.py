@@ -33,6 +33,7 @@ from agentcore.runtime.turn import complete_log as complete_mod
 from agentcore.sidecar import protocol
 from agentcore.sidecar.server import SidecarServer
 from tests.conftest import LogSpy
+from tests.sidecar_session import sidecar_session
 
 
 class _ScriptedProvider:
@@ -107,7 +108,7 @@ _CLIENT_TURN_IDS = {
     "userMessageId": "11111111-1111-4111-8111-111111111111",
     "messageId": "22222222-2222-4222-8222-222222222222",
     "traceId": "a" * 32,
-    "folderId": None,
+    "session": sidecar_session(),
 }
 
 
@@ -437,17 +438,20 @@ def test_sidecar_binds_local_backend_with_approvals(tmp_path, monkeypatch):
 
 
 def test_resolve_start_turn_folder_id_key_present():
-    """``folderId`` key present → normalize (null/blank = bare)."""
+    """``session.folderId`` present → normalize (null/blank = bare)."""
     from agentcore.sidecar.server_pkg.turns import resolve_start_turn_folder_id
 
-    assert resolve_start_turn_folder_id({"folderId": "  proj-1  "}) == "proj-1"
-    assert resolve_start_turn_folder_id({"folderId": None}) is None
-    assert resolve_start_turn_folder_id({"folderId": ""}) is None
-    assert resolve_start_turn_folder_id({"folderId": "  "}) is None
+    assert (
+        resolve_start_turn_folder_id({"session": sidecar_session(folderId="  proj-1  ")})
+        == "proj-1"
+    )
+    assert resolve_start_turn_folder_id({"session": sidecar_session(folderId=None)}) is None
+    assert resolve_start_turn_folder_id({"session": sidecar_session(folderId="")}) is None
+    assert resolve_start_turn_folder_id({"session": sidecar_session(folderId="  ")}) is None
 
 
 def test_resolve_start_turn_folder_id_key_absent():
-    """Missing ``folderId`` key is not a lookup — old desktop must upgrade."""
+    """Missing ``session`` is not a lookup — old desktop must upgrade."""
     from agentcore.core.errors import ClientTooOldError
     from agentcore.sidecar.server_pkg.turns import (
         FolderIdRequiredError,
@@ -464,20 +468,34 @@ def test_resolve_rpc_folder_binding_key_presence():
     from agentcore.sidecar.server_pkg.turns import resolve_rpc_folder_binding
 
     assert resolve_rpc_folder_binding({}) == (False, None, "")
-    assert resolve_rpc_folder_binding({"localRootId": "  root-1  "}) == (
+    assert resolve_rpc_folder_binding(
+        {"session": sidecar_session(localRootId="  root-1  ")}
+    ) == (
         True,
         "root-1",
         "",
     )
     assert resolve_rpc_folder_binding(
-        {"localRootId": "root-1", "localSubpath": "  apps/api  "}
+        {
+            "session": sidecar_session(
+                localRootId="root-1", localSubpath="  apps/api  "
+            )
+        }
     ) == (True, "root-1", "apps/api")
-    assert resolve_rpc_folder_binding({"localRootId": None}) == (True, None, "")
-    assert resolve_rpc_folder_binding({"localRootId": ""}) == (True, None, "")
+    assert resolve_rpc_folder_binding({"session": sidecar_session(localRootId=None)}) == (
+        True,
+        None,
+        "",
+    )
+    assert resolve_rpc_folder_binding({"session": sidecar_session(localRootId="")}) == (
+        True,
+        None,
+        "",
+    )
 
 
 def test_apply_rpc_folder_binding_overlays_folder_id():
-    """Resume RPC ``folderId`` key present → overwrite frame; absent → keep."""
+    """Resume RPC ``session`` overlays the frame; missing session is a no-op."""
     from agentcore.runtime.suspension import AskUserSuspension
     from agentcore.sidecar.server_pkg.turns import apply_rpc_folder_binding_to_suspension
 
@@ -500,22 +518,33 @@ def test_apply_rpc_folder_binding_overlays_folder_id():
     assert kept.folder_id == "fold-old"
 
     overwritten = _frame()
-    apply_rpc_folder_binding_to_suspension(overwritten, {"folderId": "  fold-new  "})
+    apply_rpc_folder_binding_to_suspension(
+        overwritten, {"session": sidecar_session(folderId="  fold-new  ")}
+    )
     assert overwritten.folder_id == "fold-new"
 
     cleared = _frame()
-    apply_rpc_folder_binding_to_suspension(cleared, {"folderId": None})
+    apply_rpc_folder_binding_to_suspension(
+        cleared, {"session": sidecar_session(folderId=None)}
+    )
     assert cleared.folder_id is None
 
     blank = _frame()
-    apply_rpc_folder_binding_to_suspension(blank, {"folderId": "  "})
+    apply_rpc_folder_binding_to_suspension(
+        blank, {"session": sidecar_session(folderId="  ")}
+    )
     assert blank.folder_id is None
 
-    # Binding overlay still works alongside folderId.
     bound = _frame(folder_id="fold-keep")
     apply_rpc_folder_binding_to_suspension(
         bound,
-        {"folderId": "fold-rpc", "localRootId": "root-1", "localSubpath": "apps"},
+        {
+            "session": sidecar_session(
+                folderId="fold-rpc",
+                localRootId="root-1",
+                localSubpath="apps",
+            )
+        },
     )
     assert bound.folder_id == "fold-rpc"
     assert bound.folder_binding_injected is True
@@ -530,10 +559,11 @@ def test_sidecar_start_turn_local_binding_reaches_pipeline(tmp_path, monkeypatch
     captured: dict[str, Any] = {}
 
     async def fake_pipeline(**kwargs: Any) -> dict[str, Any]:
-        captured["folder_id"] = kwargs.get("folder_id")
-        captured["folder_binding_injected"] = kwargs.get("folder_binding_injected")
-        captured["folder_local_root_id"] = kwargs.get("folder_local_root_id")
-        captured["folder_local_subpath"] = kwargs.get("folder_local_subpath")
+        snap = kwargs["conversation"]
+        captured["folder_id"] = snap.folder_id
+        captured["folder_binding_injected"] = snap.folder_binding_injected
+        captured["folder_local_root_id"] = snap.folder_local_root_id
+        captured["folder_local_subpath"] = snap.folder_local_subpath
         kwargs["sink"].close()
         return {"finish_reason": "end_turn", "content": "ok", "rounds": 1}
 
@@ -569,9 +599,11 @@ def test_sidecar_start_turn_local_binding_reaches_pipeline(tmp_path, monkeypatch
                         "turnId": "t-bind",
                         "conversationId": "c-bind",
                         "userMessage": "hello",
-                        "folderId": "fold-proj",
-                        "localRootId": "root-xyz",
-                        "localSubpath": "repos/app",
+                        "session": sidecar_session(
+                            folderId="fold-proj",
+                            localRootId="root-xyz",
+                            localSubpath="repos/app",
+                        ),
                     },
                 }
             )
@@ -642,7 +674,6 @@ def test_sidecar_start_turn_forwards_agent_mentions(tmp_path, monkeypatch):
                         "turnId": "t-mention",
                         "conversationId": "c-mention",
                         "userMessage": "让研究员看一下",
-                        "folderId": None,
                         "agentMentions": mentions,
                     },
                 }
@@ -660,7 +691,7 @@ def test_sidecar_start_turn_folder_id_param_skips_db(tmp_path, monkeypatch):
     captured: dict[str, Any] = {}
 
     async def fake_pipeline(**kwargs: Any) -> dict[str, Any]:
-        captured["folder_id"] = kwargs.get("folder_id")
+        captured["folder_id"] = kwargs["conversation"].folder_id
         kwargs["sink"].close()
         return {"finish_reason": "end_turn", "content": "ok", "rounds": 1}
 
@@ -696,7 +727,7 @@ def test_sidecar_start_turn_folder_id_param_skips_db(tmp_path, monkeypatch):
                         "turnId": "t1",
                         "conversationId": "c1",
                         "userMessage": "项目里查记忆",
-                        "folderId": "folder-from-rpc",
+                        "session": sidecar_session(folderId="folder-from-rpc"),
                     },
                 }
             )
@@ -714,7 +745,7 @@ def test_sidecar_start_turn_explicit_null_folder_id_skips_db(tmp_path, monkeypat
     captured: dict[str, Any] = {}
 
     async def fake_pipeline(**kwargs: Any) -> dict[str, Any]:
-        captured["folder_id"] = kwargs.get("folder_id")
+        captured["folder_id"] = kwargs["conversation"].folder_id
         kwargs["sink"].close()
         return {"finish_reason": "end_turn", "content": "ok", "rounds": 1}
 
@@ -750,7 +781,6 @@ def test_sidecar_start_turn_explicit_null_folder_id_skips_db(tmp_path, monkeypat
                         "turnId": "t1",
                         "conversationId": "c1",
                         "userMessage": "裸聊",
-                        "folderId": None,
                     },
                 }
             )
@@ -763,7 +793,7 @@ def test_sidecar_start_turn_explicit_null_folder_id_skips_db(tmp_path, monkeypat
 
 
 def test_sidecar_start_turn_absent_folder_id_is_too_old(tmp_path, monkeypatch):
-    """Old desktop omitted ``folderId``: INVALID_PARAMS, no pipeline, no outbox."""
+    """Old desktop omitted ``session``: INVALID_PARAMS, no pipeline, no outbox."""
     from agentcore.conversation.store.outbox import list_outbox_records
     from agentcore.core.errors import ClientTooOldError
 
@@ -812,7 +842,7 @@ def test_sidecar_start_turn_absent_folder_id_is_too_old(tmp_path, monkeypatch):
                         **ids,
                         "turnId": "t1",
                         "conversationId": "c1",
-                        "userMessage": "旧桌面无 folderId",
+                        "userMessage": "旧桌面无 session",
                     },
                 }
             )
@@ -830,13 +860,13 @@ def test_sidecar_start_turn_absent_folder_id_is_too_old(tmp_path, monkeypatch):
 
 
 def test_sidecar_start_turn_ticketed_absent_folder_id_is_too_old(tmp_path, monkeypatch):
-    """Tickets do not turn a missing folderId key into bare chat."""
+    """Tickets do not turn a missing session into bare chat."""
     from agentcore.core.errors import ClientTooOldError
 
     captured: dict[str, Any] = {}
 
     async def fake_pipeline(**kwargs: Any) -> dict[str, Any]:
-        captured["folder_id"] = kwargs.get("folder_id")
+        captured["folder_id"] = kwargs["conversation"].folder_id
         kwargs["sink"].close()
         return {"finish_reason": "end_turn", "content": "ok", "rounds": 1}
 
@@ -880,7 +910,7 @@ def test_sidecar_start_turn_ticketed_absent_folder_id_is_too_old(tmp_path, monke
                         **ids,
                         "turnId": "t1",
                         "conversationId": "c1",
-                        "userMessage": "有票旧桌面无 folderId",
+                        "userMessage": "有票旧桌面无 session",
                     },
                 }
             )
@@ -951,16 +981,13 @@ def test_sidecar_start_turn_passes_desktop_client_platform(tmp_path, monkeypatch
 
 
 def test_sidecar_threads_permission_axes_per_turn(tmp_path, monkeypatch):
-    """Conversation permission axes reach the local engine: initialize seeds them,
-    a per-turn ``permissionAxes`` refreshes them, and an absent param keeps the
-    current value — never a silent reset to the default.
-    """
+    """Conversation permission axes reach the local engine via RPC ``session``."""
     from agentcore.core.types import WorkspaceBoundary
 
     captured: list[WorkspaceBoundary] = []
 
     async def fake_pipeline(**kwargs: Any) -> dict[str, Any]:
-        captured.append(kwargs["permission_axes"])
+        captured.append(kwargs["conversation"].permission_axes)
         kwargs["sink"].close()
         return {"finish_reason": "end_turn", "content": "ok", "rounds": 1}
 
@@ -1007,12 +1034,75 @@ def test_sidecar_threads_permission_axes_per_turn(tmp_path, monkeypatch):
                 }
             )
         )
-        await start_turn("t1", {})  # no per-turn value → the initialize seed applies
-        await start_turn("t2", {"permissionAxes": cautious.to_dict()})  # per-turn refresh
-        await start_turn("t3", {})  # absent again → keeps the refreshed value
+        await start_turn(
+            "t1", {"session": sidecar_session(permissionAxes=managed.to_dict())}
+        )
+        await start_turn(
+            "t2", {"session": sidecar_session(permissionAxes=cautious.to_dict())}
+        )
+        await start_turn(
+            "t3", {"session": sidecar_session(permissionAxes=cautious.to_dict())}
+        )
 
     asyncio.run(drive())
     assert captured == [managed, cautious, cautious]
+
+
+def test_sidecar_threads_delegate_mode_per_turn(tmp_path, monkeypatch):
+    """Conversation 「统筹」reaches the local engine via RPC ``session.delegateMode``."""
+    captured: list[bool] = []
+
+    async def fake_pipeline(**kwargs: Any) -> dict[str, Any]:
+        captured.append(bool(kwargs["conversation"].prefer_delegate))
+        kwargs["sink"].close()
+        return {"finish_reason": "end_turn", "content": "ok", "rounds": 1}
+
+    monkeypatch.setattr("agentcore.sidecar.server.run_chat_pipeline", fake_pipeline)
+
+    sent, write_line = _recorder()
+    server = SidecarServer(write_line)
+
+    async def start_turn(turn_id: str, extra: dict[str, Any]) -> None:
+        await server.handle_line(
+            json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": turn_id,
+                    "method": "startTurn",
+                    "params": {
+                        **_CLIENT_TURN_IDS,
+                        "turnId": turn_id,
+                        "conversationId": "c1",
+                        "userMessage": "拆任务",
+                        **extra,
+                    },
+                }
+            )
+        )
+        await asyncio.gather(*list(server._turns.values()))
+
+    async def drive() -> None:
+        await server.handle_line(
+            json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "initialize",
+                    "params": {
+                        "userId": "u",
+                        "workspaceRoot": str(tmp_path),
+                        "inference": _FAKE_INFERENCE,
+                    },
+                }
+            )
+        )
+        await start_turn("t1", {"session": sidecar_session(delegateMode=False)})
+        await start_turn("t2", {"session": sidecar_session(delegateMode=True)})
+        await start_turn("t3", {"session": sidecar_session(delegateMode=True)})
+        await start_turn("t4", {"session": sidecar_session(delegateMode=False)})
+
+    asyncio.run(drive())
+    assert captured == [False, True, True, False]
 
 
 def test_creds_for_stamps_conversation_and_trace_headers():

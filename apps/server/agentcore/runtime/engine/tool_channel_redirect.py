@@ -42,30 +42,14 @@ def tool_wire_status(*, success: bool, failure_code: str | None) -> ToolWireStat
     return "error"
 
 
-def failure_code_from_end_payload(payload: dict[str, Any] | None) -> str | None:
-    if not isinstance(payload, dict):
-        return None
-    failure = payload.get("failure")
-    if isinstance(failure, dict):
-        code = failure.get("code")
-        if isinstance(code, str) and code.strip():
-            return code.strip()
-    nested = payload.get("code")
-    if isinstance(nested, str) and nested.strip():
-        return nested.strip()
-    return None
-
-
 def normalize_tool_step_status(
-    status: str | None, failure_code: str | None
+    status: str | None,
 ) -> Literal["running", "success", "error", "redirect"]:
-    """Journal compat: pre-redirect events stored channel steers as ``status=error``."""
+    """Sanitize a process-row / ``tool_use_end`` status. Live wire already emits ``redirect``."""
     raw = (status or "success").strip() or "success"
     if raw == "running":
         return "running"
     if raw == "redirect":
-        return "redirect"
-    if raw == "error" and is_channel_redirect_code(failure_code):
         return "redirect"
     if raw == "error":
         return "error"
@@ -77,7 +61,4 @@ def process_tool_status_from_end(payload: dict[str, Any] | None) -> str:
     if not isinstance(payload, dict):
         return "success"
     raw = payload.get("status")
-    return normalize_tool_step_status(
-        raw if isinstance(raw, str) else None,
-        failure_code_from_end_payload(payload),
-    )
+    return normalize_tool_step_status(raw if isinstance(raw, str) else None)

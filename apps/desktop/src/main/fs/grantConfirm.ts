@@ -1,16 +1,19 @@
 /**
  * Session-root grant confirm (readonly / organize / attach_rw).
  *
- * Well-known Desktop/Downloads/Documents and already-sufficient session roots
- * stay silent. First mint of any other readonly abs path uses a native system
- * dialog (same posture as execGate: cancel is default, Esc refuses). Write
- * upgrades always confirm. Worker-triggered grants go through this IPC path —
- * not CEO ask_user.
+ * ``computer`` / ``full``: this machine's files are in-boundary — mint and
+ * upgrade without a dialog (drive / home roots stay forbidden upstream).
+ * ``folder`` / ``read``: well-known Desktop/Downloads/Documents and already-
+ * sufficient session roots stay silent; first mint of any other readonly abs
+ * path uses a native system dialog; write upgrades confirm. Cancel / Esc
+ * refuses. Worker-triggered grants go through this IPC path — not CEO ask_user.
  */
 import { isAbsolute, relative, resolve, sep } from "node:path";
+import type { FolderGrantBoundary } from "@shared/ipc-contract";
 import { BrowserWindow, dialog } from "electron";
 
 export type SessionRootMode = "readonly" | "organize" | "attach_rw";
+export type { FolderGrantBoundary };
 
 const RANK: Record<SessionRootMode, number> = {
   readonly: 0,
@@ -46,7 +49,9 @@ export function grantNeedsConfirm(opts: {
   haveMode: SessionRootMode | undefined;
   wellKnown?: string | null;
   absUnderInbox: boolean;
+  boundary?: FolderGrantBoundary | null;
 }): boolean {
+  if (opts.boundary === "computer" || opts.boundary === "full") return false;
   if (sessionModeCovers(opts.haveMode, opts.mode)) return false;
   if (opts.mode === "readonly" && (opts.wellKnown || opts.absUnderInbox)) {
     return false;

@@ -28,6 +28,7 @@ from agentcore.runtime.pipeline.resume import (
     settle_resumed_suspension,
 )
 from agentcore.runtime.suspension import AskUserSuspension
+from agentcore.runtime.turn.snapshot import ConversationSnapshot
 from agentcore.tools.builtin.ask_user import ask_user_tool_result
 from agentcore.tools.builtin.ask_user.result import (
     structured_options_summary,
@@ -505,7 +506,6 @@ async def test_resume_pipeline_suspend_skips_ceo(monkeypatch):
         approval_gate=MagicMock(),
         bound_execution_id=None,
         execution_id_token=None,
-        vision_cost_sink=[],
     )
     monkeypatch.setattr(resume_mod, "wire_resume_turn", AsyncMock(return_value=wired))
     monkeypatch.setattr(
@@ -546,6 +546,7 @@ async def test_resume_pipeline_suspend_skips_ceo(monkeypatch):
         note="",
         sink=sink,
         backend=MagicMock(spec=WorkspaceBackend),
+        conversation=ConversationSnapshot.default(),
     )
     assert result["finish_reason"] is FinishReason.PAUSED
     assert result["content"] == "挂起前"

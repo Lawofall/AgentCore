@@ -10,20 +10,20 @@ import {
 } from "@/hooks/useConversations";
 import { hasLocalEngine } from "@/lib/capabilities";
 import { useChatPaneId } from "@/lib/chatPane";
-import { notifyError, notifySuccess } from "@/lib/toast";
+import { notifyError } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import {
   BOUNDARY_LABELS,
   BOUNDARY_ORDER,
-  DEFAULT_PERMISSION_AXES,
   type PermissionAxes,
   axesEqual,
   boundaryShortLabel,
   confirmComputerIfNeeded,
+  factoryPermissionAxes,
+  rememberBoundarySelection,
   resolveDefaultPermissionAxes,
   setComposerDraftAxes,
   setConversationPermissionAxes,
-  setUserDefaultRecipe,
 } from "@/services/permissionAxes";
 import { usePermissionChangeStore } from "@/stores/permissionChanges";
 import { ChevronDown, Shield } from "lucide-react";
@@ -31,8 +31,9 @@ import { useEffect, useState } from "react";
 import { ComposerPlusBackHeader, useComposerPlusRow } from "./ComposerPlusMenu";
 
 /**
- * Composer boundary badge. Three choices; 这台电脑 only when a local engine
- * is present (or the conversation is already on that boundary).
+ * Composer boundary badge. Four choices; 这台电脑 only when a local engine
+ * is present (or the conversation is already on that boundary). 完全权限
+ * is offered on every surface.
  */
 export function PermissionAxesBadge({
   disabled,
@@ -45,7 +46,7 @@ export function PermissionAxesBadge({
   const conversationId = useChatPaneId();
   const conversations = useConversations();
   const [draftAxes, setDraftAxes] = useState<PermissionAxes>(
-    DEFAULT_PERMISSION_AXES,
+    factoryPermissionAxes,
   );
   const plus = useComposerPlusRow("permission");
   const [open, setOpen] = useState(false);
@@ -83,31 +84,20 @@ export function PermissionAxesBadge({
     if (!conversationId) {
       setDraftAxes(next);
       setComposerDraftAxes(next);
+      rememberBoundarySelection(next.boundary);
       return;
     }
     setPending(true);
     try {
       const saved = await setConversationPermissionAxes(conversationId, next);
       patchConversationCache(conversationId, { permissionAxes: saved });
+      rememberBoundarySelection(next.boundary);
       void usePermissionChangeStore
         .getState()
         .load(conversationId)
         .catch(() => {});
     } catch (e) {
       notifyError(e, "切换权限失败");
-    } finally {
-      setPending(false);
-    }
-  };
-
-  const setAsSessionDefault = async () => {
-    if (pending || disabled) return;
-    setPending(true);
-    try {
-      const saved = await setUserDefaultRecipe(axes.boundary);
-      notifySuccess(`新会话将默认「${BOUNDARY_LABELS[saved].short}」`);
-    } catch (e) {
-      notifyError(e, "设置默认失败");
     } finally {
       setPending(false);
     }
@@ -139,7 +129,9 @@ export function PermissionAxesBadge({
               >
                 <span className="shrink-0 text-sm font-medium text-foreground">
                   {meta.short}
-                  {id === "folder" ? " · 荐" : ""}
+                  {id === (hasLocalEngine() ? "computer" : "folder")
+                    ? " · 荐"
+                    : ""}
                 </span>
                 <span className="min-w-0 truncate text-xs text-muted-foreground">
                   {meta.description}
@@ -148,26 +140,6 @@ export function PermissionAxesBadge({
             </SimpleTooltip>
           );
         })}
-      </div>
-
-      <div className="mt-2 border-t border-border/60 px-1 pt-2">
-        <SimpleTooltip label="写入账户默认；只影响之后新建的对话">
-          <span className="block">
-            <button
-              type="button"
-              disabled={pending || disabled}
-              onClick={() => void setAsSessionDefault()}
-              className={cn(
-                "w-full rounded-lg px-2.5 py-1.5 text-left text-xs font-medium",
-                pending || disabled
-                  ? "cursor-not-allowed text-muted-foreground/50"
-                  : "text-foreground hover:bg-accent/50",
-              )}
-            >
-              设为新会话默认
-            </button>
-          </span>
-        </SimpleTooltip>
       </div>
     </>
   );
@@ -180,8 +152,12 @@ export function PermissionAxesBadge({
       aria-expanded={plus.mode === "panel" || open}
       onClick={plus.mode === "row" ? plus.drill : undefined}
       className={cn(
-        "inline-flex items-center rounded-lg text-xs text-muted-foreground hover:bg-accent/60 hover:text-foreground",
-        iconOnly ? "size-8 justify-center" : "h-8 max-w-44 gap-1 px-2",
+        "inline-flex items-center rounded-lg text-sm text-muted-foreground hover:bg-accent/60 hover:text-foreground",
+        iconOnly
+          ? "size-8 justify-center"
+          : plus.mode === "row"
+            ? "h-8 w-full max-w-none justify-start gap-1 px-2"
+            : "h-8 max-w-44 gap-1 px-2",
         (disabled || pending) && "cursor-not-allowed opacity-60",
       )}
     >

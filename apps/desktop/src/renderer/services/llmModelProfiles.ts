@@ -2,16 +2,17 @@ import { api } from "@/services/api";
 import {
   type ModelCatalogItem,
   resolvedProfileEffort,
+  setLastUsedAssemblyId,
 } from "@/services/models";
 import type { components } from "@/types/api.generated";
 
 /**
  * 账号「模型组合」CRUD（设置·模型配置 / 输入框组合选择器）。
  *
- * 组合 = `{ main, worker?, background?, vision?, reasoning_effort? }`；
- * Worker / 后台空 = 跟随主模型；vision 槽 API 仍在，产品不再用（图走当前主模型）。
+ * 组合 = `{ main, worker?, reasoning_effort? }`；
+ * Worker 空 = 跟随主模型。图走当前主模型。
  * `reasoning_effort` 空 = 主模型厂商默认；仅官方 token。
- * 星标写在 `PUT …/default`；会话只存 `conversations.assembly_id`。
+ * 人选一份时写入 `PUT …/default`（账号回落，人侧不露）；会话只存 `conversations.assembly_id`。
  */
 
 type Schemas = components["schemas"];
@@ -48,14 +49,14 @@ export function updateLlmModelProfile(
   );
 }
 
-/** 删除用户组合（系统预置不可删）。 */
+/** 删除自建能力。官方完整不能删。 */
 export function deleteLlmModelProfile(
   profileId: string,
 ): Promise<{ status: string }> {
   return api.delete<{ status: string }>(`/v1/users/me/assemblies/${profileId}`);
 }
 
-/** 设账号默认组合（系统预置或用户组合均可）。 */
+/** 设账号回落装配（系统预置或用户组合均可）。人侧不露。 */
 export function setDefaultLlmModelProfile(
   profileId: string,
 ): Promise<LlmModelProfileView> {
@@ -64,7 +65,15 @@ export function setDefaultLlmModelProfile(
   });
 }
 
-/** 列表中的星标装配（`is_default` 或 `default_assembly_id`）。 */
+/** 人选的这份：本机 last-used + 账号回落。没打开对话时工具/信封写回落。 */
+export async function rememberAssemblySelection(
+  assemblyId: string,
+): Promise<LlmModelProfileView> {
+  setLastUsedAssemblyId(assemblyId);
+  return setDefaultLlmModelProfile(assemblyId);
+}
+
+/** 账号回落装配（`is_default` 或 `default_assembly_id`）。人侧不露。 */
 export function resolveDefaultProfile(
   response: LlmModelProfileListResponse | undefined | null,
 ): LlmModelProfileView | undefined {
@@ -77,7 +86,7 @@ export function resolveDefaultProfile(
   return response.data.find((p) => p.is_default) ?? response.data[0];
 }
 
-/** 槽位展示名：目录 display_name 优先，否则 model id。 */
+/** 槽位展示名：目录 display_name，再回落 model id。 */
 export function slotDisplayName(
   slot: ModelProfileSlot | null | undefined,
   catalogModels: {
@@ -96,20 +105,20 @@ export function slotDisplayName(
         (slot.origin !== "byok" ||
           !slot.provider_id ||
           m.provider_id === slot.provider_id),
-    ) ?? catalogModels.find((m) => m.id === slot.model);
+    ) ??
+    catalogModels.find((m) => m.id === slot.model && m.origin !== "platform");
   return match?.display_name?.trim() || slot.model;
 }
 
 /**
- * 组合次要摘要：「主 · Worker」，有覆盖时再附「后台」与思考强度官方 token。
- * Worker 空 =「跟随主模型」；后台仅在已配置时追加（列表行勿撑宽）。
+ * 组合次要摘要：「主 · Worker」与思考强度官方 token。
+ * Worker 空 =「跟随主模型」。
  * 主模型方言发 reasoning_effort 时附厂商档（空存储 = 目录默认）。
  */
 export function profileSlotSummary(
   profile: {
     main?: ModelProfileSlot | null;
     worker?: ModelProfileSlot | null;
-    background?: ModelProfileSlot | null;
     reasoning_effort?: string | null;
   },
   catalogModels: {
@@ -127,12 +136,6 @@ export function profileSlotSummary(
     ? slotDisplayName(profile.worker, catalogModels) || profile.worker.model
     : "跟随主模型";
   const parts = [`${main} · ${worker}`];
-  if (profile.background?.model) {
-    const bg =
-      slotDisplayName(profile.background, catalogModels) ||
-      profile.background.model;
-    parts.push(`后台 ${bg}`);
-  }
   const effort = resolvedProfileEffort(
     { main: slot, reasoning_effort: profile.reasoning_effort },
     catalogModels as ModelCatalogItem[],

@@ -32,7 +32,7 @@ export const referenceChapter: ManualChapterContent = {
                   text: "MCP",
                   link: { kind: "go", to: APP_PATHS.toolbox.mcp },
                 },
-                " 配置本机 stdio MCP Server；启用后团队可调用（一律先问你）。仅桌面；Web / 手机无本地 MCP。",
+                " 接线。本机命令仅桌面；远程地址宽屏网页也可。启用后团队可调用（一律先问你）。",
               ],
             },
             {
@@ -115,11 +115,11 @@ export const referenceChapter: ManualChapterContent = {
             },
             {
               title: "右坞终端",
-              desc: "右侧面板「终端」tab：你的交互 shell、后台进程与执行记录——长任务可观测、可停。",
+              desc: "右侧清单「终端」：你的交互 shell、后台进程与执行记录——长任务可观测、可停。",
             },
             {
               title: "右坞浏览器",
-              desc: "统一浏览器：桌面可 Local，云端 Sandbox。需要时用「+」或聊天里的入口打开；AI 浏览过程在对话里可见，点开可看直播；需要登录时在右坞完成登录。",
+              desc: "统一浏览器：桌面可 Local，云端 Sandbox。需要时点右侧清单「浏览器」；AI 浏览过程在对话里可见，点开可看直播；需要登录时在右坞完成登录。",
             },
             {
               title: "文件工作台",
@@ -166,20 +166,30 @@ export const referenceChapter: ManualChapterContent = {
       blocks: [
         {
           type: "lead",
-          text: "常用设置入口，点击直达。桌面「设置 · 用量」/「设置 · 装配」/「设置 · 服务商」在侧栏；手机 ☰ 打开侧栏进「设置」再点「用量」、再点「装配」、再点「服务商」。手机无 Git 凭据、通用、快捷键入口。",
+          text: "常用设置入口，点击直达。桌面「设置 · 用量」/「设置 · 模型」/「设置 · 服务商」/「设置 · 联网搜索」在侧栏，能力在工具箱；手机 ☰ 打开侧栏进「设置」再点「用量」、再点「能力」、再点「模型」、再点「服务商」、再点「联网搜索」。手机无 Git 凭据、快捷键入口；通用可调字号与发送方式。",
         },
         {
           type: "settingsRows",
           rows: [
             {
-              label: "装配",
-              desc: "账号默认组合与组合管理",
+              label: "能力",
+              desc: "这场用哪些工具、交代和插头",
               to: APP_PATHS.more.model,
+            },
+            {
+              label: "模型",
+              desc: "输入框弹层里出现哪些模型",
+              to: APP_PATHS.more.models,
             },
             {
               label: "服务商",
               desc: "接入额度或自带 Key（BYOK）",
               to: APP_PATHS.more.providers,
+            },
+            {
+              label: "联网搜索",
+              desc: "选用平台搜索，或连接自己的搜索",
+              to: APP_PATHS.more.search,
             },
             {
               label: "提示词",
@@ -192,8 +202,13 @@ export const referenceChapter: ManualChapterContent = {
               to: APP_PATHS.more.usage,
             },
             {
+              label: "订阅",
+              desc: "免费版、基础版、高级版、旗舰版；链动小铺购买后贴兑换码开通",
+              to: APP_PATHS.more.subscription,
+            },
+            {
               label: "通用",
-              desc: "界面主题与联网搜索",
+              desc: "字号、发送方式、主题与缩放",
               to: APP_PATHS.more.general,
             },
             {
@@ -205,11 +220,6 @@ export const referenceChapter: ManualChapterContent = {
               label: "关于",
               desc: "版本、产品手册与法律信息",
               to: APP_PATHS.more.about,
-            },
-            {
-              label: "赞助",
-              desc: "如果本产品对你有所帮助，欢迎您的慷慨赞助支持创作。",
-              to: APP_PATHS.more.sponsor,
             },
           ],
         },
@@ -294,7 +304,7 @@ export const referenceChapter: ManualChapterContent = {
               a: [
                 {
                   type: "text",
-                  text: "对话输入区权限徽章三档：只看＝只能看和搜索；这个文件夹（推荐）＝这个文件夹里可以改文件和跑命令；这台电脑＝仅桌面，还能做本机操作。装软件、推远程、毁灭形删除、读私钥仍会单独拦住。选完可点「设为新会话默认」（只影响之后新建的对话）。",
+                  text: "对话输入区权限徽章四档：只看＝只能看和搜索；本文件夹（网页推荐）＝本文件夹里可以改文件和跑命令；这台电脑（桌面推荐）＝这台电脑上的文件和本机操作；完全权限＝推远程、装软件、MCP 不再询问，硬拒仍在，云端网页没有 Host。人选的那档会记住，下次新建还用这一档。",
                 },
               ],
             },
@@ -331,7 +341,7 @@ export const referenceChapter: ManualChapterContent = {
               a: [
                 {
                   type: "text",
-                  text: "仅桌面：工具箱「MCP」，接本机 Server；启用后团队可调用（一律先问你）。Web / 手机无本地 MCP。",
+                  text: "工具箱「MCP」接线。本机命令仅桌面；远程地址宽屏网页也可。启用后团队可调用（一律先问你）。窄屏不上工具箱。",
                 },
               ],
             },
@@ -400,7 +410,7 @@ export const referenceChapter: ManualChapterContent = {
                       text: "设置 · 用量",
                       link: { kind: "go", to: APP_PATHS.more.usage },
                     },
-                    " 看花费与额度；复杂任务（多队员、更强模型、更高思考强度）会更贵。手机 ☰ 打开侧栏进「设置」再点「用量」。想把思考强度调低：桌面「设置 · 装配」/ 手机同路径把思考强度调到 low。",
+                    " 看花费与额度；复杂任务（多队员、更强模型、更高思考强度）会更贵。手机 ☰ 打开侧栏进「设置」再点「用量」。想把思考强度调低：在输入框打开模型，选 low。",
                   ],
                 },
               ],
@@ -453,12 +463,7 @@ export const referenceChapter: ManualChapterContent = {
                       text: "服务商",
                       link: { kind: "go", to: APP_PATHS.more.providers },
                     },
-                    " 接 OpenAI / DeepSeek / Kimi / 智谱 / 豆包 / OpenRouter，或填自定义端点；可同时接多家服务商，在 ",
-                    {
-                      text: "设置 · 装配",
-                      link: { kind: "go", to: APP_PATHS.more.model },
-                    },
-                    " 里配组合，聊天框里随时切换。每个回合全链路用你选的那一个模型。桌面接入在「设置 · 服务商」、组合在「设置 · 装配」；手机 ☰ 打开侧栏进「设置」再点「服务商」接入、再点「装配」改组合。",
+                    " 接 OpenAI / DeepSeek / Kimi / 智谱 / 豆包 / OpenRouter，或填自定义端点；可同时接多家服务商，在输入框换模型。每个回合全链路用你选的那一个模型。桌面接入在「设置 · 服务商」；手机 ☰ 打开侧栏进「设置」再点「服务商」。不想在弹层里看到某模型，去设置 · 模型关掉。改这场用哪些工具和交代：宽屏到工具箱，窄屏到设置 · 能力。",
                   ],
                 },
               ],
@@ -586,12 +591,7 @@ export const referenceChapter: ManualChapterContent = {
                       text: "设置 · 用量",
                       link: { kind: "go", to: APP_PATHS.more.usage },
                     },
-                    " 对明细：多队员并行、更强模型、更高思考强度都会抬高单次成本。可换更省的模型、到 ",
-                    {
-                      text: "设置 · 装配",
-                      link: { kind: "go", to: APP_PATHS.more.model },
-                    },
-                    " 把思考强度调到 low，或把大任务拆小后再发。",
+                    " 对明细：多队员并行、更强模型、更高思考强度都会抬高单次成本。可换更省的模型、在输入框把思考强度调到 low，或把大任务拆小后再发。",
                   ],
                 },
               ],
@@ -799,7 +799,7 @@ export const referenceChapter: ManualChapterContent = {
                         to: MANUAL_SECTION_IDS.collaboration.autonomy,
                       },
                     },
-                    "。在对话权限徽章里选，点「设为新会话默认」只影响之后新建的对话。",
+                    "。在对话权限徽章里选；人选的那档会记住，下次新建还用这一档。",
                   ],
                 },
               ],

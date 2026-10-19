@@ -160,6 +160,7 @@ class UserLlmProviderRepository:
         base_url: str | None = None,
         default_model: str | None = None,
         provider_id: str | None = None,
+        vendor_id: str = "custom",
     ) -> UserLlmProvider:
         """Add a provider row (status 'unchecked' — not connectivity-tested yet)."""
         resolved_base_url = (base_url or settings.platform_base_url).strip().rstrip("/")
@@ -170,6 +171,7 @@ class UserLlmProviderRepository:
             label=(label or "").strip(),
             api_key_enc=api_key_enc,
             base_url=resolved_base_url,
+            vendor_id=(vendor_id or "").strip() or "custom",
             default_model=resolved_model,
             status="unchecked",
             supports_tools=None,
@@ -188,6 +190,7 @@ class UserLlmProviderRepository:
         api_key_enc: bytes | object = _UNSET,
         base_url: str | object = _UNSET,
         default_model: str | object = _UNSET,
+        vendor_id: str | object = _UNSET,
     ) -> UserLlmProvider | None:
         """Owner-scoped patch of a provider; changing the key/endpoint/model resets the
         connectivity status to 'unchecked'. Returns None for a missing / non-owned id.
@@ -206,6 +209,9 @@ class UserLlmProviderRepository:
             reset_status = True
         if default_model is not _UNSET:
             row.default_model = str(default_model or "").strip()
+            reset_status = True
+        if vendor_id is not _UNSET:
+            row.vendor_id = str(vendor_id or "").strip() or "custom"
             reset_status = True
         if reset_status:
             row.status = "unchecked"

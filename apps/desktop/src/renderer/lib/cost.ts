@@ -4,12 +4,20 @@
  * the components only render the result. (Per-Agent money now shows directly on
  * each graph node from `run.cost`, §7.3B — no payroll split needed.)
  *
- * Money is integer nano throughout (1 unit = 1e9). User-facing amounts are the
- * curated CNY nominal — platform billed and BYOK display copy of the same card.
- * Legacy community-USD estimates still carry `estimated_currency=USD` (≈$).
- * This never re-prices and **never converts**; it only sums already-priced run
- * totals within a single currency.
+ * Money is integer nano throughout (1 unit = 1e9). Platform billed is credits;
+ * BYOK is the official CNY card shown as ¥. Legacy community-USD estimates
+ * still carry `estimated_currency=USD` (≈$). This never re-prices and **never
+ * converts**; it only sums already-priced run totals within a unit + currency.
  */
+
+import {
+  type CostMoney,
+  type SplitCostMoney,
+  higherSplitCost,
+  mergeSplitCost,
+  splitCostMoney,
+  sumSplitCosts,
+} from "@/lib/format";
 
 export type CostLeaf = {
   total: number;
@@ -19,27 +27,16 @@ export type CostLeaf = {
   pricing_source?: string | null;
 };
 
-export type DisplayMoney = {
-  nano: number;
-  /** True only for leftover USD community estimates (≈$). CNY is a real bill. */
-  estimated: boolean;
-  /** ISO code of {@link nano}. Renderers pick the symbol from this, never guess. */
-  currency: string;
-};
+export type DisplayMoney = CostMoney;
 
-/** 无 FX：跨币种金额不可相加，所以合计只在同一币种内累加。 */
-const DEFAULT_CURRENCY = "CNY";
-
-function isUsdEstimate(currency: string): boolean {
-  return currency.toUpperCase() === "USD";
-}
+const EMPTY_SPLIT: SplitCostMoney = { billed: null, extra: null };
 
 /**
  * The turn cost to display (§7.3A): prefer the authoritative `turnTotal` from
  * `message_end`; when absent (a stopped/crashed turn never gets one) fall back to
  * the sum of the runs that did finish — a lower bound, but it still shows what the
  * team已花. Returns null when there is nothing real to show, so callers render
- * 「—」/ nothing rather than「¥0.00」(§7.5).
+ * 「—」/ nothing rather than「0.00 积分」(§7.5).
  *
  * Note `turnTotal` of 0 is returned verbatim (it is a known total, not "unknown");
  * the caller still gates display on `> 0`.
@@ -52,71 +49,37 @@ export function resolveTurnCost(
   return turnTotal ?? (runTotal > 0 ? runTotal : null);
 }
 
-function displayFromEstimate(nano: number, currency: string): DisplayMoney {
-  return {
-    nano,
-    estimated: isUsdEstimate(currency),
-    currency,
-  };
+function hasSplitMoney(split: SplitCostMoney): boolean {
+  return (
+    (split.billed != null && split.billed.nano > 0) ||
+    (split.extra != null && split.extra.nano > 0)
+  );
 }
 
 /**
- * Turn display money: `total` (product nominal, CNY) wins; else `estimated_total`
- * (BYOK slice, or legacy USD). Null = nothing to show.
+ * Turn display bill: platform credits and BYOK ¥ stay two columns. Null = nothing
+ * to show. `turnCost.total` already includes the BYOK copy (same card, same CNY).
  */
+export function resolveTurnDisplayBill(
+  turnCost: CostLeaf | null | undefined,
+  runCosts: Array<CostLeaf | null | undefined>,
+): SplitCostMoney | null {
+  if (turnCost) {
+    const split = splitCostMoney(turnCost);
+    return hasSplitMoney(split) ? split : EMPTY_SPLIT;
+  }
+  const split = sumSplitCosts(runCosts);
+  return hasSplitMoney(split) ? split : null;
+}
+
+/** @deprecated Use {@link resolveTurnDisplayBill}; kept for single-column callers. */
 export function resolveTurnDisplayMoney(
   turnCost: CostLeaf | null | undefined,
   runCosts: Array<CostLeaf | null | undefined>,
 ): DisplayMoney | null {
-  if (turnCost) {
-    const billedCurrency = turnCost.currency || DEFAULT_CURRENCY;
-    if (turnCost.total > 0) {
-      return {
-        nano: turnCost.total,
-        estimated: false,
-        currency: billedCurrency,
-      };
-    }
-    const est = turnCost.estimated_total;
-    if (est != null && est > 0) {
-      return displayFromEstimate(
-        est,
-        turnCost.estimated_currency || billedCurrency,
-      );
-    }
-    return { nano: 0, estimated: false, currency: billedCurrency };
-  }
-  let billed = 0;
-  let billedCurrency: string | null = null;
-  let estimated = 0;
-  let estimatedCurrency: string | null = null;
-  for (const c of runCosts) {
-    if (!c) continue;
-    if (c.total > 0) {
-      billed += c.total;
-      billedCurrency ??= c.currency || DEFAULT_CURRENCY;
-    }
-    const est = c.estimated_total ?? 0;
-    if (est > 0) {
-      estimated += est;
-      estimatedCurrency ??=
-        c.estimated_currency || c.currency || DEFAULT_CURRENCY;
-    }
-  }
-  if (billed > 0) {
-    return {
-      nano: billed,
-      estimated: false,
-      currency: billedCurrency ?? DEFAULT_CURRENCY,
-    };
-  }
-  if (estimated > 0) {
-    return displayFromEstimate(
-      estimated,
-      estimatedCurrency ?? DEFAULT_CURRENCY,
-    );
-  }
-  return null;
+  const split = resolveTurnDisplayBill(turnCost, runCosts);
+  if (!split) return null;
+  return split.billed ?? split.extra;
 }
 
 export type SpendUsage = {
@@ -140,57 +103,32 @@ export type SpendLine = {
   key: string;
   label: string;
   usage: SpendUsage | null;
-  money: DisplayMoney | null;
+  billed: DisplayMoney | null;
+  extra: DisplayMoney | null;
   provisional: boolean;
 };
 
 export type ReplyInvoice = {
-  money: DisplayMoney | null;
+  billed: DisplayMoney | null;
+  extra: DisplayMoney | null;
   provisional: boolean;
   lines: SpendLine[];
 };
 
 const OPEN_RUN = new Set(["pending", "running"]);
 
-function moneyOf(cost: CostLeaf | null | undefined): DisplayMoney | null {
-  const money = resolveTurnDisplayMoney(cost, []);
-  return money && money.nano > 0 ? money : null;
-}
-
-function higherMoney(
-  left: DisplayMoney | null,
-  right: DisplayMoney | null,
-): DisplayMoney | null {
-  if (!left) return right;
-  if (!right) return left;
-  if (left.currency !== right.currency || left.estimated !== right.estimated) {
-    return left;
-  }
-  return left.nano >= right.nano ? left : right;
-}
-
-function addMoney(
-  left: DisplayMoney | null,
-  right: DisplayMoney | null,
-): DisplayMoney | null {
-  if (!left) return right;
-  if (!right) return left;
-  if (left.currency !== right.currency || left.estimated !== right.estimated) {
-    return left;
-  }
-  return {
-    nano: left.nano + right.nano,
-    estimated: left.estimated,
-    currency: left.currency,
-  };
+function splitOf(cost: CostLeaf | null | undefined): SplitCostMoney {
+  return splitCostMoney(cost);
 }
 
 function lineFromRun(run: SpendRun): SpendLine {
+  const split = splitOf(run.cost);
   return {
     key: run.id,
     label: run.label,
     usage: run.usage ?? null,
-    money: moneyOf(run.cost),
+    billed: split.billed,
+    extra: split.extra,
     provisional: OPEN_RUN.has(run.status),
   };
 }
@@ -198,12 +136,12 @@ function lineFromRun(run: SpendRun): SpendLine {
 /**
  * The reply's bill.
  *
- * One number: captain + teammates. While someone is still running, or the
- * reply itself has not closed, the number is what has already come back and
- * is labeled「至今」. Once every run is terminal and the bubble has closed,
- * the larger of the ledger snapshot and the run sum is the settled bill
- * (late workers can finish after `message_end`; the ledger can also hold a
- * row the graph does not).
+ * Platform credits and BYOK ¥ stay two columns (captain + teammates in each).
+ * While someone is still running, or the reply itself has not closed, the
+ * number is what has already come back and is labeled「至今」. Once every run
+ * is terminal and the bubble has closed, the larger of the ledger snapshot and
+ * the run sum is the settled bill (late workers can finish after `message_end`;
+ * the ledger can also hold a row the graph does not).
  *
  * Captain calls that return before the team graph exists stay on
  * `soloAccrued` and fill the captain line so they are not dropped.
@@ -217,72 +155,74 @@ export function resolveReplyInvoice(input: {
 }): ReplyInvoice {
   const captainRuns = input.runs.filter((run) => run.role === "captain");
   const otherRuns = input.runs.filter((run) => run.role !== "captain");
-  const solo = moneyOf(input.soloAccrued);
+  const solo = splitOf(input.soloAccrued);
   const captainNode =
     input.runs.length === 0
-      ? null
-      : resolveTurnDisplayMoney(
+      ? EMPTY_SPLIT
+      : (resolveTurnDisplayBill(
           null,
           captainRuns.map((run) => run.cost),
-        );
-  const captainNodeMoney =
-    captainNode && captainNode.nano > 0 ? captainNode : null;
-  const captainMoney =
+        ) ?? EMPTY_SPLIT);
+  const captainSplit =
     captainRuns.length <= 1
-      ? higherMoney(captainNodeMoney, solo)
-      : (captainNodeMoney ?? solo);
-  const otherMoney = resolveTurnDisplayMoney(
-    null,
-    otherRuns.map((run) => run.cost),
-  );
-  const accrued = addMoney(
-    otherMoney && otherMoney.nano > 0 ? otherMoney : null,
-    captainMoney,
-  );
-  const ledger = moneyOf(input.ledger);
+      ? higherSplitCost(captainNode, solo)
+      : hasSplitMoney(captainNode)
+        ? captainNode
+        : solo;
+  const otherSplit =
+    resolveTurnDisplayBill(
+      null,
+      otherRuns.map((run) => run.cost),
+    ) ?? EMPTY_SPLIT;
+  const accrued = mergeSplitCost(otherSplit, captainSplit);
+  const ledger = splitOf(input.ledger);
   const anyOpen = input.runs.some((run) => OPEN_RUN.has(run.status));
   const provisional =
-    anyOpen || (input.bubbleLive && (accrued != null || ledger != null));
-  // Ledger first: same currency takes the larger (late workers or a ledger
-  // row the graph does not carry); a currency mismatch keeps the ledger.
-  const money = higherMoney(ledger, accrued);
+    anyOpen ||
+    (input.bubbleLive && (hasSplitMoney(accrued) || hasSplitMoney(ledger)));
+  const bill = higherSplitCost(ledger, accrued);
 
   const otherLines = otherRuns
-    .filter((run) => run.usage || moneyOf(run.cost))
+    .filter((run) => run.usage || hasSplitMoney(splitOf(run.cost)))
     .map(lineFromRun);
   const captainLines: SpendLine[] = [];
   if (captainRuns.length === 1) {
     const run = captainRuns[0];
-    if (run.usage || input.soloUsage || captainMoney) {
+    if (run.usage || input.soloUsage || hasSplitMoney(captainSplit)) {
       captainLines.push({
         key: run.id,
         label: run.label || "队长",
         usage: run.usage ?? input.soloUsage ?? null,
-        money: captainMoney,
+        billed: captainSplit.billed,
+        extra: captainSplit.extra,
         provisional: OPEN_RUN.has(run.status),
       });
     }
   } else if (
     captainRuns.length === 0 &&
-    captainMoney &&
-    (input.bubbleLive || ledger == null)
+    hasSplitMoney(captainSplit) &&
+    (input.bubbleLive || !hasSplitMoney(ledger))
   ) {
     captainLines.push({
       key: "captain",
       label: "队长",
       usage: input.soloUsage ?? null,
-      money: captainMoney,
+      billed: captainSplit.billed,
+      extra: captainSplit.extra,
       provisional: input.bubbleLive,
     });
   } else {
     for (const run of captainRuns) {
-      if (run.usage || moneyOf(run.cost)) captainLines.push(lineFromRun(run));
+      if (run.usage || hasSplitMoney(splitOf(run.cost))) {
+        captainLines.push(lineFromRun(run));
+      }
     }
   }
 
   return {
-    money: money && money.nano > 0 ? money : null,
-    provisional: Boolean(provisional && money && money.nano > 0),
+    billed: bill.billed,
+    extra: bill.extra,
+    provisional: Boolean(provisional && hasSplitMoney(bill)),
     lines: [...captainLines, ...otherLines],
   };
 }

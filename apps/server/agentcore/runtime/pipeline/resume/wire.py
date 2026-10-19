@@ -17,7 +17,6 @@ from agentcore.runtime.context import (
     detect_workspace_git,
     resolve_channel_profile,
 )
-from agentcore.runtime.costing import RunCost
 from agentcore.runtime.events import EventSink
 from agentcore.runtime.interaction import default_interaction_registry
 from agentcore.runtime.resolve.prepare import (
@@ -115,7 +114,6 @@ class ResumedWiring:
     """Re-wired resume turn: tools, channels, and ambient execution binding."""
 
     base_tool_context: ToolContext
-    vision_cost_sink: list[RunCost]
     approval_gate: ApprovalGate | None
     delegate_tool: Any
     debate_tool: Any
@@ -130,7 +128,6 @@ async def _wire_continuation_toolset(
     llm: Any,
     sink: EventSink,
     backend: WorkspaceBackend,
-    table_id: str | None = None,
     conversation_id: str,
     message_id: str,
     captain_run_id: str,
@@ -142,6 +139,7 @@ async def _wire_continuation_toolset(
     display_journal: list[dict[str, Any]] | None,
     profiles: TurnProfiles,
     permission_axes: WorkspaceBoundary | None,
+    prefer_delegate: bool | None = None,
     session_saver: SessionSaver | None,
     session_loader: SessionLoader | None,
     suspension_saver: SuspensionSaver | None,
@@ -228,26 +226,12 @@ async def _wire_continuation_toolset(
     # still consult (提示词瘦身 P2).
     # The CEO prompt itself is replayed from the stored transcript
     # (already slim + 按需目录), so no directory re-render.
-    if table_id is None:
-        from agentcore.table.bind import lookup_table_id_for_turn
-
-        try:
-            table_id = await lookup_table_id_for_turn(
-                user_id=user_id,
-                conversation_id=conversation_id,
-                folder_id=folder_id,
-                attachments=None,
-            )
-        except Exception:
-            table_id = None
     # desktop_channel created earlier (MCP discovery); reuse.
     workspace_channel = workspace_channel_for_tools(
         backend,
         user_id=user_id,
         conversation_id=conversation_id,
     )
-    # Resume has no turn attachments; vision sink stays empty (native-only images).
-    vision_cost_sink: list[RunCost] = []
     from agentcore.runtime.journal import execution_id_from_journal
 
     # Same turn continuation：execution_id 取自 journal 末张 run_plan；无则才铸新。
@@ -267,6 +251,7 @@ async def _wire_continuation_toolset(
     from agentcore.runtime.coordination.session import (
         invalidate_verify_cache_for_execution,
     )
+    from agentcore.runtime.pipeline.prepare import vision_declared_for_turn
 
     rule_view = await load_turn_rule_view(
         user_id,
@@ -285,11 +270,15 @@ async def _wire_continuation_toolset(
         ),
         deep_research_auto=deep_research_auto,
         deep_research_auto_debate_count=deep_research_auto_debate_count,
-        table_id=table_id,
         desktop_channel=desktop_channel,
         workspace_channel=workspace_channel,
         accepts_images=model_accepts_images(
-            profiles.model_for("chat") if profiles is not None else ""
+            profiles.model_for("chat") if profiles is not None else "",
+            declared=await vision_declared_for_turn(
+                user_id,
+                profiles.model_for("chat") if profiles is not None else "",
+                llm_credentials,
+            ),
         ),
         shared_workspace=folder_id is not None or auto_desk_folder_id is not None,
         auto_desk_folder_id=auto_desk_folder_id,
@@ -381,6 +370,7 @@ async def _wire_continuation_toolset(
     # Look up via ``resume.pipeline`` so any module-level monkeypatch on that
     # submodule (parity with fresh-turn ``pipeline.run`` seams) is honoured.
     assemble = resume_pipeline_mod._assemble_ceo_toolset
+    prefer_delegate = bool(prefer_delegate)
     delegate_tool, debate_tool, chat_tools = assemble(
         llm=llm,
         sink=sink,
@@ -407,6 +397,7 @@ async def _wire_continuation_toolset(
         advertise_bind_local_folder=checkpoint_enabled and channel.can_bind_folder,
         desktop_online=desktop_online,
         worker_envelope=worker_envelope,
+        prefer_delegate=prefer_delegate,
     )
     from agentcore.tools.ceo_toolset import wire_ceo_consult
 
@@ -423,7 +414,6 @@ async def _wire_continuation_toolset(
 
     return ResumedWiring(
         base_tool_context=base_tool_context,
-        vision_cost_sink=vision_cost_sink,
         approval_gate=approval_gate,
         delegate_tool=delegate_tool,
         debate_tool=debate_tool,
@@ -440,12 +430,12 @@ async def wire_resume_turn(
     llm: Any,
     sink: EventSink,
     backend: WorkspaceBackend,
-    table_id: str | None = None,
     conversation_id: str,
     message_id: str,
     captain_run_id: str,
     profiles: TurnProfiles,
     permission_axes: WorkspaceBoundary | None,
+    prefer_delegate: bool | None = None,
     session_saver: SessionSaver | None,
     session_loader: SessionLoader | None,
     suspension_saver: SuspensionSaver | None,
@@ -458,7 +448,6 @@ async def wire_resume_turn(
         llm=llm,
         sink=sink,
         backend=backend,
-        table_id=table_id,
         conversation_id=conversation_id,
         message_id=message_id,
         captain_run_id=captain_run_id,
@@ -470,6 +459,7 @@ async def wire_resume_turn(
         display_journal=suspension.journal,
         profiles=profiles,
         permission_axes=permission_axes,
+        prefer_delegate=prefer_delegate,
         session_saver=session_saver,
         session_loader=session_loader,
         suspension_saver=suspension_saver,
@@ -487,7 +477,6 @@ async def wire_crash_turn(
     llm: Any,
     sink: EventSink,
     backend: WorkspaceBackend,
-    table_id: str | None = None,
     conversation_id: str,
     message_id: str,
     captain_run_id: str,
@@ -498,6 +487,7 @@ async def wire_crash_turn(
     journal_entries: list[dict[str, Any]],
     profiles: TurnProfiles,
     permission_axes: WorkspaceBoundary | None,
+    prefer_delegate: bool | None = None,
     session_saver: SessionSaver | None,
     session_loader: SessionLoader | None,
     suspension_saver: SuspensionSaver | None,
@@ -514,7 +504,6 @@ async def wire_crash_turn(
         llm=llm,
         sink=sink,
         backend=backend,
-        table_id=table_id,
         conversation_id=conversation_id,
         message_id=message_id,
         captain_run_id=captain_run_id,
@@ -526,6 +515,7 @@ async def wire_crash_turn(
         display_journal=None,
         profiles=profiles,
         permission_axes=permission_axes,
+        prefer_delegate=prefer_delegate,
         session_saver=session_saver,
         session_loader=session_loader,
         suspension_saver=suspension_saver,

@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 /**
- * 输入区装配菜单是一列名字：配方在前，离开配方的在后。
- * 还折在配方上的那一行不另画；「默认」留在那一行上。
+ * 输入区装配菜单：完整、极简、自建。官方两行各一行说明。不标「默认」。
  */
 
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -39,6 +38,17 @@ vi.mock("@/hooks/useLlmModelProfiles", () => ({
     refetch: vi.fn(),
   }),
 }));
+vi.mock("@/services/llmModelProfiles", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/services/llmModelProfiles")>();
+  return {
+    ...actual,
+    rememberAssemblySelection: vi.fn(async () => ({
+      id: "owned-chat",
+      is_default: true,
+    })),
+  };
+});
 
 function row(
   partial: Pick<LlmModelProfileView, "id" | "name" | "kind"> &
@@ -65,14 +75,13 @@ function renderPicker() {
 describe("AssemblyPicker", () => {
   beforeEach(() => {
     profiles.data = [
-      row({ id: "sys-chat", name: "极简", kind: "system", recipe: "chat" }),
-      row({ id: "sys-web", name: "轻量", kind: "system", recipe: "web" }),
       row({ id: "sys-full", name: "完整", kind: "system", recipe: "full" }),
+      row({ id: "sys-chat", name: "极简", kind: "system", recipe: "chat" }),
       row({
         id: "owned-chat",
-        name: "极简",
+        name: "写稿",
         kind: "user",
-        recipe: "chat",
+        recipe: null,
         is_default: true,
       }),
       row({ id: "owned-ds", name: "官方DS", kind: "user", recipe: null }),
@@ -92,30 +101,27 @@ describe("AssemblyPicker", () => {
     cleanup();
   });
 
-  it("一列名字，折进配方的不另画，默认留在配方行上", () => {
+  it("完整极简在前，官方带一行说明，不标默认", () => {
     renderPicker();
-    expect(screen.getByRole("button", { name: "装配：极简" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "能力：写稿" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: /预置/ })).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "装配：极简" }));
+    fireEvent.click(screen.getByRole("button", { name: "能力：写稿" }));
 
-    const manage = screen.getByRole("button", { name: "管理装配…" });
+    const manage = screen.getByRole("button", { name: "管理能力…" });
     const list = manage.previousElementSibling;
     expect(list).toBeTruthy();
     const names = [...(list?.querySelectorAll("button") ?? [])].map(
-      (button) => button.textContent ?? "",
+      (button) => button.getAttribute("aria-label") ?? "",
     );
-    expect(names.map((name) => name.replace("默认", ""))).toEqual([
-      "极简",
-      "轻量",
-      "完整",
-      "官方DS",
-    ]);
-    expect(names[0]).toContain("默认");
+    expect(names).toEqual(["完整", "极简", "写稿", "官方DS"]);
+    expect(list?.textContent).toContain("能改文件、跑命令、上网。");
+    expect(list?.textContent).toContain("这场只聊天。");
+    expect(list?.textContent).not.toContain("默认");
     expect(list?.textContent).not.toContain("预置");
     expect(list?.textContent).not.toContain("我的");
     expect(list?.querySelector('[aria-current="true"]')?.textContent).toContain(
-      "极简",
+      "写稿",
     );
   });
 });

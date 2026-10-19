@@ -733,6 +733,41 @@ async def test_mcp_op_error_names_server_and_tool():
     assert "echo" in result.error
 
 
+@pytest.mark.asyncio
+async def test_http_mcp_tool_does_not_need_desktop(monkeypatch):
+    from unittest.mock import MagicMock
+
+    async def fake_execute(user_id, **kwargs):
+        assert user_id == "u1"
+        assert kwargs["server_id"] == "s"
+        assert kwargs["tool_name"] == "echo"
+        return {"content": "pong"}
+
+    monkeypatch.setattr(
+        "agentcore.mcp.remote.execute_remote_mcp_tool", fake_execute
+    )
+    tool = McpDynamicTool(
+        fc_name="mcp_s_echo",
+        server_id="s",
+        server_name="S",
+        mcp_tool_name="echo",
+        description="Echo",
+        input_schema=None,
+        transport="http",
+    )
+    ctx = ToolContext.create(
+        execution_id="e",
+        run_id="r",
+        agent_id="a",
+        backend=MagicMock(location="server", root_label="docs"),
+        user_id="u1",
+        desktop_channel=None,
+    )
+    ok = await tool.execute({}, ctx)
+    assert ok.success
+    assert ok.output == "pong"
+
+
 def test_mcp_reattach_rebuilds_required_event():
     import asyncio
 

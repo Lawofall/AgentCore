@@ -1,4 +1,5 @@
 import { type DiffLine, lineDiff } from "@/components/chat/toolResult/diff";
+import { DiffRows } from "@/components/diff/DiffRows";
 import { Button } from "@/components/ui";
 import { useConversationWorkspace } from "@/hooks/useWorkspaces";
 import type { FileArtifact, FileChangePreview } from "@/lib/fileArtifacts";
@@ -68,18 +69,6 @@ function writeModeLabel(mode: "overwrite" | "append" | "added"): string {
   return "更新";
 }
 
-function diffSign(type: DiffLine["type"]): string {
-  if (type === "add") return "+";
-  if (type === "del") return "-";
-  return " ";
-}
-
-function diffRowClass(type: DiffLine["type"]): string {
-  if (type === "add") return "bg-success/10 text-foreground";
-  if (type === "del") return "bg-destructive/10 text-foreground";
-  return "text-muted-foreground";
-}
-
 function summarizeLineDiff(
   oldText: string,
   newText: string,
@@ -102,20 +91,7 @@ function summarizeLineDiff(
 function DiffBody({ lines }: { lines: DiffLine[] }) {
   return (
     <div className="max-h-72 overflow-auto rounded-lg border border-border font-mono text-xs leading-relaxed">
-      {lines.map((l, i) => (
-        <div
-          // biome-ignore lint/suspicious/noArrayIndexKey: stable positional diff rows
-          key={i}
-          className={`flex ${diffRowClass(l.type)}`}
-        >
-          <span className="w-5 shrink-0 select-none text-center text-muted-foreground/50">
-            {diffSign(l.type)}
-          </span>
-          <span className="whitespace-pre-wrap break-words pr-2">
-            {l.text || " "}
-          </span>
-        </div>
-      ))}
+      <DiffRows lines={lines} />
     </div>
   );
 }

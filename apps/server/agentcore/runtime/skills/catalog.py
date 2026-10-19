@@ -56,6 +56,8 @@ _SYSTEM_SKILLS: tuple[SystemSkill, ...] = (
     ),
 )
 
+FACTORY_SKILL_NAMES: tuple[str, ...] = tuple(skill.name for skill in _SYSTEM_SKILLS)
+
 
 def build_system_skill_registry() -> SkillRegistry:
     """Register the platform's built-in (system) skills — the single source of truth.

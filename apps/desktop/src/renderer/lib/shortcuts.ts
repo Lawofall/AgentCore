@@ -1,7 +1,9 @@
 import { focusOtherConversationPane } from "@/lib/conversationSplitActions";
+import { cycleActiveSchemeGroup } from "@/lib/devSchemes";
 import { startNewConversation } from "@/lib/newConversation";
 import { isMac } from "@/lib/platform";
 import { switchRailConversationByDigit } from "@/lib/railHotkeys";
+import { readNarrowViewport } from "@/lib/useNarrowLayout";
 import { openCurrentConversationTerminal } from "@/services/terminalActions";
 import { useSidebarStore } from "@/stores/sidebar";
 import { useUIStore } from "@/stores/ui";
@@ -171,6 +173,52 @@ export const GLOBAL_SHORTCUTS: GlobalShortcut[] = [
       return undefined;
     },
   },
+  {
+    id: "zoom-in",
+    label: "放大界面",
+    keys: ["=", "+"],
+    allowInEditable: true,
+    run: () => {
+      if (readNarrowViewport()) return undefined;
+      useUIStore.getState().nudgeZoom(1);
+      return undefined;
+    },
+  },
+  {
+    id: "zoom-out",
+    label: "缩小界面",
+    keys: ["-"],
+    allowInEditable: true,
+    run: () => {
+      if (readNarrowViewport()) return undefined;
+      useUIStore.getState().nudgeZoom(-1);
+      return undefined;
+    },
+  },
+  {
+    id: "zoom-reset",
+    label: "恢复默认缩放",
+    keys: ["0"],
+    allowInEditable: true,
+    run: () => {
+      if (readNarrowViewport()) return undefined;
+      useUIStore.getState().resetZoom();
+      return undefined;
+    },
+  },
+  ...(import.meta.env.DEV
+    ? [
+        {
+          id: "cycle-dev-scheme",
+          label: "切换界面方案",
+          keys: ["."],
+          run: () => {
+            cycleActiveSchemeGroup();
+            return undefined;
+          },
+        } satisfies GlobalShortcut,
+      ]
+    : []),
 ];
 
 /** Display chords for a shortcut (canonical first, then any alternates). */

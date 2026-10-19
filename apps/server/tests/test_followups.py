@@ -1,9 +1,4 @@
-"""Tests for motion_card journal selection + historical Message.followups read schema.
-
-CEO→user「下一步」chips mint is offline; this module only keeps
-``select_motion_card_from_journal`` (stage_card / research_first) and the read
-projection of the retained ``messages.followups`` column.
-"""
+"""Tests for motion_card journal selection used by research_first."""
 
 from __future__ import annotations
 
@@ -112,37 +107,3 @@ def test_message_detail_projects_origin_from_usage():
     )
     assert detail.origin == "execution_harvest"
 
-
-def test_message_detail_projects_persisted_followups():
-    """Historical ``messages.followups`` still projects on read (new turns leave [])."""
-    from datetime import datetime
-    from types import SimpleNamespace
-
-    from agentcore.api.schemas.messages import MessageDetail
-
-    row = SimpleNamespace(
-        id="m1",
-        conversation_id="c1",
-        role="assistant",
-        content="好的，方案如下",
-        created_at=datetime(2026, 1, 1),
-        followups=["帮我导出 PDF", "再做一版竞品对比"],
-    )
-    assert MessageDetail.model_validate(row).followups == ["帮我导出 PDF", "再做一版竞品对比"]
-
-
-def test_message_detail_followups_default_empty():
-    """A row with no chips (user / none-minted turn) projects to []."""
-    from datetime import datetime
-    from types import SimpleNamespace
-
-    from agentcore.api.schemas.messages import MessageDetail
-
-    row = SimpleNamespace(
-        id="m1",
-        conversation_id="c1",
-        role="user",
-        content="你好",
-        created_at=datetime(2026, 1, 1),
-    )
-    assert MessageDetail.model_validate(row).followups == []

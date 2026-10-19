@@ -7,10 +7,9 @@ Two routers:
   Creating a share FREEZES a content-only transcript snapshot (所见即所享): later edits
   never leak, no future turns are exposed.
 - ``public_router`` (NO auth, mounted at the root) — ``GET /shared/{token}`` renders a
-  frozen conversation *or* 文档 snapshot as a self-contained HTML page. The token is
-  the share row id (uuid4, unguessable); a revoked / unknown / malformed token
-  renders a 404 page without leaking whether the id ever existed. 文档 mint/list/revoke
-  live on ``/v1/docs/{id}/shares`` (desk ``can_write``).
+  frozen conversation snapshot as a self-contained HTML page. The token is the share
+  row id (uuid4, unguessable); a revoked / unknown / malformed token renders a 404
+  page without leaking whether the id ever existed.
 """
 
 from datetime import UTC, datetime, timedelta
@@ -23,7 +22,6 @@ from agentcore.api.dependencies import (
     AuthUser,
     get_conversation_repo,
     get_conversation_share_repo,
-    get_doc_share_repo,
     get_message_repo,
 )
 from agentcore.api.schemas import (
@@ -38,10 +36,8 @@ from agentcore.db.models import ConversationShare
 from agentcore.db.repositories import (
     ConversationRepository,
     ConversationShareRepository,
-    DocShareRepository,
     MessageRepository,
 )
-from agentcore.doc.share import render_doc_share_html
 
 router = APIRouter(prefix="/conversations", tags=["sharing"])
 public_router = APIRouter(tags=["shared"])
@@ -157,29 +153,20 @@ def _not_found_page() -> str:
 async def view_shared(
     token: str,
     share_repo: ConversationShareRepository = Depends(get_conversation_share_repo),
-    doc_share_repo: DocShareRepository = Depends(get_doc_share_repo),
 ):
-    """Public, read-only view of a frozen share snapshot (no auth).
+    """Public, read-only view of a frozen conversation share snapshot (no auth).
 
-    Conversation and 文档 shares share the ``/shared/<id>`` URL. A revoked /
-    unknown / malformed token returns the same 404 page (never an existence leak).
+    A revoked / unknown / malformed token returns the same 404 page (never an
+    existence leak).
     """
     try:
         UUID(token)
     except ValueError:
         return HTMLResponse(_not_found_page(), status_code=404)
     share = await share_repo.get_active(token)
-    if share is not None:
-        page = render_share_html(
-            title=share.title, snapshot=share.snapshot, created_at=share.created_at
-        )
-        return HTMLResponse(page)
-    doc_share = await doc_share_repo.get_active(token)
-    if doc_share is None:
+    if share is None:
         return HTMLResponse(_not_found_page(), status_code=404)
-    page = render_doc_share_html(
-        title=doc_share.title,
-        snapshot=doc_share.snapshot,
-        created_at=doc_share.created_at,
+    page = render_share_html(
+        title=share.title, snapshot=share.snapshot, created_at=share.created_at
     )
     return HTMLResponse(page)

@@ -154,6 +154,40 @@ export function getModels(): Promise<ModelCatalog> {
   return api.get<ModelCatalog>("/v1/users/me/models");
 }
 
+export type HiddenModelRefs = { refs: string[]; enabled_refs: string[] };
+export type ModelDisplayName = Schemas["ModelDisplayNameView"];
+
+/** BYOK refs currently on composer pickers. Missing on older catalog payloads. */
+export function catalogEnabledRefs(
+  catalog: { enabled_refs?: string[] | null } | undefined,
+): string[] {
+  return Array.isArray(catalog?.enabled_refs) ? catalog.enabled_refs : [];
+}
+
+/** Replace picker membership: platform opt-out (`refs`) + BYOK opt-in. */
+export function putPickerVisibility(body: {
+  refs: string[];
+  enabled_refs: string[];
+}): Promise<HiddenModelRefs> {
+  return api.put<HiddenModelRefs>("/v1/users/me/models/hidden", body);
+}
+
+/** Set or clear the shown name for one connected (BYOK) catalog row. */
+export function putModelDisplayName(
+  body: Schemas["ModelDisplayNameUpdate"],
+): Promise<ModelDisplayName> {
+  return api.put<ModelDisplayName>("/v1/users/me/models/display-names", body);
+}
+
+export type VisionAccept = Schemas["VisionAcceptView"];
+
+/** Declare or clear native image accept for one connected (BYOK) catalog row. */
+export function putVisionAccept(
+  body: Schemas["VisionAcceptUpdate"],
+): Promise<VisionAccept> {
+  return api.put<VisionAccept>("/v1/users/me/models/vision-accept", body);
+}
+
 // —— 跨会话的「上次选择」偏好（走统一 UI 持久化层，禁止直碰 localStorage）——
 
 /** 拆分前聊天里记下的装配 id。第一次读装配时抄进 `chat:assembly:last`。 */

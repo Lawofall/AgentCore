@@ -80,11 +80,16 @@ async def put_account_tool_switches(
     from agentcore.llm.model_profiles import LlmModelProfileService
 
     disabled = list(normalize_disabled_tools(body.disabled))
-    aid = await LlmModelProfileService(users._session).snapshot_default_profile_id(
-        user.user_id
-    )
+    svc = LlmModelProfileService(users._session)
+    aid = await svc.snapshot_default_profile_id(user.user_id)
     if not aid:
         raise ValidationError("还没有可写入的装配")
+    from agentcore.llm.model_profiles import is_system_profile_id
+
+    if is_system_profile_id(aid):
+        from agentcore.assembly.recipes import OFFICIAL_READONLY
+
+        raise ValidationError(OFFICIAL_READONLY)
     await users.set_disabled_tools(user.user_id, disabled)
     return _view(disabled)
 

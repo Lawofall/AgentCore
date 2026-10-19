@@ -67,7 +67,6 @@ function session(p: Partial<SessionSummary> & { id: string }): SessionSummary {
 
 function detail(p?: Partial<AdminUserDetail>): AdminUserDetail {
   return {
-    background_model: null,
     billing_mode: "platform",
     conversations: [
       {
@@ -123,6 +122,9 @@ function detail(p?: Partial<AdminUserDetail>): AdminUserDetail {
       quota_daily_cost_cny: null,
       quota_daily_tokens: null,
       quota_monthly_cost_cny: null,
+      seat_plan: null,
+      seat_until: null,
+      seat_pending_plan: null,
       registration_ip: "203.0.113.9",
       role: "user",
       status: "active",

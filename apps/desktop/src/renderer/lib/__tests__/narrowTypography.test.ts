@@ -12,8 +12,10 @@ const css = readFileSync(
 describe("narrow typography", () => {
   it("remaps reading tokens at the same cutoff as the narrow shell", () => {
     expect(css).toContain(`@media (max-width: ${NARROW_MAX_WIDTH}px)`);
-    expect(css).toMatch(/--text-sm:\s*1rem;/);
-    expect(css).toMatch(/--text-base:\s*1\.0625rem;/);
+    expect(css).toMatch(/--text-sm:\s*calc\(1rem \* var\(--font-scale\)\);/);
+    expect(css).toMatch(
+      /--text-base:\s*calc\(1\.0625rem \* var\(--font-scale\)\);/,
+    );
     expect(css).toMatch(
       /\.markdown-body \{[\s\S]*?font-size:\s*var\(--text-sm\);/,
     );

@@ -10,6 +10,10 @@ vi.mock("@/lib/revokeExternalGrant", () => ({
   revokeExternalGrant: vi.fn(),
 }));
 
+vi.mock("@/services/permissionAxes", () => ({
+  peekConversationBoundary: vi.fn(async () => undefined),
+}));
+
 vi.mock("@/services/api", () => ({
   ApiError: class ApiError extends Error {
     status: number;
@@ -163,6 +167,30 @@ describe("pickAndGrantOrganizeFolder", () => {
       ok: false,
       reason: "cancelled",
       message: "用户拒绝授权",
+    });
+  });
+
+  it("forwards computer boundary so main can skip the dialog", async () => {
+    const { peekConversationBoundary } = await import(
+      "@/services/permissionAxes"
+    );
+    const { api } = await import("@/services/api");
+    vi.mocked(peekConversationBoundary).mockResolvedValueOnce("computer");
+    vi.mocked(window.fsApi.grantSessionReadonlyRoot).mockResolvedValue({
+      ok: true,
+      root: { id: "r1", name: "咨询", mode: "organize" },
+    });
+    vi.mocked(api.post).mockResolvedValue({
+      grant: { alias: "咨询", namespace: "external/咨询" },
+    });
+
+    await pickAndGrantOrganizeFolder("conv-1", { path: "C:\\咨询" });
+
+    expect(window.fsApi.grantSessionReadonlyRoot).toHaveBeenCalledWith({
+      conversationId: "conv-1",
+      mode: "organize",
+      path: "C:\\咨询",
+      boundary: "computer",
     });
   });
 });

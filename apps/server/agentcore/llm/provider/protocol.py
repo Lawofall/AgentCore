@@ -72,9 +72,12 @@ LLMContent = str | list[dict] | None
 
 
 def normalize_thinking_blocks(raw: Any) -> list[dict] | None:
-    """Keep only echoable Anthropic thinking / redacted_thinking blocks.
+    """Keep echoable vendor items for the next tool round.
 
-    Unsigned ``thinking`` blocks cannot be sent back and are dropped.
+    Anthropic ``/messages``: signed ``thinking`` / ``redacted_thinking``.
+    OpenAI ``/responses``: ``reasoning`` items (id + encrypted_content).
+    Unsigned Anthropic thinking cannot be sent back and is dropped.
+    Each protocol leaf filters to the types it may PUT upstream.
     """
     if not isinstance(raw, list) or not raw:
         return None
@@ -98,7 +101,40 @@ def normalize_thinking_blocks(raw: Any) -> list[dict] | None:
             data = block.get("data")
             if isinstance(data, str) and data:
                 out.append({"type": "redacted_thinking", "data": data})
+        elif kind == "reasoning":
+            item_id = block.get("id")
+            if not isinstance(item_id, str) or not item_id.strip():
+                continue
+            item: dict[str, Any] = {"type": "reasoning", "id": item_id.strip()}
+            encrypted = block.get("encrypted_content")
+            if isinstance(encrypted, str) and encrypted:
+                item["encrypted_content"] = encrypted
+            summary = block.get("summary")
+            if isinstance(summary, list):
+                item["summary"] = summary
+            content = block.get("content")
+            if isinstance(content, list):
+                item["content"] = content
+            out.append(item)
     return out or None
+
+
+def anthropic_echo_blocks(raw: Any) -> list[dict]:
+    """Thinking blocks the Anthropic ``/messages`` leaf may send back."""
+    return [
+        block
+        for block in (normalize_thinking_blocks(raw) or [])
+        if block.get("type") in {"thinking", "redacted_thinking"}
+    ]
+
+
+def responses_echo_items(raw: Any) -> list[dict]:
+    """Reasoning items the OpenAI ``/responses`` leaf must replay (store:false)."""
+    return [
+        block
+        for block in (normalize_thinking_blocks(raw) or [])
+        if block.get("type") == "reasoning"
+    ]
 
 
 def llm_content_text(content: LLMContent) -> str:
@@ -147,9 +183,10 @@ class LLMMessage:
     reasoning_content: str | None = None
     # Tool-result audience (``ceo`` = orchestration; not sent to the LLM wire).
     audience: str | None = None
-    # Opaque Anthropic thinking / redacted_thinking blocks (signature included).
-    # Display text stays on ``reasoning_content``; the /messages leaf echoes these
-    # on the next tool round. Not a user-facing column.
+    # Opaque vendor echo for the next tool round. Display text stays on
+    # ``reasoning_content``. Anthropic ``/messages`` puts signed thinking here;
+    # OpenAI ``/responses`` puts reasoning items (encrypted_content). Leaves
+    # filter to the types they may PUT upstream. Not a user-facing column.
     thinking_blocks: list[dict] | None = None
 
 
@@ -310,11 +347,46 @@ class TokenUsage:
             usage_keys=_wire_usage_keys(usage_data),
         )
 
+    @classmethod
+    def from_responses_wire(cls, usage_data: Mapping[str, Any]) -> "TokenUsage":
+        """Parse a ``usage`` block from OpenAI ``POST /responses``.
+
+        Keys are ``input_tokens`` / ``output_tokens``. Cache hit is
+        ``input_tokens_details.cached_tokens``; miss is the remainder of input.
+        Reasoning tokens ride ``output_tokens_details.reasoning_tokens``.
+        """
+        input_tokens = int(usage_data.get("input_tokens", 0) or 0)
+        details_in = usage_data.get("input_tokens_details") or {}
+        details_out = usage_data.get("output_tokens_details") or {}
+        cache_hit = (
+            int(details_in.get("cached_tokens", 0) or 0) if isinstance(details_in, Mapping) else 0
+        )
+        cache_miss = max(input_tokens - cache_hit, 0) if cache_hit else 0
+        reasoning = (
+            int(details_out.get("reasoning_tokens", 0) or 0)
+            if isinstance(details_out, Mapping)
+            else 0
+        )
+        return cls(
+            input_tokens=input_tokens,
+            output_tokens=int(usage_data.get("output_tokens", 0) or 0),
+            reasoning_tokens=reasoning,
+            cache_hit_tokens=cache_hit,
+            cache_miss_tokens=cache_miss,
+            last_prompt_tokens=input_tokens,
+            usage_keys=_wire_usage_keys(usage_data),
+        )
+
 
 def _wire_usage_keys(usage_data: Mapping[str, Any]) -> str:
     """Sorted key names from one wire ``usage`` object. Values are not kept."""
     names = [str(key) for key in usage_data]
-    for parent in ("prompt_tokens_details", "completion_tokens_details"):
+    for parent in (
+        "prompt_tokens_details",
+        "completion_tokens_details",
+        "input_tokens_details",
+        "output_tokens_details",
+    ):
         nested = usage_data.get(parent)
         if isinstance(nested, dict):
             names.extend(f"{parent}.{key}" for key in nested)

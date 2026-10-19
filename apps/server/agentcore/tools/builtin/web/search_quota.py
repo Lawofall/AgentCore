@@ -1,8 +1,8 @@
 """Platform web_search count quota.
 
 Orthogonal to the ¥ / token caps. Only a request that actually leaves for the
-platform SearXNG counts. Own CleverSee and own SearXNG do not. Cache hits and
-rejected queries never reach this module.
+platform SearXNG counts. Own DeepSeek does not. Cache hits and rejected queries
+never reach this module.
 
 ``0`` on a window means that window is unlimited. ``is_unlimited`` skips both.
 """
@@ -23,7 +23,7 @@ _UUID_RE = re.compile(
     r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
 )
 _RESET_HINT = "额度重置后可继续"
-_OWN_EXIT = "或在设置 · 通用改接自己的搜索"
+_OWN_EXIT = "或在设置 · 联网搜索改接自己的搜索"
 
 
 @dataclass(frozen=True)

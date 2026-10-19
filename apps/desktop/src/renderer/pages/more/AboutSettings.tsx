@@ -320,7 +320,7 @@ function VersionSection() {
  * 关于（/more/about）— 品牌、产品手册、版本溯源、软件更新、法律与合规。
  *
  * 手册入口从工具箱顶栏迁来：查阅不占工作面；窄屏不上手册页，故本行也不挂。
- * 收款码在「赞助」子页。
+ * 购买入口与兑换码在「订阅」子页。
  */
 export function AboutSettings() {
   const navigate = useNavigate();

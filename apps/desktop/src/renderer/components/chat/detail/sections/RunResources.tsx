@@ -4,8 +4,9 @@ import {
   COST_ESTIMATE_HINT,
   formatAlignedCostParts,
   formatCompact,
-  formatDisplayCost,
-  pickCostMoney,
+  formatCostBill,
+  formatCostMoney,
+  splitCostMoney,
 } from "@/lib/format";
 import { usePersistentDisclosure } from "@/stores/disclosure";
 import {
@@ -22,10 +23,10 @@ import { MetricRow } from "./shared";
 
 /**
  * Per-run resource ledger — the single place a run's full token + cost
- * breakdown lives. Defaults collapsed; header keeps the run ¥. All-zero cost
- * renders as「—」(§7.5), not「¥0.00」. BYOK 有产品价目时出 ¥，tooltip 说明不扣额度。
- * `cost.cached` is the billed cache-hit portion (already inside input), not
- * savings vs miss price.
+ * breakdown lives. Defaults collapsed; header keeps the run 积分 / ¥. All-zero
+ * cost renders as「—」(§7.5), not「0.00 积分」. BYOK 有产品价目时出 ¥，tooltip
+ * 「按官网价目」。`cost.cached` is the billed cache-hit portion (already inside
+ * input), not savings vs miss price.
  */
 export function ResourceSection({
   run,
@@ -43,18 +44,16 @@ export function ResourceSection({
     defaultExpanded,
   );
   const { usage, cost, model } = run;
-  const money = pickCostMoney(cost);
+  const split = splitCostMoney(cost);
   const tokenTotal = usage ? usage.input + usage.output : 0;
-  const byokHint =
-    (cost?.estimated_total ?? 0) > 0 || money?.estimated === true;
+  const byokHint = split.extra != null;
   const accrued = run.status === "running" || run.status === "pending";
-  const soFar = accrued ? " 至今" : "";
+  const billText = formatCostBill(split.billed, split.extra, accrued);
   const costLabel =
-    money != null && money.nano > 0
-      ? `${formatDisplayCost(money.nano, money.estimated, money.currency)}${soFar}`
-      : tokenTotal > 0
-        ? `${formatCompact(tokenTotal)} tok${soFar}`
-        : null;
+    billText ??
+    (tokenTotal > 0
+      ? `${formatCompact(tokenTotal)} tok${accrued ? " 至今" : ""}`
+      : null);
   const cache = usage ? cacheUsageDisplay(usage) : null;
   const think = reasoningMeta(agent.thinking, run.reasoningEffort);
   const cacheLine =
@@ -67,13 +66,22 @@ export function ResourceSection({
               cache.hitRatePercent != null ? `（${cache.hitRatePercent}%）` : ""
             }`
           : null;
+  const partsUnit = split.billed
+    ? split.extra
+      ? null
+      : ("credit" as const)
+    : split.extra && !split.extra.estimated
+      ? ("cash" as const)
+      : null;
+  const partsMoney = split.billed ?? split.extra;
   const parts =
-    cost != null && money != null && money.nano > 0 && !money.estimated
+    cost != null && partsUnit != null && partsMoney != null
       ? formatAlignedCostParts(
           cost.input,
           cost.output,
-          money.nano,
-          cost.currency,
+          partsMoney.nano,
+          partsMoney.currency,
+          partsUnit,
         )
       : null;
 
@@ -132,15 +140,20 @@ export function ResourceSection({
               <p className="text-xs tabular-nums text-muted-foreground">
                 输入 {parts.input} · 输出 {parts.output}
               </p>
-              {cost && cost.cached > 0 && (
+              {cost && cost.cached > 0 && partsMoney && partsUnit && (
                 <p className="mt-0.5 text-xs tabular-nums text-muted-foreground">
                   其中缓存{" "}
-                  {formatDisplayCost(cost.cached, false, cost.currency)}
+                  {formatCostMoney({
+                    nano: cost.cached,
+                    estimated: false,
+                    currency: partsMoney.currency,
+                    unit: partsUnit,
+                  })}
                 </p>
               )}
             </div>
           )}
-          {byokHint && money != null && money.nano > 0 && (
+          {byokHint && split.extra != null && (
             <SimpleTooltip label={COST_ESTIMATE_HINT}>
               <p className="cursor-default text-xs text-muted-foreground">
                 {COST_ESTIMATE_HINT}

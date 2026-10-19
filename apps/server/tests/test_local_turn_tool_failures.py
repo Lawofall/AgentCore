@@ -24,6 +24,7 @@ from agentcore.tools.builtin.delegate.schema import EMPTY_DELEGATE_MSG
 pytestmark = pytest.mark.anyio
 
 _TRACE = "0123456789abcdef0123456789abcdef"
+_USER_MSG_ID = "01234567-89ab-4def-8123-456789abcdef"
 
 
 @pytest.mark.parametrize(
@@ -219,7 +220,7 @@ def test_record_turn_request_accepts_empty_user_message():
     """Process-only salvage may omit real um (ffafc42b)."""
     body = RecordTurnRequest(
         user_message="",
-        user_message_id="u1",
+        user_message_id=_USER_MSG_ID,
         trace_id=_TRACE,
     )
     assert body.user_message == ""
@@ -228,7 +229,7 @@ def test_record_turn_request_accepts_empty_user_message():
 def test_record_turn_request_tool_failures_optional_default_empty():
     body = RecordTurnRequest(
         user_message="hi",
-        user_message_id="u1",
+        user_message_id=_USER_MSG_ID,
         trace_id=_TRACE,
     )
     assert body.tool_failures == []
@@ -237,7 +238,7 @@ def test_record_turn_request_tool_failures_optional_default_empty():
 def test_record_turn_request_accepts_tool_failures():
     body = RecordTurnRequest(
         user_message="hi",
-        user_message_id="u1",
+        user_message_id=_USER_MSG_ID,
         trace_id=_TRACE,
         tool_failures=[
             {
@@ -256,7 +257,7 @@ def test_record_turn_request_rejects_empty_tool_name():
     with pytest.raises(ValidationError):
         RecordTurnRequest(
             user_message="hi",
-            user_message_id="u1",
+            user_message_id=_USER_MSG_ID,
             trace_id=_TRACE,
             tool_failures=[{"tool": "", "code": "other", "message": "x"}],
         )
@@ -462,7 +463,6 @@ async def test_record_local_turn_logs_tool_failures(monkeypatch):
             "user_message_id": "u1",
             "assistant_message_id": "a1",
             "title": None,
-            "followups": None,
             "noop": False,
         }
     )
@@ -525,7 +525,6 @@ async def test_record_local_turn_caps_logged_failure_messages(monkeypatch):
             "user_message_id": "u1",
             "assistant_message_id": "a1",
             "title": None,
-            "followups": None,
             "noop": False,
         }
     )
@@ -562,7 +561,6 @@ async def test_record_local_turn_skips_log_when_no_failures(monkeypatch):
             "user_message_id": "u1",
             "assistant_message_id": "a1",
             "title": None,
-            "followups": None,
             "noop": False,
         }
     )

@@ -45,10 +45,9 @@ import {
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ComposerPlusBackHeader, useComposerPlusRow } from "./ComposerPlusMenu";
-import { WorkspaceChannelGuideDialog } from "./WorkspaceChannelGuideDialog";
 
 /**
- * Always-on「在哪工作」chip for the TurnComposer 底栏左簇（工作区首位）。
+ * 「在哪工作」chip：空草稿在卡片上方世界行首位；有会话后进「更多」。
  * Draft first screen = pick a place (本地对话 + 云端对话 + folders);
  * join nest 新建·Git·从本机加入（选完即直接改）. Bound conversation: read-only status.
  */
@@ -78,7 +77,7 @@ function BoundChip({ conversationId }: { conversationId: string }) {
 
   if (!state) {
     return (
-      <span className="inline-flex h-7 items-center gap-1 px-1.5 text-xs text-muted-foreground">
+      <span className="inline-flex h-8 items-center gap-1 px-1.5 text-sm text-muted-foreground">
         <Loader2 size={12} className="animate-spin" />…
       </span>
     );
@@ -93,10 +92,14 @@ function BoundChip({ conversationId }: { conversationId: string }) {
       aria-label={title}
       title={title}
       onClick={plus.mode === "row" ? plus.drill : undefined}
-      className="inline-flex h-8 max-w-[280px] items-center gap-1 rounded-lg px-2 text-xs text-muted-foreground hover:bg-accent/60 hover:text-foreground"
+      className={
+        plus.mode === "row"
+          ? "inline-flex h-8 w-full max-w-none items-center justify-start gap-1 rounded-lg px-2 text-sm text-muted-foreground hover:bg-accent/60 hover:text-foreground"
+          : "inline-flex h-8 max-w-[280px] items-center gap-1 rounded-lg px-2 text-sm text-muted-foreground hover:bg-accent/60 hover:text-foreground"
+      }
       data-testid="composer-workspace-chip"
     >
-      <WorkspaceModeTrigger effective={state.effective} className="text-xs" />
+      <WorkspaceModeTrigger effective={state.effective} className="text-sm" />
       {borrowActive ? (
         <span className="shrink-0 rounded-lg bg-muted px-1.5 py-0.5 text-xs font-medium text-muted-foreground">
           原件尚未改动
@@ -194,7 +197,6 @@ function DraftChip() {
   const plus = useComposerPlusRow("workspace");
   const navigate = useNavigate();
   const [pop, setPop] = useState(false);
-  const [guideOpen, setGuideOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [foldersExpanded, setFoldersExpanded] = useState(false);
   /** Same popover handoff — avoid close→open race that swallows the create dialog. */
@@ -328,12 +330,6 @@ function DraftChip() {
     setView("create");
   };
 
-  const openGuide = () => {
-    setPop(false);
-    if (plus.mode === "panel" || plus.mode === "row") plus.close();
-    setGuideOpen(true);
-  };
-
   const holdOpen =
     plus.mode === "panel" || plus.mode === "row" ? plus.setHoldOpen : null;
   useEffect(() => {
@@ -408,22 +404,13 @@ function DraftChip() {
     </>
   );
 
-  const guide = (
-    <WorkspaceChannelGuideDialog
-      open={guideOpen}
-      onOpenChange={setGuideOpen}
-      showLocalTraditional={isDesktop}
-    />
-  );
-  const hosts = guide;
-
   const trigger = (
     <button
       type="button"
       aria-label="在哪工作"
       title={draftTitle}
       onClick={plus.mode === "row" ? plus.drill : undefined}
-      className="inline-flex h-8 max-w-[280px] items-center gap-1 rounded-lg px-2 text-xs text-muted-foreground hover:bg-accent/60 hover:text-foreground"
+      className="inline-flex h-8 max-w-[280px] items-center gap-1 rounded-lg px-2 text-sm text-muted-foreground hover:bg-accent/60 hover:text-foreground"
     >
       {icon === "cloud" ? (
         <Cloud size={13} className="shrink-0" />
@@ -483,6 +470,7 @@ function DraftChip() {
           <DraftRow
             icon={<HardDrive size={14} />}
             label="本地对话"
+            hint="改这台电脑上的文件"
             selected={intent.kind === "quick_local"}
             onClick={pickQuickLocal}
           />
@@ -490,6 +478,7 @@ function DraftChip() {
         <DraftRow
           icon={<Cloud size={14} />}
           label="云端对话"
+          hint="关电脑、手机网页也能接着改"
           selected={intent.kind === "quick_cloud"}
           onClick={pickQuickCloud}
         />
@@ -508,23 +497,14 @@ function DraftChip() {
             onClick={openCreateCloud}
           />
         )}
-        <button
-          type="button"
-          className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs text-muted-foreground hover:bg-accent/40 hover:text-foreground"
-          onClick={openGuide}
-        >
-          <span className="w-4 shrink-0" aria-hidden />
-          了解区别
-        </button>
       </div>
     );
 
-  if (plus.mode === "hidden") return hosts;
+  if (plus.mode === "hidden") return null;
 
   if (plus.mode === "panel") {
     return (
       <div className="w-64">
-        {hosts}
         {view === "pick" ? (
           <ComposerPlusBackHeader
             title="在哪工作"
@@ -540,17 +520,11 @@ function DraftChip() {
   }
 
   if (plus.mode === "row") {
-    return (
-      <>
-        {hosts}
-        {trigger}
-      </>
-    );
+    return trigger;
   }
 
   return (
     <div className="relative shrink-0">
-      {hosts}
       <Popover
         open={pop}
         onOpenChange={(o) => {

@@ -2,6 +2,7 @@ export {
   SettingField,
   SettingsFormMessage,
   type SettingFieldHintPlacement,
+  type SettingFieldLayout,
   type SettingFieldProps,
   type SettingsFormMessageProps,
   type SettingsFormMessageTone,

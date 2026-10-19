@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildPaletteCommands, commandMatches } from "../paletteCommands";
 
 vi.mock("@/services/demoTape", () => ({
@@ -25,7 +25,11 @@ vi.mock("@/lib/toast", () => ({
 
 vi.mock("@/lib/capabilities", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../capabilities")>();
-  return { ...actual, hasLocalFiles: vi.fn(() => false) };
+  return {
+    ...actual,
+    hasLocalFiles: vi.fn(() => false),
+    hasWindowControls: vi.fn(() => true),
+  };
 });
 
 vi.mock("@/hooks/useConversations", () => ({
@@ -66,6 +70,8 @@ describe("paletteCommands narrow restriction", () => {
     expect(cmds.some((c) => c.id === "nav-toolbox")).toBe(false);
     expect(cmds.some((c) => c.id === "nav-conversations")).toBe(true);
     expect(cmds.some((c) => c.id === "theme-dark")).toBe(false);
+    expect(cmds.some((c) => c.id === "nav-settings-general")).toBe(true);
+    expect(cmds.some((c) => c.id === "zoom-in")).toBe(false);
     expect(cmds.some((c) => c.id === "nav-files")).toBe(true);
     expect(cmds.some((c) => c.id === "nav-settings")).toBe(true);
     expect(cmds.some((c) => c.id === "toggle-diagnostic-mode")).toBe(false);
@@ -194,19 +200,36 @@ describe("paletteCommands · 设置深链", () => {
     expect(commandMatches(general, "外观")).toBe(true);
     expect(commandMatches(general, "appearance")).toBe(true);
     expect(commandMatches(general, "theme")).toBe(true);
+    expect(commandMatches(general, "字号")).toBe(true);
+    expect(commandMatches(general, "发送")).toBe(true);
+    expect(commandMatches(general, "通知")).toBe(true);
 
     expect(cmds.some((c) => c.id === "nav-settings-appearance")).toBe(false);
   });
 
-  it("opens 设置 · 赞助", () => {
+  it("opens 设置 · 联网搜索", () => {
     const cmds = buildPaletteCommands(baseCtx);
-    const sponsor = cmds.find((c) => c.id === "nav-settings-sponsor");
-    expect(sponsor).toBeTruthy();
-    if (!sponsor) return;
-    expect(sponsor.title).toBe("设置 · 赞助");
-    expect(commandMatches(sponsor, "赞助")).toBe(true);
-    sponsor.run();
-    expect(baseCtx.navigate).toHaveBeenCalledWith("/more/sponsor");
+    const search = cmds.find((c) => c.id === "nav-settings-search");
+    expect(search).toBeTruthy();
+    if (!search) return;
+    expect(search.title).toBe("设置 · 联网搜索");
+    search.run();
+    expect(baseCtx.navigate).toHaveBeenCalledWith("/more/search");
+    expect(commandMatches(search, "联网搜索")).toBe(true);
+    expect(commandMatches(search, "DeepSeek")).toBe(true);
+    expect(commandMatches(search, "SearXNG")).toBe(false);
+  });
+
+  it("opens 设置 · 订阅", () => {
+    const cmds = buildPaletteCommands(baseCtx);
+    const subscription = cmds.find((c) => c.id === "nav-settings-subscription");
+    expect(subscription).toBeTruthy();
+    if (!subscription) return;
+    expect(subscription.title).toBe("设置 · 订阅");
+    expect(commandMatches(subscription, "订阅")).toBe(true);
+    expect(commandMatches(subscription, "赞助")).toBe(true);
+    subscription.run();
+    expect(baseCtx.navigate).toHaveBeenCalledWith("/more/subscription");
   });
 });
 
@@ -288,5 +311,53 @@ describe("paletteCommands · 区外只读授权", () => {
       "local_traditional",
     );
     expect(pickAndOpenLocalFolder).toHaveBeenCalledWith(baseCtx.navigate);
+  });
+});
+
+describe("paletteCommands · 窗口拍摄", () => {
+  afterEach(async () => {
+    vi.unstubAllGlobals();
+    const { hasWindowControls } = await import("../capabilities");
+    vi.mocked(hasWindowControls).mockReturnValue(true);
+  });
+
+  it("lists free + 16:9 + 4:3 under 开发, with 当前 on the active preset", () => {
+    const cmds = buildPaletteCommands({
+      ...baseCtx,
+      framePreset: "4:3-uxga",
+    });
+    const free = cmds.find((c) => c.id === "dev-window-frame-free");
+    const wide = cmds.find((c) => c.id === "dev-window-frame-16:9-1080");
+    const uxga = cmds.find((c) => c.id === "dev-window-frame-4:3-uxga");
+    expect(free?.category).toBe("开发");
+    expect(wide?.title).toBe("窗口拍摄：16:9 · 1920×1080");
+    expect(uxga?.title).toBe("窗口拍摄：4:3 · 1600×1200");
+    expect(free?.hint).toBeUndefined();
+    expect(wide?.hint).toBeUndefined();
+    expect(uxga?.hint).toBe("当前");
+    expect(uxga && commandMatches(uxga, "拍摄")).toBe(true);
+    expect(uxga && commandMatches(uxga, "obs")).toBe(true);
+    expect(uxga && commandMatches(uxga, "4:3")).toBe(true);
+  });
+
+  it("hides window-frame commands without window chrome", async () => {
+    const { hasWindowControls } = await import("../capabilities");
+    vi.mocked(hasWindowControls).mockReturnValueOnce(false);
+    const cmds = buildPaletteCommands(baseCtx);
+    expect(cmds.some((c) => c.id.startsWith("dev-window-frame-"))).toBe(false);
+  });
+
+  it("applies the preset via windowApi", async () => {
+    const { hasWindowControls } = await import("../capabilities");
+    vi.mocked(hasWindowControls).mockReturnValue(true);
+    const applyFramePreset = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal("window", {
+      windowApi: { applyFramePreset },
+    });
+    const cmds = buildPaletteCommands(baseCtx);
+    const uxga = cmds.find((c) => c.id === "dev-window-frame-4:3-uxga");
+    expect(uxga).toBeTruthy();
+    uxga?.run();
+    expect(applyFramePreset).toHaveBeenCalledWith("4:3-uxga");
   });
 });

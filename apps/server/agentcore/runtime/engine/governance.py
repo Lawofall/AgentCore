@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any
 
 from agentcore.config import settings
 from agentcore.core.logging import get_logger
@@ -26,19 +26,6 @@ logger = get_logger(__name__)
 
 # Local file peeks (file_list / glob / read / grep) — diagnostics / eval probe only.
 LOCAL_RECON_TOOLS = frozenset({"file_list", "glob", "read", "grep"})
-
-
-def maybe_inject_delivery_idle(
-    controller: LoopController,
-    *,
-    messages: list[LLMMessage],
-    run_id: str,
-    round_idx: int,
-    role: str,
-) -> Literal["none"]:
-    """Product-retired. Never injects, even if an explicit controller still has bars."""
-    del controller, messages, run_id, round_idx, role
-    return "none"
 
 
 def coordination_injection_has_all_completed(messages: list[LLMMessage]) -> bool:
@@ -146,16 +133,13 @@ def create_loop_controller(
     thrash; see :meth:`LoopController.apply_seed`); omit on a fresh turn.
 
     Zero-write / prose_idle mid-loop warn→FINALIZE is **retired** (always off).
-    Files-expected delivery_idle (nudge / narrow / report) is **retired**: factory
-    never arms it. Recon-idle nudge is **retired** the same way. Absolute
-    investigation-round finalize is **retired**: factory always passes
-    ``convergence_finalize_rounds=0``. Same-target spin
-    (``engine_convergence_spin_rounds``) stays. Explicit ``LoopController``
-    construction may still pass ``finalize_rounds`` / idle bars (idle bars no
-    longer inject).
-    ``report_delivery`` stays for call-site compatibility and does not drive idle.
-    Orthogonal to token/timeout wind_down and never stamps DEGRADED / FAILED for
-    read-idle.
+    Files-expected idle inject (nudge / narrow / report) is **gone**. Recon-idle
+    nudge is **gone**. Absolute investigation-round finalize is **retired**:
+    factory always passes ``convergence_finalize_rounds=0``. Same-target spin
+    (``engine_convergence_spin_rounds``) stays.
+    ``report_delivery`` stays for call-site compatibility and does not drive
+    idle. Orthogonal to token/timeout wind_down and never stamps DEGRADED /
+    FAILED for read-idle.
     Delivery pressure otherwise stays on round/token hard ceilings + convergence
     spin. 真纯丙后不再有「白名单缺写盘 → 补写工具」半成品路径.
 
@@ -176,13 +160,6 @@ def create_loop_controller(
         tool_failure_disable = min(int(tool_failure_disable), 2)
         unproductive_threshold = min(int(unproductive_threshold), 2)
 
-    # Soft read-idle: factory never arms files-expected delivery_idle
-    # (nudge/narrow/report) or recon-idle conclude nudges.
-    delivery_idle_nudge = 0
-    delivery_idle_narrow = 0
-    delivery_idle_recon = False
-    delivery_idle_report = False
-
     controller = LoopController(
         tool_failure_warn=tool_failure_warn,
         tool_failure_disable=tool_failure_disable,
@@ -190,10 +167,6 @@ def create_loop_controller(
         convergence_finalize_rounds=0,
         convergence_spin_rounds=settings.engine_convergence_spin_rounds,
         expects_landing=expects_landing,
-        delivery_idle_nudge_rounds=delivery_idle_nudge,
-        delivery_idle_narrow_rounds=delivery_idle_narrow,
-        delivery_idle_recon=delivery_idle_recon,
-        delivery_idle_report=delivery_idle_report,
         investigation_tools=investigation_tools,
         product_landing_artifacts=product_landing_artifacts,
     )
@@ -614,13 +587,6 @@ def govern_after_tools(
             round_idx=round_idx,
             role=role,
         )
-        maybe_inject_delivery_idle(
-            controller,
-            messages=messages,
-            run_id=run_id,
-            round_idx=round_idx,
-            role=role,
-        )
         return Continue()
 
     if signal is not None and action is Intervention.FINALIZE:
@@ -651,13 +617,6 @@ def govern_after_tools(
         return Finalize(reason="convergence")
 
     maybe_inject_turn_token_budget_gate(
-        controller,
-        messages=messages,
-        run_id=run_id,
-        round_idx=round_idx,
-        role=role,
-    )
-    maybe_inject_delivery_idle(
         controller,
         messages=messages,
         run_id=run_id,

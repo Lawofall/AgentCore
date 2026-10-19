@@ -27,6 +27,7 @@ from agentcore.runtime.checkpoints import CheckpointDecision
 from agentcore.runtime.events import EventSink, EventType, FinishReason
 from agentcore.runtime.facts import LlmCallFact, RoundBoundaryFact, TurnStartedFact
 from agentcore.runtime.suspension import AskUserSuspension
+from agentcore.runtime.turn.snapshot import ConversationSnapshot
 from agentcore.tools.sandbox.subprocess import SubprocessSandbox
 from agentcore.workspace.server import ServerWorkspace
 from tests.llm_helpers import make_turn_profiles
@@ -139,6 +140,7 @@ async def test_resume_binds_byok_credential_source_into_log_context(monkeypatch)
         note="继续",
         sink=EventSink(),
         backend=ServerWorkspace(root=Path("."), sandbox=SubprocessSandbox()),
+        conversation=ConversationSnapshot.default(),
         profile_set=make_turn_profiles(model=DEEPSEEK_V4_FLASH),
         llm_credentials=_byok_creds(),
     )
@@ -163,6 +165,7 @@ async def test_resume_without_creds_binds_platform_like_prepare(monkeypatch):
         note="继续",
         sink=EventSink(),
         backend=ServerWorkspace(root=Path("."), sandbox=SubprocessSandbox()),
+        conversation=ConversationSnapshot.default(),
         profile_set=make_turn_profiles(model=DEEPSEEK_V4_FLASH),
         llm_credentials=None,
     )

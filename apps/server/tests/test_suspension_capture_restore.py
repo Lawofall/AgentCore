@@ -9,7 +9,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from agentcore.core.types import WorkspaceBoundary
 from agentcore.llm.provider.protocol import LLMMessage
 from agentcore.runtime.events import FinishReason
 from agentcore.runtime.facts import TurnFactLog, TurnStartedFact, current_fact_log
@@ -365,14 +364,8 @@ async def test_resume_chat_does_not_restore_after_settlement_on_error() -> None:
     with (
         patch.object(turns_mod, "async_session_factory") as factory,
         patch.object(turns_mod, "ConversationRepository") as conv_repo_cls,
-        patch.object(turns_mod, "TableRepository") as table_repo_cls,
         patch.object(turns_mod, "resolve_local_binding", AsyncMock(return_value=None)),
         patch.object(turns_mod, "resolve_profile_set", AsyncMock(return_value=None)),
-        patch.object(
-            turns_mod,
-            "resolve_permission_axes",
-            AsyncMock(return_value=WorkspaceBoundary.FOLDER),
-        ),
         patch.object(turns_mod, "load_chat_context", AsyncMock(return_value=[])),
         patch.object(turns_mod, "build_turn_backend", return_value=MagicMock()),
         patch.object(turns_mod, "session_callbacks", return_value=(AsyncMock(), AsyncMock())),
@@ -396,7 +389,6 @@ async def test_resume_chat_does_not_restore_after_settlement_on_error() -> None:
         session = AsyncMock()
         factory.return_value.__aenter__.return_value = session
         conv_repo_cls.return_value.get_by_id_unscoped = AsyncMock(return_value=conv)
-        table_repo_cls.return_value.get_by_conversation_id = AsyncMock(return_value=None)
 
         await turns_mod.resume_chat(
             suspension=suspension,
@@ -421,14 +413,8 @@ async def test_resume_chat_does_not_restore_on_success() -> None:
     with (
         patch.object(turns_mod, "async_session_factory") as factory,
         patch.object(turns_mod, "ConversationRepository") as conv_repo_cls,
-        patch.object(turns_mod, "TableRepository") as table_repo_cls,
         patch.object(turns_mod, "resolve_local_binding", AsyncMock(return_value=None)),
         patch.object(turns_mod, "resolve_profile_set", AsyncMock(return_value=None)),
-        patch.object(
-            turns_mod,
-            "resolve_permission_axes",
-            AsyncMock(return_value=WorkspaceBoundary.FOLDER),
-        ),
         patch.object(turns_mod, "load_chat_context", AsyncMock(return_value=[])),
         patch.object(turns_mod, "build_turn_backend", return_value=MagicMock()),
         patch.object(turns_mod, "session_callbacks", return_value=(AsyncMock(), AsyncMock())),
@@ -451,7 +437,6 @@ async def test_resume_chat_does_not_restore_on_success() -> None:
         session = AsyncMock()
         factory.return_value.__aenter__.return_value = session
         conv_repo_cls.return_value.get_by_id_unscoped = AsyncMock(return_value=conv)
-        table_repo_cls.return_value.get_by_conversation_id = AsyncMock(return_value=None)
 
         await turns_mod.resume_chat(
             suspension=suspension,
@@ -501,14 +486,8 @@ async def test_resume_chat_does_not_restore_after_settlement_on_cancel() -> None
     with (
         patch.object(turns_mod, "async_session_factory") as factory,
         patch.object(turns_mod, "ConversationRepository") as conv_repo_cls,
-        patch.object(turns_mod, "TableRepository") as table_repo_cls,
         patch.object(turns_mod, "resolve_local_binding", AsyncMock(return_value=None)),
         patch.object(turns_mod, "resolve_profile_set", AsyncMock(return_value=None)),
-        patch.object(
-            turns_mod,
-            "resolve_permission_axes",
-            AsyncMock(return_value=WorkspaceBoundary.FOLDER),
-        ),
         patch.object(turns_mod, "load_chat_context", AsyncMock(return_value=[])),
         patch.object(turns_mod, "build_turn_backend", return_value=MagicMock()),
         patch.object(turns_mod, "session_callbacks", return_value=(AsyncMock(), AsyncMock())),
@@ -521,7 +500,6 @@ async def test_resume_chat_does_not_restore_after_settlement_on_cancel() -> None
         session = AsyncMock()
         factory.return_value.__aenter__.return_value = session
         conv_repo_cls.return_value.get_by_id_unscoped = AsyncMock(return_value=conv)
-        table_repo_cls.return_value.get_by_conversation_id = AsyncMock(return_value=None)
 
         try:
             with pytest.raises(asyncio.CancelledError):

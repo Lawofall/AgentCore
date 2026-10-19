@@ -4,6 +4,7 @@ import { basename, join } from "node:path";
 import {
   type AddRootResult,
   FS_CHANNELS,
+  type FolderGrantBoundary,
   type FsResult,
   type FsRoot,
   type FsWriteInput,
@@ -110,6 +111,20 @@ function parseRootId(p: unknown): string | undefined {
   if (!isRecord(p) || typeof p.rootId !== "string") return undefined;
   const trimmed = p.rootId.trim();
   return trimmed || undefined;
+}
+
+const FOLDER_GRANT_BOUNDARIES = new Set<FolderGrantBoundary>([
+  "read",
+  "folder",
+  "computer",
+  "full",
+]);
+
+function parseBoundary(p: unknown): FolderGrantBoundary | undefined {
+  if (!isRecord(p) || typeof p.boundary !== "string") return undefined;
+  return FOLDER_GRANT_BOUNDARIES.has(p.boundary as FolderGrantBoundary)
+    ? (p.boundary as FolderGrantBoundary)
+    : undefined;
 }
 
 async function realpathOrSelf(absPath: string): Promise<string> {
@@ -406,7 +421,7 @@ export function registerFsIpc(): void {
   // fs-session-grants.json (not permanent fs-roots.json).
   // Optional path / wellKnown / targetName: resolve only (no folder picker).
   // Optional rootId: upgrade that session root (no path, no picker).
-  // Write modes confirm here (system dialog). Abs never returned to renderer.
+  // Optional boundary: computer/full skip the folder dialog. Abs never returned.
   ipcMain.handle(
     FS_CHANNELS.grantSessionReadonlyRoot,
     async (_e, p: unknown): Promise<GrantSessionReadonlyRootResult> => {
@@ -428,6 +443,7 @@ export function registerFsIpc(): void {
       const targetName = parseTargetName(p);
       const pathHint = parseGrantPath(p);
       const rootId = parseRootId(p);
+      const boundary = parseBoundary(p);
       await ensureReady();
 
       let absPath: string;
@@ -491,6 +507,7 @@ export function registerFsIpc(): void {
           haveMode,
           wellKnown: wellKnown ?? null,
           absUnderInbox,
+          boundary,
         })
       ) {
         const label = displayLabel || existing?.name || "该文件夹";

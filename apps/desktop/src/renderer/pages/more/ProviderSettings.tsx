@@ -1,4 +1,5 @@
 import {
+  MaskedKeyChip,
   ModelKeyForm,
   modelConfigApiErrorMessage,
 } from "@/components/llm/ModelKeyForm";
@@ -22,7 +23,7 @@ import { useState } from "react";
 
 /**
  * 服务商 (/more/providers) — BYOK 列表 / 表单 / 测连。
- * 页头只留标题；准入走空态，选用组合在「设置 · 装配」。
+ * 页头只留标题；准入走空态，选模型在输入框。
  * 有卡片时页脚一句：加密保存 + 测连绿≠可聊天。
  */
 export function ProviderSettings() {
@@ -75,7 +76,7 @@ export function ProviderSettings() {
   const deleteConsequence = (): string => {
     const remaining = (response?.providers.length ?? 1) - 1;
     return remaining > 0 || response?.platform_available
-      ? "已有装配用着这个服务商，会改指到还在的服务商或平台额度，不会中断对话。"
+      ? "已有能力用着这个服务商，会改指到还在的服务商或平台额度，不会中断对话。"
       : "这是唯一的服务商，删除后将无法发起对话，直到重新接入。";
   };
 
@@ -124,6 +125,8 @@ export function ProviderSettings() {
                 providerId={provider.id}
                 initialLabel={provider.label}
                 initialBaseUrl={provider.base_url}
+                initialVendorId={provider.vendor_id}
+                initialMaskedKey={provider.masked_key}
                 hideTestHint
                 onSaved={onSavedProvider}
                 onCancel={() => setForm(null)}
@@ -165,7 +168,7 @@ export function ProviderSettings() {
 
           {providers.length > 0 ? (
             <p className="text-xs text-muted-foreground">
-              Key 已加密保存。测连绿≠可聊天；日常选用在「装配」。
+              Key 已加密保存。测连绿≠可聊天；日常选模型在输入框。
             </p>
           ) : null}
         </div>
@@ -202,6 +205,19 @@ function hostFromBaseUrl(url: string | null | undefined): string {
   if (!trimmed) return "";
   try {
     return new URL(trimmed).host;
+  } catch {
+    return trimmed;
+  }
+}
+
+/** Host + path so `omyai.vip` vs `omyai.vip/v1` is visible. */
+function endpointFromBaseUrl(url: string | null | undefined): string {
+  const trimmed = url?.trim();
+  if (!trimmed) return "";
+  try {
+    const parsed = new URL(trimmed);
+    const path = parsed.pathname.replace(/\/+$/, "");
+    return path && path !== "/" ? `${parsed.host}${path}` : parsed.host;
   } catch {
     return trimmed;
   }
@@ -260,11 +276,8 @@ function ProviderCard({
   onEdit: () => void;
   onDelete: () => void;
 }) {
-  const host = hostFromBaseUrl(provider.base_url);
+  const endpoint = endpointFromBaseUrl(provider.base_url);
   const busy = testing;
-  const metaParts = [host || null, provider.masked_key ?? "已配置"].filter(
-    Boolean,
-  );
 
   return (
     <Card className="px-4 py-3">
@@ -281,9 +294,21 @@ function ProviderCard({
             />
             <ToolsCapabilityBadge supportsTools={provider.supports_tools} />
           </div>
-          <p className="truncate font-mono text-xs text-muted-foreground">
-            {metaParts.join(" · ")}
-          </p>
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            {endpoint ? (
+              <p className="truncate font-mono text-xs text-muted-foreground">
+                {endpoint}
+              </p>
+            ) : null}
+            {provider.masked_key ? (
+              <MaskedKeyChip
+                value={provider.masked_key}
+                className="px-2 py-0.5 text-xs"
+              />
+            ) : (
+              <span className="text-xs text-muted-foreground">已配置</span>
+            )}
+          </div>
         </div>
         <div className="flex shrink-0 items-center gap-1">
           <Button

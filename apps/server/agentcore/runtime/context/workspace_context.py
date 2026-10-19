@@ -5,7 +5,7 @@
 表格解析 / 通道履约剧本不在这里。本机「桌」写文件夹名 / ``root_label``，不写 OS 绝对路径
 （工具 path 只认相对 POSIX；盘符进任务会让队员按错坐标系）。
 
-空状态不写。空桌只标「顶层空」。某一行在 ``omitted_projections`` 里则不写；
+空状态不写。空桌只标「尚无用户文件」。某一行在 ``omitted_projections`` 里则不写；
 全空则不输出标签。关掉只丢这行字，探测和边界照常。文件夹对话可在本块末节点名本对话写/改/导出（工人不加）。
 HOW → ``product_help`` / 工具 description / consult。
 分层 → docs/03-AI核心/上下文工程.md「提示词设计原则」。
@@ -32,6 +32,7 @@ from agentcore.runtime.context.envelope_switches import (
     SYSTEM,
     include_projection,
 )
+from agentcore.workspace.desk_empty import EMPTY_DESK_FACT
 from agentcore.workspace.layout import CONV_SEGMENT, INTERNAL_SEGMENT, TREE_SEGMENT
 
 if TYPE_CHECKING:
@@ -276,7 +277,7 @@ def _desk_line(
     file tools reject drive letters, and captains copy the desk line into tasks.
     The 执行 line already says 云端; this line only distinguishes 文件夹 vs 草稿.
     """
-    empty = "顶层空" if desk_visibly_empty else ""
+    empty = EMPTY_DESK_FACT if desk_visibly_empty else ""
 
     def _note(*parts: str) -> str:
         body = "；".join(part for part in parts if part)
@@ -362,7 +363,7 @@ def build_workspace_context(
 
     ``desk_folder_id`` / ``desk_folder_label`` name the sitting desk.
     ``desk_is_birth`` is accepted for call-site compatibility; the label is enough.
-    ``desk_visibly_empty`` adds「顶层空」on the desk line.
+    ``desk_visibly_empty`` adds「尚无用户文件」on the desk line.
     """
     del desk_is_birth
     if backend is None:
@@ -373,8 +374,9 @@ def build_workspace_context(
     boundary = permission_axes if permission_axes is not None else WorkspaceBoundary.FOLDER
     boundary_line = "边界：" + {
         WorkspaceBoundary.READ: "只看",
-        WorkspaceBoundary.FOLDER: "这个文件夹",
+        WorkspaceBoundary.FOLDER: "本文件夹",
         WorkspaceBoundary.COMPUTER: "这台电脑",
+        WorkspaceBoundary.FULL: "完全权限",
     }[boundary]
 
     location: Literal["server", "local"] = backend.location
@@ -420,7 +422,8 @@ def build_workspace_context(
     from agentcore.runtime.closing_posture import note_browser_assembled
 
     note_browser_assembled(browser_on)
-    host_on = boundary.allows_host and desktop_online
+    host_expected = boundary.host_in_registry(location)
+    host_on = host_expected and desktop_online
     # host 已在开场表时，连接是表的推论。文件夹边界下桌面在线时，这行是唯一的客户端信号。
     if not desktop_online:
         desktop_line = "客户端：未连接"
@@ -472,7 +475,7 @@ def build_workspace_context(
                 ("browser", browser_on),
             )
         )
-    if boundary.allows_host:
+    if host_expected:
         gap_flags.append(("host", host_on))
     # local_open 不是工具；云端不能改原件已经在执行行。
     # Omissions drop the rendered line after the probes. They do not skip

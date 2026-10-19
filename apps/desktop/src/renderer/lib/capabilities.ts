@@ -87,3 +87,15 @@ export function hasNativeNotification(): boolean {
     typeof window !== "undefined" && !!window.notificationApi && !isWebRuntime()
   );
 }
+
+/** 本机 Host（窗口附着 / 点击 / 键入 / 本机 shell）——仅 Electron 外壳。 */
+export function hasHostOps(): boolean {
+  return (
+    typeof window !== "undefined" && !!window.hostApi?.runOp && !isWebRuntime()
+  );
+}
+
+/** 本机 MCP 插头——仅 Electron 外壳。网页壳即使以后误加 `mcpApi` 也不算有。 */
+export function hasLocalMcp(): boolean {
+  return typeof window !== "undefined" && !!window.mcpApi && !isWebRuntime();
+}

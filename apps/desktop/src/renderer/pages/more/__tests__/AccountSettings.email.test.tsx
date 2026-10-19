@@ -157,7 +157,7 @@ describe("AccountSettings profile", () => {
     });
   });
 
-  it("shows the 14-day username cooldown hint for a claimed handle", () => {
+  it("hides the 14-day cooldown until a claimed handle is being changed", () => {
     useAuthStore.setState({
       user: {
         id: "u1",
@@ -171,7 +171,36 @@ describe("AccountSettings profile", () => {
     });
 
     render(<AccountSettings />);
-    expect(screen.getByText("用户名 14 天内只能改一次。")).toBeTruthy();
+    expect(screen.queryByText("14 天内只能改一次。")).toBeNull();
     expect(screen.queryByText(/系统分配的找人码/)).toBeNull();
+
+    fireEvent.change(screen.getByLabelText("用户名"), {
+      target: { value: "ab" },
+    });
+    expect(screen.queryByText("14 天内只能改一次。")).toBeNull();
+    expect(screen.getByText("用户名至少 3 个字符")).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText("用户名"), {
+      target: { value: "alice2" },
+    });
+    expect(screen.queryByText("用户名至少 3 个字符")).toBeNull();
+    expect(screen.getByText("14 天内只能改一次。")).toBeTruthy();
+  });
+});
+
+describe("AccountSettings password", () => {
+  it("keeps length and side-effect copy off the idle fields", () => {
+    render(<AccountSettings />);
+    expect(screen.queryByText("至少 8 位")).toBeNull();
+    expect(screen.queryByText("至少 8 位。")).toBeNull();
+    expect(screen.queryByText("更新后，其他设备需要重新登录。")).toBeNull();
+  });
+
+  it("surfaces the length rule as a field error while typing", () => {
+    render(<AccountSettings />);
+    fireEvent.change(screen.getByLabelText("新密码"), {
+      target: { value: "short" },
+    });
+    expect(screen.getByText("至少 8 位")).toBeTruthy();
   });
 });

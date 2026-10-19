@@ -46,6 +46,9 @@ class AdminUserResponse(BaseModel):
     quota_daily_cost_cny: float | None
     quota_search_daily: int | None = None
     quota_search_monthly: int | None = None
+    seat_plan: Literal["starter", "plus", "flagship"] | None = None
+    seat_until: datetime | None = None
+    seat_pending_plan: Literal["starter", "plus", "flagship"] | None = None
     created_at: datetime
     # Client IP at registration (加强可查). NULL for pre-column / seeded rows.
     registration_ip: str | None = None
@@ -450,9 +453,10 @@ class AdminObservabilitySummary(BaseModel):
 class AdminOverview(BaseModel):
     """Landing dashboard (``GET /v1/admin/overview``, admin-only) — platform pulse.
 
-    Today's vitals (active users / turn health / cost), account tallies, the 7-day
-    cost + turn trends, deployment health, and the most recent errors (drillable
-    into 会话复盘). Money is integer nano-CNY; ``CostBreakdown.cny_total`` is yuan.
+    Today's vitals (active users / turn health / cost), account tallies, live
+    online accounts, the 7-day cost + turn trends, deployment health, and the
+    most recent errors (drillable into 会话复盘). Money is integer nano-CNY;
+    ``CostBreakdown.cny_total`` is yuan.
     """
 
     # 今日 pulse: distinct users that took a turn, the turn-health rollup (turns /
@@ -464,6 +468,10 @@ class AdminOverview(BaseModel):
     users_total: int
     users_active: int
     admins: int
+    # Distinct accounts with ≥1 live /v1/realtime subscription on this API
+    # process (ChatHub). Same definition as IM presence; not today's active
+    # users and not a per-group headcount.
+    users_online: int
     # 7-day trends (oldest-first, zero-filled) — cost bars + turn/error bars.
     recent_daily_cost: list[DailyCost]
     recent_daily_turns: list[DailyTurns]
@@ -584,7 +592,6 @@ class AdminUserDetail(BaseModel):
     # Account BYOK default model pointers (names only; null when unset). 多服务商列表:
     # the chat / background default model, plus how many providers are configured.
     default_model: str | None = None
-    background_model: str | None = None
     provider_count: int = 0
     today: UsageWindow
     month: UsageWindow

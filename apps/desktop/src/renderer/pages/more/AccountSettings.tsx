@@ -228,7 +228,7 @@ function ProfileSection() {
         <SettingField
           label="昵称"
           htmlFor="account-profile-display-name"
-          hint="会展示给团队成员。"
+          layout="inline"
           error={nicknameErr}
         >
           <Input
@@ -242,11 +242,12 @@ function ProfileSection() {
         <SettingField
           label="用户名"
           htmlFor="account-profile-username"
+          layout="inline"
           hint={
             user && systemUsername
               ? "这是系统分配的找人码。改成你容易记住的名字即可，随时能再改。"
-              : user && !systemUsername
-                ? "用户名 14 天内只能改一次。"
+              : usernameDirty && !usernameErr
+                ? "14 天内只能改一次。"
                 : undefined
           }
           error={usernameErr}
@@ -262,7 +263,7 @@ function ProfileSection() {
         <SettingField
           label="邮箱"
           htmlFor="account-profile-email"
-          hint="用于找回密码；未验证不影响登录。更改后需重新验证，不会自动发送验证码。"
+          layout="inline"
           action={<Badge tone={status.tone}>{status.label}</Badge>}
         >
           <Input
@@ -432,7 +433,11 @@ function PasswordSection() {
   return (
     <SettingsSection title="修改密码">
       <Card className="space-y-3 p-4">
-        <SettingField label="当前密码" htmlFor="account-password-current">
+        <SettingField
+          label="当前密码"
+          htmlFor="account-password-current"
+          layout="inline"
+        >
           <Input
             id="account-password-current"
             type="password"
@@ -442,9 +447,10 @@ function PasswordSection() {
           />
         </SettingField>
         <SettingField
-          label="新密码（至少 8 位）"
+          label="新密码"
           htmlFor="account-password-new"
-          error={tooShort ? "新密码至少需要 8 个字符" : null}
+          layout="inline"
+          error={tooShort ? "至少 8 位" : null}
         >
           <Input
             id="account-password-new"
@@ -457,7 +463,7 @@ function PasswordSection() {
         <SettingField
           label="确认新密码"
           htmlFor="account-password-confirm"
-          hint="更新后，其他设备需要重新登录。"
+          layout="inline"
           error={mismatch ? "两次输入的新密码不一致" : null}
         >
           <Input

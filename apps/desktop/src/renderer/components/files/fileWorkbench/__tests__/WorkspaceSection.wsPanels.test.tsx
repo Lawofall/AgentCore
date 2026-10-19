@@ -3,8 +3,8 @@
  * 「我的文件」里云端文件夹的能力入口——版本 / 软删区。
  *
  * 这件此前只有对话右坞才有，从文件页进来的用户得绕回某个对话才够得着。这里钉的是
- * 入口的**门控**（后端对本机工作区一律 409，不能让用户点进一个必然失败的
- * 动作）与**出口**（版本 / 软删区走开标签页那条缝）。导出 ZIP 已从人侧卸下。
+ * 入口的**门控**（云端 REST 对本机一律 409，本机「版本」走 sidecar；软删区仍只挂云端）
+ * 与**出口**（版本 / 软删区走开标签页那条缝）。导出 ZIP 已从人侧卸下。
  */
 
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -155,17 +155,38 @@ describe("云端文件夹的版本 / 软删区入口", () => {
     expect(screen.queryByText("在此新建文件夹")).toBeNull();
   });
 
-  it("本机文件夹不挂这三项：它的版本与回收站是另一条轨", async () => {
+  it("本机文件夹挂版本、不挂软删区：回收站是系统轨", async () => {
+    const onOpenFile = vi.fn();
     renderSection({
       ws: ws({ wsId: "folder:f2", location: "local", rootId: "root-1" }),
       source: source({ snapshots: false }),
+      onOpenFile,
     });
 
     fireEvent.contextMenu(screen.getByText("季度报告"));
-    await screen.findByText("新建文件");
-    expect(screen.queryByText("版本…")).toBeNull();
+    fireEvent.click(await screen.findByText("版本…"));
+    expect(onOpenFile).toHaveBeenCalledWith(
+      "__ws_versions__",
+      "版本 · 季度报告",
+    );
     expect(screen.queryByText("软删区…")).toBeNull();
     expect(screen.queryByText("导出 ZIP")).toBeNull();
+  });
+
+  it("本机根还没绑上时不挂版本", async () => {
+    renderSection({
+      ws: ws({
+        wsId: "conv:c1",
+        location: "local",
+        rootId: null,
+      }),
+      source: null,
+    });
+
+    fireEvent.contextMenu(screen.getByText("季度报告"));
+    await screen.findByText("打开对话");
+    expect(screen.queryByText("版本…")).toBeNull();
+    expect(screen.queryByText("软删区…")).toBeNull();
   });
 
   it("只读协作桌不挂：viewer 源无 snapshots", async () => {

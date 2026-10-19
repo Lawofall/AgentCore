@@ -12,11 +12,16 @@ export function SupplyTabs() {
   return (
     <SegmentTabs
       items={[
-        { to: "/quota", label: "额度", active: pathname.startsWith("/quota") },
+        { to: "/quota", label: "额度", active: pathname === "/quota" },
         {
           to: "/analytics/cost",
           label: "成本",
           active: pathname.startsWith("/analytics"),
+        },
+        {
+          to: "/redemption-codes",
+          label: "兑换码",
+          active: pathname.startsWith("/redemption-codes"),
         },
       ]}
     />

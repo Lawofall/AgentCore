@@ -11,10 +11,11 @@ SKU ``costMultiplier`` is **not** in the unit rates. Update USD numbers and
 from __future__ import annotations
 
 from collections.abc import Mapping
-from datetime import UTC, date, datetime
+from datetime import date, datetime
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
+from agentcore.llm.deepseek_official_peak import is_deepseek_official_peak
 from agentcore.llm.profiles import DEEPSEEK_V4_FLASH, OPENCODE_GO_V41_FLASH
 from agentcore.llm.provider.protocol import TokenUsage
 
@@ -40,18 +41,10 @@ _PEAK: dict[str, Decimal] = {
 # tokens × (USD / 1M) → nano-USD. Same scale as billing nano (1 unit = 1e9).
 _PER_MILLION_TO_NANO = Decimal(1000)
 
-# Peak = UTC [01:00, 04:00) ∪ [06:00, 10:00) Monday–Friday. Half-open so 04:00
-# and 10:00 are Off-Peak. Weekends are Off-Peak (official DeepSeek + Go).
-# Chinese public holidays are not encoded.
-_PEAK_HOURS = frozenset({1, 2, 3, 6, 7, 8, 9})
-
 
 def is_opencode_go_peak(ts: datetime) -> bool:
-    """Whether ``ts`` falls in a DeepSeek / OpenCode Go Peak hour (UTC)."""
-    utc = _as_utc(ts)
-    if utc.weekday() >= 5:
-        return False
-    return utc.hour in _PEAK_HOURS
+    """Whether ``ts`` falls in DeepSeek official Flash peak hours (UTC)."""
+    return is_deepseek_official_peak(ts)
 
 
 def go_public_card(ts: datetime) -> dict[str, Decimal]:
@@ -96,11 +89,7 @@ def estimate_go_public_usd_nano(
 
     Peak / Off-Peak is chosen from **this call's** ``at``, never a window average.
 
-    Two uncertainties the admin card must keep visible (not encoded in the
-    number): Go may apply an unpublished ``costMultiplier`` before the window;
-    and we have not packet-verified that the gateway forwards DeepSeek cache-hit
-    fields. If it does not, Go prices those tokens as Input while we price
-    recorded hits as Cached Read — this estimate undershoots.
+    Admin window card is a public-list estimate, not an upstream invoice.
     """
     if (model or "").strip() not in PRICED_MODEL_IDS:
         return 0
@@ -142,9 +131,3 @@ def _nano(tokens: int, price_per_million: Decimal) -> int:
         return 0
     value = Decimal(tokens) * price_per_million * _PER_MILLION_TO_NANO
     return int(value.quantize(Decimal(1), rounding=ROUND_HALF_UP))
-
-
-def _as_utc(ts: datetime) -> datetime:
-    if ts.tzinfo is None:
-        return ts.replace(tzinfo=UTC)
-    return ts.astimezone(UTC)

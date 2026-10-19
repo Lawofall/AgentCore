@@ -5,9 +5,9 @@ import {
 } from "@/components/settings";
 import { Card, PageHeader } from "@/components/ui";
 import {
-  COMMAND_CATEGORY_ORDER,
   type PaletteCommand,
   buildPaletteCommands,
+  paletteCategoryOrder,
 } from "@/lib/paletteCommands";
 import { GLOBAL_SHORTCUTS, shortcutChords } from "@/lib/shortcuts";
 import { useSidebarStore } from "@/stores/sidebar";
@@ -67,7 +67,7 @@ export function ShortcutsSettings() {
           titleSize="base"
           contentClassName="space-y-4"
         >
-          {COMMAND_CATEGORY_ORDER.map((category) => {
+          {paletteCategoryOrder().map((category) => {
             const items = commands.filter((c) => c.category === category);
             if (items.length === 0) return null;
             return (

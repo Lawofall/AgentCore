@@ -4,7 +4,7 @@ import { TurnWarningBanner } from "@/components/chat/TurnWarningBanner";
 import { Badge } from "@/components/ui/badge";
 import { useChatPaneId, useChatPaneSliceKey } from "@/lib/chatPane";
 import { type SpendRun, resolveReplyInvoice } from "@/lib/cost";
-import { formatDisplayCost } from "@/lib/format";
+import { formatCostBill } from "@/lib/format";
 import { completedAtIso } from "@/lib/runningElapsed";
 import { precedingUserMessageId } from "@/lib/supportDiagnostics";
 import {
@@ -203,14 +203,11 @@ export function AssistantMessage({ message }: MessageBubbleProps) {
     soloUsage: message.accruedUsage,
     bubbleLive,
   });
-  const costText =
-    invoice.money != null
-      ? `${formatDisplayCost(
-          invoice.money.nano,
-          invoice.money.estimated,
-          invoice.money.currency,
-        )}${invoice.provisional ? " 至今" : ""}`
-      : null;
+  const costText = formatCostBill(
+    invoice.billed,
+    invoice.extra,
+    invoice.provisional,
+  );
   const showDuration =
     !bubbleLive && message.durationMs != null && message.durationMs > 0;
   const showCostMeta = costText != null || showDuration;

@@ -32,6 +32,14 @@ class CreateLlmProviderRequest(BaseModel):
         description="OpenAI-compatible endpoint including version prefix",
         examples=[_OPENAPI_BASE_URL_EXAMPLE],
     )
+    vendor_id: str = Field(
+        ...,
+        max_length=40,
+        description=(
+            "Vendor identity for protocol dispatch (openai / opencode_go / custom …). "
+            "Independent of base_url."
+        ),
+    )
 
 
 class UpdateLlmProviderRequest(BaseModel):
@@ -42,6 +50,11 @@ class UpdateLlmProviderRequest(BaseModel):
     label: str | None = Field(default=None, max_length=100)
     api_key: str | None = Field(default=None, max_length=400)
     base_url: str | None = Field(default=None, max_length=500)
+    vendor_id: str | None = Field(
+        default=None,
+        max_length=40,
+        description="Vendor identity for protocol dispatch. Independent of base_url.",
+    )
 
 
 class LlmProviderView(BaseModel):
@@ -50,6 +63,9 @@ class LlmProviderView(BaseModel):
     id: str
     label: str
     base_url: str
+    vendor_id: str = Field(
+        description="Vendor identity for protocol dispatch (openai / opencode_go / custom …)"
+    )
     status: str = Field(description="Connectivity result: unchecked | active | error")
     masked_key: str | None = None
     supports_tools: bool | None = None

@@ -647,7 +647,7 @@ export interface DescribedError {
   action: ErrorAction | null;
   retriable: boolean;
   code?: string;
-  /** 只放用户自己能行动的事实。运营方中转账号的诊断（Sub2API）不进这里，也不进气泡
+  /** 只放用户自己能行动的事实。运营方上游账号的诊断不进这里，也不进气泡
    * ——平台模式下用户没有自己的 key，那说的是别人的账号。后端只写日志。 */
   context?: {
     upstream_status?: number;
@@ -707,10 +707,10 @@ export function errorActionForCode(
   ) {
     return { label: "去服务商", href: "/more/providers" };
   }
-  // 平台额度耗尽 (QUOTA_EXCEEDED, 成本配额与计费 §〇·六 F6): 主文案是等重置 / 联系管理员，
-  // 这里补一个「接入自己的 Key」次级出口 —— byok 回合不查配额, 是真正的绕过路径。
+  // 平台额度耗尽 (QUOTA_EXCEEDED, 成本配额与计费 §〇·六 F6): 主文案是等重置；
+  // 低于旗舰才说开通更高档；按钮仍去订阅。BYOK 仍是信封里的次级出口（不查配额）。
   if (code === "QUOTA_EXCEEDED") {
-    return { label: "接入自己的 Key", href: "/more/providers" };
+    return { label: "去订阅", href: "/more/subscription" };
   }
   // Always-entry write gate (常驻用户规则配额闸在写侧): create / promote past the cap —
   // send the user to the file rail to shrink or demote always entries.

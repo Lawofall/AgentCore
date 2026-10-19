@@ -1,11 +1,13 @@
 """Delegate tool schema and constants.
 
 Schema layer (工具面瘦身): 判得出就判；判不出只取一次廉价信号，这一次只用来判。
-何时用写在本 description（根 / 嵌套共用 ``DELEGATE_WHEN``，窗绑定分叉）；
+何时用写在本 description（根 / 嵌套共用 when-to-use 核，窗绑定分叉）；
 编制 HOW 写在本按钮（根 / 嵌套共用填参与一块验收；嵌套另加拆层）。
 依赖何时填在编制段末句（不点字段名）；取值在 ``depends_on`` 参数。
 task 只写工人拿不到的增量。不进常驻核、不另开按需 skill。
 信号值到派/不派的对照表不进按钮。
+两套 when-to-use 并存：默认注意力尺 ``DELEGATE_WHEN``；对话 ``delegate_mode``
+开则 ``DELEGATE_WHEN_PREFER``（优先派）。同一回合只注入一套。
 """
 
 from __future__ import annotations
@@ -32,15 +34,14 @@ TASK_ARTIFACTS_SCHEMA: dict[str, object] = {
 # Shared when-to-use（根 / 嵌套；场面表不进按钮）。
 # 判得出就判；判不出只取一次廉价信号，这一次只用来判。入口已在，探路结束。
 # 窗是注意力的计价参数，不是单独一问。根靠「这扇窗」；嵌套分叉在 NESTED 描述。
-# 墙钟只计能并行且结论各自成立的切片；拆不开仍看注意力。
-# 自己做限于答复就是结果、正文已在窗里、点名少量路径读完即答。装得下 ≠ 顾得住。
+# 默认尺：自己做在前，要派比成本；墙钟只计能并行且结论各自成立的切片。
 # 人数在 DELEGATE_STAFF_HOW，且只在派了之后。不写成问卷。
 # 根按钮首句只钉交回后由你收尾。返回时机在启动回执，不进按钮；协调期开口纪律不进按钮。
 DELEGATE_WHEN = (
-    "判得出就判。判不出只取一次廉价信号（列目录、条目数与文件名、并列对象数、回执里的字数行数），这一次只用来判，不接着收结论。入口已在这扇窗里，探路结束。"
-    "委派换墙钟或注意力。墙钟只来自能并行、且每件结论不靠别的件补齐的切片；拆不开，墙钟不计，仍看注意力。"
-    "要连着取证，或把还不在这扇窗里的工作区正文读进来、写出去，做完会留下、之后每轮都还在：写 task + 读回执小于这份注意力，要派。"
-    "自己做限于答复本身就是结果，或那一处正文已经在这扇窗里，或点名的少量路径读完即答。装得下 ≠ 顾得住。"
+    "委派规则：自己做：答复即结果，或正文已在这扇窗，或点名少量路径读完即答。"
+    "要派：连续取证，或读写还不在这扇窗的工作区正文且做完会留下——写 task + 读回执小于这份注意力才派。"
+    "探路判断：判得出就判；判不出只取一次廉价信号（列目录、条目数、文件名、回执字数行数），只用来判，不接着收结论。入口已在这扇窗里，探路结束。"
+    "墙钟：只在能并行且每件结论不靠别的件补齐时计入；拆不开不计墙钟，仍看注意力。装得下 ≠ 顾得住。"
 )
 
 # 写 tasks 时必见。原 consult(staffing)/lead_subteam 上收进本按钮。
@@ -49,10 +50,12 @@ DELEGATE_WHEN = (
 # 末句只写何时填依赖（不点字段名）。取值在 depends_on 参数。
 # 连线的条件：下游任务现在就能写死，且只吃落盘或简报。要看正文才知道下一步的，不连。
 DELEGATE_STAFF_HOW = (
-    "派了之后：拆开仍成立的对象各是一件，否则这一批只留一名队员；同一话题的侧面不是，也不按人拆。"
-    "只读取证在结论拆开仍成立时可以并行；改同一份成品或同一套契约 ≠ 拆开仍成立。"
-    "多模块、多文件夹且结论仍独立的仍各是一件。"
-    "下游任务现在就能写死、且只吃上游落盘或简报时，才填对上游的依赖；要看上游正文才知道下一步的，不要连，等这一批回来再派。能同时做的不要串成队列。"
+    "拆分规则：可拆：结论独立；多模块、多文件夹且独立；只读取证且结论独立。"
+    "不拆：改同一成品/契约；同一话题侧面。拆不开则这一批只留一名队员。"
+    "原则：拆对象不拆人，拆任务不拆话题。"
+    "依赖规则：填依赖：下游能写死，且只吃上游落盘/简报。"
+    "不填依赖：要看上游正文才知道下一步，等这批回来再派。"
+    "原则：能并行就并行，不串队列。"
 )
 # 开局已注入原话 / 前置结果 / 并行队友任务。再抄增量是 0。
 # task 只写工人拿不到的三样。不钉「已确认约束：」行格式（引擎不解析）。
@@ -78,6 +81,42 @@ NESTED_DELEGATE_DESCRIPTION = (
     f"{DELEGATE_STAFF_HOW}"
     f"{NESTED_STAFF_HOW}"
 )
+
+# 输入区「统筹」开：这一场协调。必须派在前，自己做写成仅当。根首句带「优先」；嵌套不加，靠「卡上已是一件则留下」。
+# 相对默认尺：需要干活工具就派（次数少也派）；自己做仅限不必动干活工具，或正文已在窗的短合成。无墙钟、不比成本。不剥工具。
+DELEGATE_WHEN_PREFER = (
+    "这一场你协调：拆任务、问挡路的、收人。调查、读窗外正文、改文件、跑命令、检索收证是队员的活。"
+    "委派规则：必须派：完成它需要干活工具（读/写/改工作区、连续取证、跑命令、检索收证）——次数少也派。拆不开也派一名队员。"
+    "自己做仅当：答复本身就是结果、不必动干活工具；或正文已在这扇窗，读完即可短合成。"
+    "协调工具（delegate / replan / ask_user / consult 手册）≠ 干活工具（read / write / edit / run / grep / glob / web / browser / host）。"
+    "探路判断：判得出就判。判不出只取一次廉价信号（列目录、条目数、文件名、回执字数行数），只用来判：不读正文、不收结论。已判明要动手 → 停，派。"
+)
+DELEGATE_DESCRIPTION_PREFER = (
+    "优先把任务交给队员；他们交回之后，由你对用户收尾。"
+    f"{DELEGATE_WHEN_PREFER}"
+    f"{DELEGATE_STAFF_HOW}"
+)
+NESTED_DELEGATE_DESCRIPTION_PREFER = (
+    "把当前任务拆给由你指挥的子团队。"
+    f"{DELEGATE_WHEN_PREFER}"
+    "你的窗跟这张任务卡走，卡上已是一件则留下。"
+    f"{DELEGATE_STAFF_HOW}"
+    f"{NESTED_STAFF_HOW}"
+)
+
+
+def root_delegate_description(*, prefer: bool) -> str:
+    return DELEGATE_DESCRIPTION_PREFER if prefer else DELEGATE_DESCRIPTION
+
+
+def nested_delegate_description(*, prefer: bool) -> str:
+    return NESTED_DELEGATE_DESCRIPTION_PREFER if prefer else NESTED_DELEGATE_DESCRIPTION
+
+
+def catalog_prefer_description(tool_name: str) -> str:
+    """Toolbox inspector: root-CEO prefer variant. Nested is runtime-only."""
+    return DELEGATE_DESCRIPTION_PREFER if tool_name == "delegate" else ""
+
 
 DELEGATE_PARAMETERS = {
     "type": "object",

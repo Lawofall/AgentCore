@@ -69,6 +69,38 @@ def _send_sync(
             client.close()
 
 
+async def send_smtp_text(*, to: str, subject: str, body: str, purpose: str) -> None:
+    host = settings.smtp_host.strip()
+    from_addr = settings.smtp_from_address.strip()
+    tls_mode = settings.smtp_tls_mode
+    if tls_mode not in _TLS_MODES:
+        raise EmailSendError("smtp tls mode is invalid")
+    try:
+        from_header = _from_header(from_addr, settings.smtp_from_name)
+        await asyncio.to_thread(
+            _send_sync,
+            host=host,
+            port=settings.smtp_port,
+            username=settings.smtp_username.strip(),
+            password=settings.smtp_password,
+            tls_mode=tls_mode,
+            from_header=from_header,
+            to=to,
+            subject=subject,
+            body=body,
+        )
+    except EmailSendError:
+        raise
+    except (smtplib.SMTPException, OSError, TimeoutError) as exc:
+        logger.warning(
+            "email.send_failed",
+            purpose=purpose,
+            error=type(exc).__name__,
+        )
+        raise EmailSendError("smtp send failed") from exc
+    logger.info("email.sent", purpose=purpose)
+
+
 class SmtpEmailSender:
     """Hand off a verification code via configured SMTP."""
 
@@ -80,36 +112,8 @@ class SmtpEmailSender:
         code: str,
         ttl_seconds: int,
     ) -> None:
-        host = settings.smtp_host.strip()
-        from_addr = settings.smtp_from_address.strip()
-        tls_mode = settings.smtp_tls_mode
-        if tls_mode not in _TLS_MODES:
-            raise EmailSendError("smtp tls mode is invalid")
         subject = verification_subject(purpose)
         body = format_verification_body(
             purpose=purpose, code=code, ttl_seconds=ttl_seconds
         )
-        try:
-            from_header = _from_header(from_addr, settings.smtp_from_name)
-            await asyncio.to_thread(
-                _send_sync,
-                host=host,
-                port=settings.smtp_port,
-                username=settings.smtp_username.strip(),
-                password=settings.smtp_password,
-                tls_mode=tls_mode,
-                from_header=from_header,
-                to=to,
-                subject=subject,
-                body=body,
-            )
-        except EmailSendError:
-            raise
-        except (smtplib.SMTPException, OSError, TimeoutError) as exc:
-            logger.warning(
-                "email.send_failed",
-                purpose=purpose,
-                error=type(exc).__name__,
-            )
-            raise EmailSendError("smtp send failed") from exc
-        logger.info("email.sent", purpose=purpose)
+        await send_smtp_text(to=to, subject=subject, body=body, purpose=purpose)

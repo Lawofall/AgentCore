@@ -7,7 +7,7 @@
     当场作废且事后追不回。自赋值
     ``updated_at=Conversation.updated_at`` 钉住位次——这是编译期性质，
     所以直接断言编译出来的 SQL。
-  * **只给「删除时尚未归档」的行打标**——legacy ``Conversation.archived`` 与文件夹
+  * **只给「删除时尚未归档」的行打标**——已打 ``archived_by_folder_delete`` 与文件夹
     所有者 ``conversation_preferences.archived`` 都算已归档；无脑全解档会把用户
     自己归档的帖拽回侧栏。
   * **回收站只列用户删的**——``reclaim_orphan_auto_desk_folder`` 调同一个
@@ -225,7 +225,7 @@ async def test_soft_delete_marks_only_unarchived_visible_live_rows():
     set_clause, where_clause = sql.split("WHERE", 1)
     assert "archived_by_folder_delete=true" in set_clause
     # 用户自己归档的对话不打标 ⇒ 恢复时不会被拽回侧栏。
-    assert "conversations.archived IS false" in where_clause
+    assert "conversations.archived_by_folder_delete IS false" in where_clause
     assert "conversation_preferences.archived IS true" in where_clause
     assert f"conversation_preferences.user_id = '{USER_ID}'" in where_clause
     assert "conversations.id NOT IN" in where_clause
@@ -276,21 +276,6 @@ async def test_soft_delete_missing_folder_writes_nothing():
     assert not await FolderRepository(session).soft_delete(FOLDER_ID, user_id=USER_ID)
     assert not [s for s in session.statements if isinstance(s, Update)]
     assert session.commits == 0
-
-
-async def test_soft_delete_revokes_doc_shares_for_subtree():
-    """公开 /shared 不得活过回收站；本方法只撤链，恢复路径不解撤。"""
-    session = _soft_delete_session(_fake_folder())
-
-    await FolderRepository(session).soft_delete(FOLDER_ID, user_id=USER_ID)
-
-    shares = _updates(session, "doc_shares")
-    assert len(shares) == 1, [_sql(s) for s in session.statements]
-    sql = shares[0]
-    set_clause, where_clause = sql.split("WHERE", 1)
-    assert "revoked_at=" in set_clause
-    assert "doc_shares.revoked_at IS NULL" in where_clause
-    assert f"docs.folder_id IN ('{FOLDER_ID}'" in where_clause
 
 
 # --- 自动桌回收不进回收站 ---------------------------------------------------------
@@ -389,7 +374,6 @@ async def test_restore_unarchives_only_marked_conversations():
     )
 
     set_clause, where_clause = _member_archive_sql(session).split("WHERE", 1)
-    assert "archived=false" in set_clause
     assert "archived_by_folder_delete=false" in set_clause
     # 打过标的那批，仅此而已——用户自己归档的对话没有标，留在归档里。
     assert "conversations.archived_by_folder_delete IS true" in where_clause

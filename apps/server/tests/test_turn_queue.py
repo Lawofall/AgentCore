@@ -480,7 +480,6 @@ async def test_edit_queued_item_updates_memory_only_after_row_write(monkeypatch)
         user_message_id="11111111-1111-4111-8111-111111111111",
         llm_credentials=creds,
         interjection_id="ij-1",
-        table_selection=["row-1"],
         attachments=[{"name": "a.txt", "path": "a.txt", "text": "a"}],
         agent_mentions=[{"agent_id": "ag", "role": "审"}],
     )
@@ -511,7 +510,6 @@ async def test_edit_queued_item_updates_memory_only_after_row_write(monkeypatch)
         assert item.agent_mentions == []
         assert item.llm_credentials is creds
         assert item.interjection_id == "ij-1"
-        assert item.table_selection == ["row-1"]
         assert item.user_message_id == "11111111-1111-4111-8111-111111111111"
         assert [row.queue_id for row in turn_queue.list_pending(cid)] == [
             item.queue_id,

@@ -1,8 +1,9 @@
-"""Unit tests for BYOK helpers: key masking + the DeepSeek connectivity probe.
+"""Unit tests for the DeepSeek connectivity probe.
 
 Pure / mocked — no DB and no network (the probe's HTTP client is stubbed), so
 these run in the unit lane. End-to-end resolution, the key routes, and the
 billing preflight are covered by tests/integration/test_llm_key_api.py.
+Key fingerprints live in tests/test_mask.py.
 """
 
 import httpx
@@ -15,21 +16,6 @@ from agentcore.core.errors import (
 )
 from agentcore.llm.profiles import DEEPSEEK_V4_FLASH
 from agentcore.llm.provider.openai_compatible import OpenAICompatibleProvider
-from agentcore.llm.provider_service import _mask_key
-
-# --- key masking ---
-
-
-def test_mask_key_shows_last_four():
-    assert _mask_key("sk-abcdef1234") == "••••1234"
-
-
-def test_mask_key_hides_short_key_entirely():
-    assert _mask_key("abc") == "••••"
-    assert _mask_key("abcd") == "••••"
-
-
-# --- connectivity probe (OpenAICompatibleProvider.probe) ---
 
 
 class _Resp:

@@ -1,8 +1,8 @@
-"""Worker wind-down / delivery-idle / timeout-grace execute-layer deny.
+"""Worker wind-down / timeout-grace execute-layer deny.
 
 Split from ``loop.py`` — pure move. The ReAct round sequencer stays on the loop;
-this object owns the worker cutoff surface (enter, arm, breach, delivery-idle
-narrow). Opening ``tools[]`` stays frozen; wind-down denies at execute.
+this object owns the worker cutoff surface (enter, arm, breach). Opening
+``tools[]`` stays frozen; wind-down denies at execute.
 """
 
 from __future__ import annotations
@@ -33,7 +33,7 @@ class WindDownBreachResult:
 
 
 class LoopWindDown:
-    """Worker-only cutoff surface: token/timeout/retrieval wind-down + delivery-idle.
+    """Worker-only cutoff surface: token/timeout/retrieval wind-down.
 
     Constructed once per ``react_loop`` after the :class:`LoopController` exists.
     Opening ``tools[]`` stays frozen; ``wind_down_whitelist`` is execute-deny.
@@ -68,9 +68,6 @@ class LoopWindDown:
         self.wind_down_reason = ""
         self.wind_down_whitelist: frozenset[str] | None = None
         self.wind_down_breach_count = 0
-        # delivery_idle 工具收窄（factory 对交文件已关；显式构造仍可能走此路径）。
-        # 与 token/timeout wind_down 解耦。
-        self.delivery_idle_narrow_active = False
 
     def effective_allowed(self) -> list[str] | None:
         return self.live_allowed
@@ -111,23 +108,6 @@ class LoopWindDown:
         from agentcore.runtime.runs.run_phase_emit import emit_run_phase
 
         emit_run_phase(self.sink, self.run_id, self.agent_id, "winding_down")
-
-    def apply_delivery_idle_narrow(self) -> None:
-        """Narrow to write/诊断/handoff/必要读. Inject no longer latches this path."""
-        if self.delivery_idle_narrow_active or self.role != "worker":
-            return
-        # Defense: report posts must never strip search even if a pending latch leaked.
-        if self.controller is not None and self.controller.delivery_idle_report:
-            return
-        self.delivery_idle_narrow_active = True
-        if self.wind_down_active:
-            return
-        logger.info(
-            "engine.delivery_idle_narrow_apply",
-            run_id=self.run_id,
-            role=self.role,
-            allowed_tools=self.live_allowed,
-        )
 
     def consume_timeout_wind_down_pending(self) -> bool:
         """Consume timeout wind-down from hard-timeout guard and/or coordination session.

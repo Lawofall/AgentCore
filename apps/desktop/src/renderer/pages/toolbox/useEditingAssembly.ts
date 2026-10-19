@@ -11,11 +11,11 @@ import { setConversationModelProfile } from "@/services/conversations";
 import {
   type LlmModelProfileView,
   createLlmModelProfile,
+  rememberAssemblySelection,
   resolveDefaultProfile,
-  setDefaultLlmModelProfile,
   updateLlmModelProfile,
 } from "@/services/llmModelProfiles";
-import { setLastUsedAssemblyId } from "@/services/models";
+import { getLastUsedAssemblyId } from "@/services/models";
 import { useConversationStore } from "@/stores/conversation";
 import type { Conversation } from "@/stores/conversation";
 import { useQueryClient } from "@tanstack/react-query";
@@ -24,8 +24,8 @@ import { useState } from "react";
 /**
  * The assembly this shelf edits.
  * A live conversation points at its assembly. With no conversation, the page
- * is the starred one — picking another stars it, so tool and envelope writes
- * stay on the same record 总 names.
+ * is last-used (then the silent account fallback), so tool and envelope writes
+ * stay on the same record the next new chat will pin.
  */
 export function useEditingAssembly() {
   const queryClient = useQueryClient();
@@ -38,11 +38,17 @@ export function useEditingAssembly() {
     ? conversations.find((row) => row.id === conversationId)
     : undefined;
   const rows = profilesQuery.data?.data ?? [];
-  const starred = resolveDefaultProfile(profilesQuery.data);
+  const fallback = resolveDefaultProfile(profilesQuery.data);
+  const lastUsedId = getLastUsedAssemblyId();
+  const lastUsed = lastUsedId
+    ? rows.find((row) => row.id === lastUsedId)
+    : undefined;
   const pinned = conversation?.assemblyId
     ? rows.find((row) => row.id === conversation.assemblyId)
     : undefined;
-  const profile = conversationId ? (pinned ?? starred) : starred;
+  const profile = conversationId
+    ? (pinned ?? lastUsed ?? fallback)
+    : (lastUsed ?? fallback);
 
   const refresh = () =>
     queryClient.invalidateQueries({ queryKey: llmModelProfileKeys.list });
@@ -66,32 +72,19 @@ export function useEditingAssembly() {
         patchConversationCache(conversationId, {
           assemblyId: saved.assemblyId ?? null,
         });
-        await refresh();
-        return;
+      } else {
+        useComposerProfileDraftStore.getState().setAssemblyId(id);
       }
-      await setDefaultLlmModelProfile(id);
-      setLastUsedAssemblyId(id);
-      useComposerProfileDraftStore.getState().setAssemblyId(id);
+      await rememberAssemblySelection(id);
       await refresh();
-    }, "装配没换成");
+    }, "能力没换成");
 
-  const star = (id?: string) =>
-    run(async () => {
-      const target = id ?? profile?.id;
-      if (!target) return;
-      await setDefaultLlmModelProfile(target);
-      if (!conversationId) {
-        setLastUsedAssemblyId(target);
-        useComposerProfileDraftStore.getState().setAssemblyId(target);
-      }
-      await refresh();
-    }, "星标没设上");
-
-  const createFromCurrent = () =>
+  const create = () =>
     run(async () => {
       const created = await createLlmModelProfile({
         name: "未命名",
-        set_as_default: !conversationId,
+        set_as_default: true,
+        origin: "full",
       });
       if (conversationId) {
         const saved = await setConversationModelProfile(
@@ -102,9 +95,9 @@ export function useEditingAssembly() {
           assemblyId: saved.assemblyId ?? null,
         });
       } else {
-        setLastUsedAssemblyId(created.id);
         useComposerProfileDraftStore.getState().setAssemblyId(created.id);
       }
+      await rememberAssemblySelection(created.id);
       await refresh();
     }, "新建失败");
 
@@ -119,10 +112,6 @@ export function useEditingAssembly() {
         kind: profile.kind,
         currentName: profile.name,
         nextName: trimmed,
-        materialize: async (id) => {
-          const row = await setDefaultLlmModelProfile(id);
-          return row.id;
-        },
         updateName: async (id, next) => {
           await updateLlmModelProfile(id, { name: next });
         },
@@ -157,8 +146,7 @@ export function useEditingAssembly() {
     pending,
     loading: profilesQuery.isLoading,
     select,
-    star,
-    createFromCurrent,
+    create,
     rename,
   };
 }

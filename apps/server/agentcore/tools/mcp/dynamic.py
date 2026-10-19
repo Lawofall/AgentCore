@@ -61,10 +61,12 @@ class McpDynamicTool:
         mcp_tool_name: str,
         description: str,
         input_schema: dict[str, Any] | None,
+        transport: str = "stdio",
     ) -> None:
         self._server_id = server_id
         self._server_name = server_name
         self._mcp_tool_name = mcp_tool_name
+        self._transport = transport if transport in {"stdio", "http"} else "stdio"
         desc = (description or "").strip() or f"MCP 工具 {mcp_tool_name}"
         prefix = f"[MCP · {server_name}] "
         self._schema = ToolSchema(
@@ -91,6 +93,42 @@ class McpDynamicTool:
         return self._server_name
 
     async def execute(self, arguments: dict[str, Any], context: ToolContext) -> ToolResult:
+        if self._transport == "http":
+            from agentcore.mcp.http import McpHttpError
+            from agentcore.mcp.remote import execute_remote_mcp_tool
+
+            try:
+                value = await execute_remote_mcp_tool(
+                    context.user_id,
+                    server_id=self._server_id,
+                    server_name=self._server_name,
+                    tool_name=self._mcp_tool_name,
+                    arguments=arguments if isinstance(arguments, dict) else {},
+                    root_label=context.backend.root_label,
+                )
+            except McpHttpError as e:
+                return ToolResult(
+                    tool_call_id="",
+                    success=False,
+                    output="",
+                    error=str(e),
+                )
+            is_error = bool(value.get("isError")) if isinstance(value, dict) else False
+            content = value.get("content") if isinstance(value, dict) else value
+            if isinstance(content, str):
+                body = content
+            else:
+                payload = content if content is not None else value
+                body = json.dumps(payload, ensure_ascii=False, indent=2)
+            if is_error:
+                return ToolResult(
+                    tool_call_id="",
+                    success=False,
+                    output=body,
+                    error=f"MCP 工具 {self._mcp_tool_name} 返回错误",
+                )
+            return ToolResult(tool_call_id="", success=True, output=body)
+
         channel = context.desktop_channel
         if channel is None:
             return ToolResult(

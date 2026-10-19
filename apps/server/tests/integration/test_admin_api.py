@@ -20,6 +20,7 @@ from agentcore.db.repositories import (
     UserRepository,
 )
 from agentcore.llm.pricing import NANO_PER_CNY
+from agentcore.messaging.hub import default_chat_hub
 from tests.integration.conftest import (
     client_platform_headers,
     login_admin,
@@ -120,10 +121,9 @@ async def _seed_llm_key(
     *,
     user_id: str,
     default_model: str = "deepseek-v4-pro",
-    background_model: str | None = "deepseek-v4-flash",
 ) -> None:
     """Seed a BYOK provider + default 模型组合 (ciphertext stub — admin detail
-    only reads main/background model names from the account default profile)."""
+    only reads the main model name from the account default profile)."""
     from agentcore.db.repositories import (
         LlmModelProfileRepository,
         UserLlmProviderRepository,
@@ -143,9 +143,6 @@ async def _seed_llm_key(
             main_origin="byok",
             main_provider_id=provider.id,
             main_model=default_model,
-            background_origin="byok" if background_model else None,
-            background_provider_id=provider.id if background_model else None,
-            background_model=background_model,
         )
         await UserRepository(session).set_default_model_profile(user_id, assembly.id)
 
@@ -1968,7 +1965,6 @@ async def test_admin_user_detail_composes_account_view(client, make_admin, sessi
     assert b["billing_mode"] == settings.billing_mode
     # No BYOK → model names empty; conversation fixture seeds one cost_calls row.
     assert b["default_model"] is None
-    assert b["background_model"] is None
     assert b["recent_by_model"] == [
         {
             "model": "deepseek-v4-pro",
@@ -2025,7 +2021,6 @@ async def test_admin_user_detail_exposes_models_and_by_model_usage(
         session_factory,
         user_id=alice,
         default_model="deepseek-v4-pro",
-        background_model="deepseek-v4-flash",
     )
     await _seed_calls(
         session_factory,
@@ -2052,7 +2047,6 @@ async def test_admin_user_detail_exposes_models_and_by_model_usage(
     b = r.json()
 
     assert b["default_model"] == "deepseek-v4-pro"
-    assert b["background_model"] == "deepseek-v4-flash"
     # Response must never leak any key ciphertext / plaintext fields.
     assert "api_key" not in b
     assert "api_key_enc" not in b
@@ -2101,12 +2095,20 @@ async def test_admin_overview_aggregates_today(client, make_admin, session_facto
     await _seed_spend(session_factory, user_id=alice, total=5000)
     await _seed_spend(session_factory, user_id=bob, total=1000)
 
-    r = await client.get("/v1/admin/overview")
+    hub = default_chat_hub()
+    before_online = hub.online_user_count()
+    probe = hub.subscribe("overview-online-probe", device_id="overview-probe")
+    try:
+        r = await client.get("/v1/admin/overview")
+    finally:
+        hub.unsubscribe(probe)
     assert r.status_code == 200, r.text
     b = r.json()
 
     # 今日 pulse: distinct active users + turn health + cost.
     assert b["active_users_today"] == 2
+    # Live headcount is this process's ChatHub, not today's turn-takers.
+    assert b["users_online"] == before_online + 1
     assert b["today"]["turns"] == 3
     assert b["today"]["errors"] == 1
     assert abs(b["today"]["error_rate"] - 1 / 3) < 0.001
@@ -2138,6 +2140,7 @@ async def test_admin_overview_empty_is_zero(client, make_admin):
     assert r.status_code == 200, r.text
     b = r.json()
     assert b["active_users_today"] == 0
+    assert b["users_online"] == default_chat_hub().online_user_count()
     assert b["today"]["turns"] == 0
     assert b["cost_today"]["total"] == 0
     assert b["recent_errors"] == []

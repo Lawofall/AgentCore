@@ -484,6 +484,19 @@ def test_transcript_round_trips_thinking_blocks():
         ]
     )
     assert unsigned[0].thinking_blocks is None
+    restored_rs = transcript_from_json(
+        [
+            {
+                "role": "assistant",
+                "thinking_blocks": [
+                    {"type": "reasoning", "id": "rs_1", "encrypted_content": "enc"}
+                ],
+            }
+        ]
+    )
+    assert restored_rs[0].thinking_blocks == [
+        {"type": "reasoning", "id": "rs_1", "encrypted_content": "enc"}
+    ]
 
 
 def test_spec_round_trips_with_nested_policy_and_deliverable():

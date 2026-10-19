@@ -24,12 +24,13 @@ from agentcore.runtime.suspension import AskUserSuspension
 from agentcore.sidecar import protocol
 from agentcore.sidecar.paused_store import LocalPausedTurnStore
 from agentcore.sidecar.server import SidecarServer
+from tests.sidecar_session import sidecar_session
 
 _CLIENT_TURN_IDS = {
     "userMessageId": "11111111-1111-4111-8111-111111111111",
     "messageId": "22222222-2222-4222-8222-222222222222",
     "traceId": "a" * 32,
-    "folderId": None,
+    "session": sidecar_session(),
 }
 
 
@@ -522,7 +523,7 @@ def test_resume_claims_frame_and_drives_resume_pipeline(tmp_path, monkeypatch):
         # The Sidecar has no DB → history must come from the claimed local frame record.
         captured["history"] = kwargs.get("history")
         # The conversation's CURRENT permission axes ride the resume params.
-        captured["autonomy"] = kwargs.get("permission_axes")
+        captured["autonomy"] = kwargs["conversation"].permission_axes
         captured["x_client_platform"] = kwargs.get("x_client_platform")
         kwargs["sink"].close()
         return {
@@ -554,7 +555,7 @@ def test_resume_claims_frame_and_drives_resume_pipeline(tmp_path, monkeypatch):
                         "conversationId": "c1",
                         "decision": "adjust",
                         "note": "换个方向",
-                        "permissionAxes": {"boundary": "read"},
+                        "session": sidecar_session(permissionAxes={"boundary": "read"}),
                     },
                 }
             )
@@ -643,6 +644,7 @@ def test_resume_skips_unknown_team_preview(tmp_path, monkeypatch):
                         "conversationId": "c1",
                         "decision": "continue",
                         "note": "",
+                        "session": sidecar_session(),
                     },
                 }
             )
@@ -684,6 +686,7 @@ def test_resume_skips_leftover_team_preview_even_with_veto(tmp_path, monkeypatch
                         "decision": "continue",
                         "note": "",
                         "excluded_run_ids": ["nope"],
+                        "session": sidecar_session(),
                     },
                 }
             )
@@ -734,6 +737,7 @@ def test_resume_unknown_kind_does_not_rewrite_stamped_folder(tmp_path, monkeypat
                         "decision": "continue",
                         "note": "",
                         "excluded_run_ids": ["nope"],
+                        "session": sidecar_session(),
                     },
                 }
             )
@@ -777,6 +781,7 @@ def test_resume_failure_after_settlement_does_not_restore_frame(tmp_path, monkey
                         "note": "retry me",
                         "userMessageId": "u1",
                         "traceId": "a" * 32,
+                        "session": sidecar_session(),
                     },
                 }
             )
@@ -802,7 +807,11 @@ def test_resume_missing_frame_reports_not_found(tmp_path):
                     "jsonrpc": "2.0",
                     "id": 8,
                     "method": "resume",
-                    "params": {"messageId": "nope", "conversationId": "c1"},
+                    "params": {
+                        "messageId": "nope",
+                        "conversationId": "c1",
+                        "session": sidecar_session(),
+                    },
                 }
             )
         )
@@ -856,6 +865,7 @@ def test_resume_without_user_message_id_mints_uuid_outbox_key(tmp_path, monkeypa
                         "conversationId": "c1",
                         "decision": "continue",
                         "traceId": "a" * 32,
+                        "session": sidecar_session(),
                     },
                 }
             )

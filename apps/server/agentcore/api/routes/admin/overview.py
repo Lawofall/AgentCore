@@ -27,6 +27,7 @@ from agentcore.db.repositories import (
     TurnMetricsRepository,
     UserRepository,
 )
+from agentcore.messaging.hub import default_chat_hub
 
 router = APIRouter(tags=["admin"])
 
@@ -43,8 +44,8 @@ async def overview(
     metrics_repo: TurnMetricsRepository = Depends(get_turn_metrics_repo),
 ) -> AdminOverview:
     """控制台概览 (landing dashboard): today's platform pulse (active users + turn
-    health + cost), account tallies, the 7-day cost / turn trends, deployment
-    health, and a short recent-errors feed.
+    health + cost), account tallies, live online accounts, the 7-day cost / turn
+    trends, deployment health, and a short recent-errors feed.
 
     A curated one-call home view that *reuses the same aggregates* as the 用量 /
     观测 / 系统 surfaces (so the headline numbers never drift from the drill-down
@@ -91,6 +92,7 @@ async def overview(
         users_total=counts["total"],
         users_active=counts["active"],
         admins=counts["admins"],
+        users_online=default_chat_hub().online_user_count(),
         recent_daily_cost=recent_daily_cost,
         recent_daily_turns=recent_daily_turns,
         database_ok=db_ok,

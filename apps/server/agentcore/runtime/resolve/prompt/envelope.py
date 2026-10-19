@@ -5,7 +5,7 @@ If this turn's composed system differs from that node 0, DeepSeek in-history
 appends the changed ``<设定>`` / ``<按需目录>`` (or the full new string when the
 rest drifted) as ``role: system`` after history and before the envelope
 (``usage.in_history_system`` replay). Date, workspace (+ folder-chat
-this-conversation writes), scene gates, attachments, and table ride a
+this-conversation writes), scene gates, and attachments ride a
 synthetic user message fenced with ``[系统提示]``. A new envelope that
 matches the last one already in the window is omitted. The envelope is
 snapshotted on ``turn_started`` and stamped onto the prompting user row
@@ -247,7 +247,6 @@ def render_ceo_turn_envelope(
     *,
     workspace_context: str | None = None,
     conversation_edits: str | None = None,
-    table_context: str | None = None,
     attachment_material: bool = False,
     attachment_context: str = "",
     include_runtime: bool = True,
@@ -268,7 +267,6 @@ def render_ceo_turn_envelope(
         )
         .add("attachment_material", material_block, SectionOrder.WORKING_SET)
         .add("attachment_context", attachment_context, SectionOrder.ATTACHMENT)
-        .add("table_context", table_context, SectionOrder.TABLE_FACTS)
         .observe(scope="ceo_envelope")
         .render()
     )

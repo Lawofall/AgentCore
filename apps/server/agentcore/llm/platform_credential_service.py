@@ -30,6 +30,7 @@ from agentcore.llm.platform_pool import (
 )
 from agentcore.llm.tool_surface import parse_tool_surface_limits, tool_surface_limits_as_dict
 from agentcore.security.keys import KeyEncryptor
+from agentcore.security.mask import mask_secret
 
 logger = get_logger(__name__)
 
@@ -150,12 +151,6 @@ class PlatformCredentialView:
     tool_surface_limits: ToolSurfaceLimits = field(default_factory=ToolSurfaceLimits)
 
 
-def _mask_key(api_key: str) -> str:
-    if len(api_key) <= 4:
-        return "••••"
-    return f"••••{api_key[-4:]}"
-
-
 def _mask_key_ciphertext(enc: KeyEncryptor | None, api_key_enc: bytes) -> str | None:
     if enc is None or not api_key_enc:
         return None
@@ -163,7 +158,7 @@ def _mask_key_ciphertext(enc: KeyEncryptor | None, api_key_enc: bytes) -> str | 
         plaintext = enc.decrypt(api_key_enc).decode()
     except Exception:  # noqa: BLE001
         return None
-    return _mask_key(plaintext)
+    return mask_secret(plaintext)
 
 
 def _limits_from_row(row: PlatformCredential) -> ToolSurfaceLimits:

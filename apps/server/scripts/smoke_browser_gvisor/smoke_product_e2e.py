@@ -18,9 +18,8 @@ Docker Desktop 的运行方式见本目录 README。
 落到 ``/out`` 便于目视。任何架构级失败（netstack→proxy 不通、握手卡死）都会以 SMOKE_OK=False +
 诊断出现——即「停下回报」的证据。
 
-环境变量（docker run -e）：GVISOR_ENABLED=true、BROWSER_SANDBOX_IGNORE_CGROUPS=true
-（Docker Desktop 嵌套 cgroup v1，见 PoC finding #6）；web_fetch_allow_fake_ip_proxy 默认 True
-（dev fake-IP，PoC finding #5）。
+环境变量（docker run -e）：GVISOR_ENABLED=true。web_fetch_allow_fake_ip_proxy 默认 True
+（dev fake-IP，PoC finding #5）。sandboxd argv 固定 ``--ignore-cgroups``。
 """
 
 from __future__ import annotations
@@ -185,7 +184,6 @@ async def main() -> int:
             "gvisor_enabled": settings.gvisor_enabled,
             "runsc_path": settings.gvisor_runsc_path,
             "runtime_root": settings.gvisor_runtime_root,
-            "ignore_cgroups": settings.browser_sandbox_ignore_cgroups,
             "proxy_port": settings.browser_proxy_port,
             "veth_subnet_base": settings.browser_veth_subnet_base,
             "allow_fake_ip_proxy": settings.web_fetch_allow_fake_ip_proxy,

@@ -61,10 +61,10 @@ export interface paths {
         };
         /**
          * View Shared
-         * @description Public, read-only view of a frozen share snapshot (no auth).
+         * @description Public, read-only view of a frozen conversation share snapshot (no auth).
          *
-         *     Conversation and 文档 shares share the ``/shared/<id>`` URL. A revoked /
-         *     unknown / malformed token returns the same 404 page (never an existence leak).
+         *     A revoked / unknown / malformed token returns the same 404 page (never an
+         *     existence leak).
          */
         get: operations["view_shared_shared__token__get"];
         put?: never;
@@ -623,8 +623,8 @@ export interface paths {
         /**
          * Overview
          * @description 控制台概览 (landing dashboard): today's platform pulse (active users + turn
-         *     health + cost), account tallies, the 7-day cost / turn trends, deployment
-         *     health, and a short recent-errors feed.
+         *     health + cost), account tallies, live online accounts, the 7-day cost / turn
+         *     trends, deployment health, and a short recent-errors feed.
          *
          *     A curated one-call home view that *reuses the same aggregates* as the 用量 /
          *     观测 / 系统 surfaces (so the headline numbers never drift from the drill-down
@@ -649,7 +649,7 @@ export interface paths {
         };
         /**
          * List Platform Credentials
-         * @description List platform-pool members. Ciphertext only; ``masked_key`` is last-4.
+         * @description List platform-pool members. Ciphertext only; ``masked_key`` is a fingerprint.
          */
         get: operations["list_platform_credentials_v1_admin_platform_credentials_get"];
         put?: never;
@@ -702,6 +702,41 @@ export interface paths {
          * @description Drop cooling / exhausted / blocked flags so the member is schedulable again.
          */
         post: operations["clear_platform_credential_runtime_v1_admin_platform_credentials__credential_id__clear_runtime_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/redemption-codes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Redemption Codes */
+        get: operations["list_redemption_codes_v1_admin_redemption_codes_get"];
+        put?: never;
+        /** Create Redemption Codes */
+        post: operations["create_redemption_codes_v1_admin_redemption_codes_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/redemption-codes/{code_id}/void": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Void Redemption Code */
+        post: operations["void_redemption_code_v1_admin_redemption_codes__code_id__void_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -938,7 +973,7 @@ export interface paths {
          *     to one account — composed with the account's recent conversation roster (message
          *     counts batched, no N+1) and its recent turns (each carries ``conversation_id`` to
          *     drill into 会话复盘). Configured model names come from the account default
-         *     模型组合 (``main_model`` / ``background_model``; never the API key) + provider
+         *     模型组合 (``main_model``; never the API key) + provider
          *     count from ``user_llm_providers``. Per-model stats scan ``cost_calls`` (last 30
          *     days). Sessions reuse the owner ``AuthService.list_sessions`` shape (read-only).
          *     Admin cross-user; 404 for an unknown id.
@@ -2632,10 +2667,10 @@ export interface paths {
         get?: never;
         /**
          * Set Permission Axes
-         * @description Switch the conversation boundary (升到「这台电脑」的确认由客户端负责).
+         * @description Switch the conversation boundary (升到「这台电脑」/「完全权限」的确认由客户端负责).
          *
          *     Takes effect on the next turn / durable resume (gate is built at turn entry).
-         *     Body is ``{"boundary": "read" | "folder" | "computer"}``.
+         *     Body is ``{"boundary": "read" | "folder" | "computer" | "full"}``.
          */
         put: operations["set_permission_axes_v1_conversations__conversation_id__permission_axes_put"];
         post?: never;
@@ -3688,98 +3723,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/docs": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Docs */
-        get: operations["list_docs_v1_docs_get"];
-        put?: never;
-        /** Create Doc */
-        post: operations["create_doc_v1_docs_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/docs/{doc_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Doc */
-        get: operations["get_doc_v1_docs__doc_id__get"];
-        put?: never;
-        post?: never;
-        /** Delete Doc */
-        delete: operations["delete_doc_v1_docs__doc_id__delete"];
-        options?: never;
-        head?: never;
-        /** Update Doc */
-        patch: operations["update_doc_v1_docs__doc_id__patch"];
-        trace?: never;
-    };
-    "/v1/docs/{doc_id}/body": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /** Write Doc Body */
-        put: operations["write_doc_body_v1_docs__doc_id__body_put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/docs/{doc_id}/shares": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Doc Shares */
-        get: operations["list_doc_shares_v1_docs__doc_id__shares_get"];
-        put?: never;
-        /**
-         * Publish Doc Share
-         * @description First publish mints a URL (201). Later POSTs update that snapshot (200).
-         */
-        post: operations["publish_doc_share_v1_docs__doc_id__shares_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/docs/{doc_id}/shares/{share_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /** Revoke Doc Share */
-        delete: operations["revoke_doc_share_v1_docs__doc_id__shares__share_id__delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/documents": {
         parameters: {
             query?: never;
@@ -4251,26 +4194,6 @@ export interface paths {
         get: operations["fulfill_stream_v1_fulfill_get"];
         put?: never;
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/inference/search_connection/failure": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Inference Search Connection Failure
-         * @description Sidecar report: the keyless SearXNG it called just failed.
-         */
-        post: operations["inference_search_connection_failure_v1_inference_search_connection_failure_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5040,6 +4963,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/seats/redeem": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Redeem Seat
+         * @description Consume one 链动小铺 card secret and open / extend the matching seat.
+         */
+        post: operations["redeem_seat_v1_seats_redeem_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/skill-catalog": {
         parameters: {
             query?: never;
@@ -5181,88 +5124,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/tables": {
+    "/v1/usage/activity": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** List Tables */
-        get: operations["list_tables_v1_tables_get"];
-        put?: never;
-        /** Create Table */
-        post: operations["create_table_v1_tables_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/tables/by-source": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Table By Source */
-        get: operations["get_table_by_source_v1_tables_by_source_get"];
+        /**
+         * Get Usage Activity
+         * @description Recent spend grouped by conversation (用量活动表).
+         *
+         *     One row per conversation in the window; account-level AI 改写 is one extra
+         *     row with a null ``conversation_id``. ``model`` keeps rows that used that
+         *     billed model id and slices tokens/cost to it. Ordered by last spend.
+         */
+        get: operations["get_usage_activity_v1_usage_activity_get"];
         put?: never;
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/tables/{table_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Table */
-        get: operations["get_table_v1_tables__table_id__get"];
-        put?: never;
-        post?: never;
-        /** Delete Table */
-        delete: operations["delete_table_v1_tables__table_id__delete"];
-        options?: never;
-        head?: never;
-        /** Update Table */
-        patch: operations["update_table_v1_tables__table_id__patch"];
-        trace?: never;
-    };
-    "/v1/tables/{table_id}/conversation": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Ensure Table Conversation */
-        post: operations["ensure_table_conversation_v1_tables__table_id__conversation_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/tables/{table_id}/ops": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Apply Table Ops */
-        post: operations["apply_table_ops_v1_tables__table_id__ops_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5278,8 +5157,8 @@ export interface paths {
         };
         /**
          * Get Usage Summary
-         * @description Account dashboard: today's tokens/cost, the month's cost, the recent
-         *     daily-cost trend, and the quota.
+         * @description Account dashboard: today's tokens/cost, the month's cost, the 30-day
+         *     daily-cost trend, this month's by-model mix, platform search uses, and quota.
          *
          *     Windows are bounded at the current UTC day / month start (MVP — a per-user
          *     timezone is a later refinement). ``recent_daily_cost`` is the last
@@ -5287,6 +5166,7 @@ export interface paths {
          *     Money is nano-CNY; ``CostBreakdown.cny_total`` is already yuan (no FX).
          *     Per-role split lives on the turn payroll
          *     (``GET /messages/{id}/cost``), not this monthly account view.
+         *     Conversation-level rows live on ``GET /usage/activity``.
          *
          *     This is the account total, so it also carries spend that belongs to no
          *     conversation at all (AI 改写 — ``role=assist`` ledger rows).
@@ -5523,6 +5403,96 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/users/me/mcp-servers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Mcp Servers */
+        get: operations["list_mcp_servers_v1_users_me_mcp_servers_get"];
+        put?: never;
+        /** Create Mcp Server */
+        post: operations["create_mcp_server_v1_users_me_mcp_servers_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/users/me/mcp-servers/oauth/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Mcp Oauth Callback
+         * @description Browser redirect from the authorization server — no login cookie required.
+         */
+        get: operations["mcp_oauth_callback_v1_users_me_mcp_servers_oauth_callback_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/users/me/mcp-servers/{server_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Mcp Server */
+        delete: operations["delete_mcp_server_v1_users_me_mcp_servers__server_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update Mcp Server */
+        patch: operations["update_mcp_server_v1_users_me_mcp_servers__server_id__patch"];
+        trace?: never;
+    };
+    "/v1/users/me/mcp-servers/{server_id}/oauth/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start Mcp Oauth */
+        post: operations["start_mcp_oauth_v1_users_me_mcp_servers__server_id__oauth_start_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/users/me/mcp-servers/{server_id}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Test Mcp Server */
+        post: operations["test_mcp_server_v1_users_me_mcp_servers__server_id__test_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/users/me/models": {
         parameters: {
             query?: never;
@@ -5536,6 +5506,86 @@ export interface paths {
          */
         get: operations["list_user_models_v1_users_me_models_get"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/users/me/models/composer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Put Composer Model
+         * @description Replace the account last-used snapshot and upsert that main's knobs.
+         */
+        put: operations["put_composer_model_v1_users_me_models_composer_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/users/me/models/display-names": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Put Model Display Name
+         * @description Set or clear the shown name for one connected (BYOK) catalog row.
+         */
+        put: operations["put_model_display_name_v1_users_me_models_display_names_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/users/me/models/hidden": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Put Hidden Model Refs
+         * @description Replace which catalog refs belong on composer pickers.
+         */
+        put: operations["put_hidden_model_refs_v1_users_me_models_hidden_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/users/me/models/vision-accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Put Vision Accept
+         * @description Declare or clear native image accept for one connected (BYOK) catalog row.
+         */
+        put: operations["put_vision_accept_v1_users_me_models_vision_accept_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -5560,7 +5610,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/users/me/search-connection/cleversee": {
+    "/v1/users/me/search-connection/deepseek": {
         parameters: {
             query?: never;
             header?: never;
@@ -5569,28 +5619,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Connect Cleversee */
-        post: operations["connect_cleversee_v1_users_me_search_connection_cleversee_post"];
-        /** Disconnect Cleversee */
-        delete: operations["disconnect_cleversee_v1_users_me_search_connection_cleversee_delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/users/me/search-connection/searxng": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Connect Searxng */
-        post: operations["connect_searxng_v1_users_me_search_connection_searxng_post"];
-        /** Disconnect Searxng */
-        delete: operations["disconnect_searxng_v1_users_me_search_connection_searxng_delete"];
+        /** Connect Deepseek */
+        post: operations["connect_deepseek_v1_users_me_search_connection_deepseek_post"];
+        /** Disconnect Deepseek */
+        delete: operations["disconnect_deepseek_v1_users_me_search_connection_deepseek_delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -6651,9 +6683,10 @@ export interface components {
          * AdminOverview
          * @description Landing dashboard (``GET /v1/admin/overview``, admin-only) — platform pulse.
          *
-         *     Today's vitals (active users / turn health / cost), account tallies, the 7-day
-         *     cost + turn trends, deployment health, and the most recent errors (drillable
-         *     into 会话复盘). Money is integer nano-CNY; ``CostBreakdown.cny_total`` is yuan.
+         *     Today's vitals (active users / turn health / cost), account tallies, live
+         *     online accounts, the 7-day cost + turn trends, deployment health, and the
+         *     most recent errors (drillable into 会话复盘). Money is integer nano-CNY;
+         *     ``CostBreakdown.cny_total`` is yuan.
          */
         AdminOverview: {
             /** Active Users Today */
@@ -6674,6 +6707,8 @@ export interface components {
             today: components["schemas"]["TurnHealthWindow"];
             /** Users Active */
             users_active: number;
+            /** Users Online */
+            users_online: number;
             /** Users Total */
             users_total: number;
         };
@@ -7020,8 +7055,6 @@ export interface components {
          *     (byok = own-key spend).
          */
         AdminUserDetail: {
-            /** Background Model */
-            background_model?: string | null;
             /** Billing Mode */
             billing_mode: string;
             /** Conversations */
@@ -7093,6 +7126,12 @@ export interface components {
              * @enum {string}
              */
             role: "user" | "admin";
+            /** Seat Pending Plan */
+            seat_pending_plan?: ("starter" | "plus" | "flagship") | null;
+            /** Seat Plan */
+            seat_plan?: ("starter" | "plus" | "flagship") | null;
+            /** Seat Until */
+            seat_until?: string | null;
             /**
              * Status
              * @enum {string}
@@ -7158,6 +7197,12 @@ export interface components {
              * @enum {string}
              */
             role: "user" | "admin";
+            /** Seat Pending Plan */
+            seat_pending_plan?: ("starter" | "plus" | "flagship") | null;
+            /** Seat Plan */
+            seat_plan?: ("starter" | "plus" | "flagship") | null;
+            /** Seat Until */
+            seat_until?: string | null;
             /**
              * Status
              * @enum {string}
@@ -7345,12 +7390,12 @@ export interface components {
         };
         /** AutonomyUpdate */
         AutonomyUpdate: {
-            /** @description New-session default boundary: read | folder | computer */
+            /** @description New-session default boundary: read | folder | computer | full */
             policy: components["schemas"]["WorkspaceBoundary"];
         };
         /** AutonomyView */
         AutonomyView: {
-            /** @default folder */
+            /** @default computer */
             policy: components["schemas"]["WorkspaceBoundary"];
         };
         /**
@@ -7635,6 +7680,8 @@ export interface components {
          *     side of the team holds each tool.
          *     ``blurb`` is the toolbox shelf description only — not the consult directory
          *     or the tool schema ``description``.
+         *     ``description_prefer`` is the root-CEO prefer-delegate button text. Empty
+         *     except for ``delegate``. Nested captain descriptions are not catalogued.
          */
         CapabilityTool: {
             approval: components["schemas"]["ToolApproval"];
@@ -7647,6 +7694,12 @@ export interface components {
             blurb: string;
             /** Description */
             description: string;
+            /**
+             * Description Prefer
+             * @description Root-CEO prefer-delegate schema description. Empty except for ``delegate``. Toolbox inspector switches between ``description`` (注意力尺) and this (优先派). Nested captain descriptions are not catalogued.
+             * @default
+             */
+            description_prefer: string;
             face: components["schemas"]["ToolFace"];
             /** Name */
             name: string;
@@ -7936,26 +7989,18 @@ export interface components {
             /** Path */
             path: string;
         };
-        /** ConnectCleverSeeRequest */
-        ConnectCleverSeeRequest: {
+        /**
+         * ComposerModelKnobs
+         * @description Last effort / context for one catalog ref.
+         */
+        ComposerModelKnobs: {
             /**
-             * Api Key
-             * @default
+             * Context Budget
+             * @description Shorter context ceiling in tokens. Null = that model's own window.
              */
-            api_key: string;
-        };
-        /** ConnectSearxngRequest */
-        ConnectSearxngRequest: {
-            /**
-             * Api Key
-             * @default
-             */
-            api_key: string;
-            /**
-             * Base Url
-             * @default
-             */
-            base_url: string;
+            context_budget?: number | null;
+            /** Reasoning Effort */
+            reasoning_effort?: string | null;
         };
         /**
          * ContextCutCommitRequest
@@ -8049,6 +8094,25 @@ export interface components {
             page_size: number;
             /** Total */
             total: number;
+        };
+        /**
+         * ConversationModelOverride
+         * @description A complete composer snapshot: this conversation, or the account last-used.
+         *
+         *     Null on the conversation row = this chat never pinned a brain (follow the
+         *     assembly). Null ``reasoning_effort`` / ``context_budget`` / ``worker`` inside
+         *     a snapshot = vendor default / model window / follow main — not assembly.
+         */
+        ConversationModelOverride: {
+            /**
+             * Context Budget
+             * @description Shorter context ceiling in tokens (128000 / 256000 / 512000). Null = the main model's own window.
+             */
+            context_budget?: number | null;
+            main: components["schemas"]["ModelProfileSlot"];
+            /** Reasoning Effort */
+            reasoning_effort?: string | null;
+            worker?: components["schemas"]["ModelProfileSlot"] | null;
         };
         /** ConversationReadRequest */
         ConversationReadRequest: {
@@ -8245,6 +8309,11 @@ export interface components {
              * @default false
              */
             deep_research_auto: boolean;
+            /**
+             * Delegate Mode
+             * @default false
+             */
+            delegate_mode: boolean;
             /** Folder Id */
             folder_id?: string | null;
             /** Id */
@@ -8258,6 +8327,7 @@ export interface components {
              * @default 0
              */
             message_count: number;
+            model_override?: components["schemas"]["ConversationModelOverride"] | null;
             permission_axes?: components["schemas"]["PermissionAxesModel"];
             /**
              * Pinned
@@ -8379,10 +8449,16 @@ export interface components {
             assembly_id?: string | null;
             /** Client Request Id */
             client_request_id?: string | null;
+            /**
+             * Delegate Mode
+             * @default false
+             */
+            delegate_mode: boolean;
             /** Folder Id */
             folder_id?: string | null;
             /** Local Container Root Id */
             local_container_root_id?: string | null;
+            model_override?: components["schemas"]["ConversationModelOverride"] | null;
             permission_axes?: components["schemas"]["PermissionAxesModel"] | null;
             /** Title */
             title?: string | null;
@@ -8394,13 +8470,6 @@ export interface components {
         CreateDirRequest: {
             /** Path */
             path: string;
-        };
-        /** CreateDocRequest */
-        CreateDocRequest: {
-            /** Folder Id */
-            folder_id: string;
-            /** Title */
-            title?: string | null;
         };
         /**
          * CreateFolderRequest
@@ -8430,11 +8499,18 @@ export interface components {
         };
         /**
          * CreateLlmModelProfileRequest
-         * @description New assembly. Copies the starred assembly, including its model.
+         * @description New user assembly. Always a snapshot of official 完整, not a locked recipe.
          */
         CreateLlmModelProfileRequest: {
             /** Name */
             name: string;
+            /**
+             * Origin
+             * @description Snapshot of official 完整 (tools, envelope, factory catalog on).
+             * @default full
+             * @constant
+             */
+            origin: "full";
             /**
              * Set As Default
              * @default false
@@ -8463,6 +8539,26 @@ export interface components {
              * @default
              */
             label: string;
+            /**
+             * Vendor Id
+             * @description Vendor identity for protocol dispatch (openai / opencode_go / custom …). Independent of base_url.
+             */
+            vendor_id: string;
+        };
+        /** CreateMcpServerRequest */
+        CreateMcpServerRequest: {
+            /**
+             * Bearer
+             * @description Optional static bearer token (AES-GCM at rest; never returned).
+             */
+            bearer?: string | null;
+            /**
+             * Name
+             * @default
+             */
+            name: string;
+            /** Url */
+            url: string;
         };
         /** CreateNoticeRequest */
         CreateNoticeRequest: {
@@ -8530,6 +8626,31 @@ export interface components {
             subscription_day: number;
             tool_surface_limits?: components["schemas"]["ToolSurfaceLimits"] | null;
         };
+        /** CreateRedemptionCodesRequest */
+        CreateRedemptionCodesRequest: {
+            /** Count */
+            count: number;
+            /**
+             * Sku
+             * @enum {string}
+             */
+            sku: "starter" | "plus" | "flagship";
+        };
+        /**
+         * CreateRedemptionCodesResponse
+         * @description Plaintext codes are returned once. They are not stored.
+         */
+        CreateRedemptionCodesResponse: {
+            /** Batch Id */
+            batch_id: string;
+            /** Codes */
+            codes: string[];
+            /**
+             * Sku
+             * @enum {string}
+             */
+            sku: "starter" | "plus" | "flagship";
+        };
         /**
          * CreateShareRequest
          * @description Optional expiry when minting a public share link.
@@ -8557,14 +8678,9 @@ export interface components {
             /** Label */
             label?: string | null;
         };
-        /** CreateTableRequest */
-        CreateTableRequest: {
-            /** Title */
-            title?: string | null;
-        };
         /**
          * DailyCost
-         * @description One UTC day's total spend — a point in the dashboard 7-day trend (§7.3D).
+         * @description One UTC day's total spend — a point in the dashboard trend sparkline.
          */
         DailyCost: {
             /** Cost Total */
@@ -8956,85 +9072,6 @@ export interface components {
         DispatchHandoffRequest: {
             /** Task */
             task: string;
-        };
-        /** DocBodyWriteRequest */
-        DocBodyWriteRequest: {
-            /** Baseline */
-            baseline?: number | null;
-            /** Body */
-            body: {
-                [key: string]: unknown;
-            };
-        };
-        /**
-         * DocDetail
-         * @description A doc plus its markdown body (editor load payload).
-         */
-        DocDetail: {
-            /** Body */
-            body: {
-                [key: string]: unknown;
-            };
-            /** Can Write */
-            can_write: boolean;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /** Folder Id */
-            folder_id: string;
-            /** Folder Name */
-            folder_name: string;
-            /** Id */
-            id: string;
-            /** Title */
-            title: string;
-            /**
-             * Updated At
-             * Format: date-time
-             */
-            updated_at: string;
-            /** Version */
-            version: number;
-        };
-        /** DocSummary */
-        DocSummary: {
-            /** Can Write */
-            can_write: boolean;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /** Folder Id */
-            folder_id: string;
-            /** Folder Name */
-            folder_name: string;
-            /** Id */
-            id: string;
-            /** Title */
-            title: string;
-            /**
-             * Updated At
-             * Format: date-time
-             */
-            updated_at: string;
-            /** Version */
-            version: number;
-        };
-        /** DocWriteResult */
-        DocWriteResult: {
-            /**
-             * Conflict
-             * @default false
-             */
-            conflict: boolean;
-            doc?: components["schemas"]["DocDetail"] | null;
-            /** Ok */
-            ok: boolean;
-            /** Version */
-            version: number;
         };
         /** DocumentContentRequest */
         DocumentContentRequest: {
@@ -9805,6 +9842,29 @@ export interface components {
              */
             updated_at: string;
         };
+        /**
+         * HiddenModelRefsUpdate
+         * @description ``PUT /v1/users/me/models/hidden`` — replace picker membership.
+         */
+        HiddenModelRefsUpdate: {
+            /**
+             * Enabled Refs
+             * @description BYOK refs on pickers. Null leaves the stored allowlist unchanged (older clients that only send refs).
+             */
+            enabled_refs?: string[] | null;
+            /**
+             * Refs
+             * @description Refs kept off pickers (platform opt-out; leftover BYOK denylist).
+             */
+            refs?: string[];
+        };
+        /** HiddenModelRefsView */
+        HiddenModelRefsView: {
+            /** Enabled Refs */
+            enabled_refs?: string[];
+            /** Refs */
+            refs: string[];
+        };
         /** HistoryToolCall */
         HistoryToolCall: {
             function?: components["schemas"]["HistoryToolCallFunction"];
@@ -9961,7 +10021,6 @@ export interface components {
          * @description One assembly, including its model columns.
          */
         LlmModelProfileView: {
-            background?: components["schemas"]["ModelProfileSlot"] | null;
             /**
              * Context Budget
              * @description Shorter context ceiling in tokens (128000 / 256000 / 512000). Null = the main model's own window.
@@ -9990,20 +10049,19 @@ export interface components {
             /** Name */
             name: string;
             /**
-             * Omit Factory Catalog
-             * @description When true, this assembly does not carry the three factory skill rows. consult stays only if user on-demand rows remain. Null means the factory rows are still on.
+             * Omitted Factory Skills
+             * @description Official HOW names this assembly leaves off the consult directory. Empty = every factory row stays. A name on the list is missing from the directory and consult. New skills default on once the recipe is released.
              */
-            omit_factory_catalog?: boolean | null;
+            omitted_factory_skills?: string[];
             /** Reasoning Effort */
             reasoning_effort?: string | null;
             /**
              * Recipe
-             * @description Official recipe still locked on this assembly. Null once tools, the envelope, the factory catalog, or plugs are edited, or the row was never a recipe.
+             * @description Official recipe still locked on this assembly. Null on user snapshots. Official 完整 / 极简 themselves are virtual ids.
              */
-            recipe?: ("chat" | "web" | "full") | null;
+            recipe?: ("chat" | "full") | null;
             /** Updated At */
             updated_at?: string | null;
-            vision?: components["schemas"]["ModelProfileSlot"] | null;
             /**
              * Warnings
              * @description Ignorable BYOK model reachability hints from the last save (empty on list/get). Save still succeeds when non-empty.
@@ -10037,6 +10095,11 @@ export interface components {
             supports_tools?: boolean | null;
             /** Updated At */
             updated_at?: string | null;
+            /**
+             * Vendor Id
+             * @description Vendor identity for protocol dispatch (openai / opencode_go / custom …)
+             */
+            vendor_id: string;
         };
         /**
          * LlmProvidersResponse
@@ -10231,6 +10294,64 @@ export interface components {
             /** Last Read Message Id */
             last_read_message_id: string;
         };
+        /** McpOAuthStartRequest */
+        McpOAuthStartRequest: {
+            /**
+             * Return Origin
+             * @default
+             */
+            return_origin: string;
+        };
+        /** McpOAuthStartResponse */
+        McpOAuthStartResponse: {
+            /** Authorization Url */
+            authorization_url: string;
+        };
+        /** McpServerListResponse */
+        McpServerListResponse: {
+            /** Data */
+            data: components["schemas"]["McpServerView"][];
+            /** Total */
+            total: number;
+        };
+        /** McpServerTestResponse */
+        McpServerTestResponse: {
+            /** Id */
+            id: string;
+            /** Last Error */
+            last_error: string;
+            /** Status */
+            status: string;
+            /** Tools */
+            tools: string[];
+        };
+        /** McpServerView */
+        McpServerView: {
+            /** Auth Kind */
+            auth_kind: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Has Token */
+            has_token: boolean;
+            /** Id */
+            id: string;
+            /** Last Error */
+            last_error: string;
+            /** Name */
+            name: string;
+            /** Status */
+            status: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Url */
+            url: string;
+        };
         /**
          * MemoryUpdateItemView
          * @description One applied memory change in a 记忆已更新 card (Agent记忆与知识系统 §1.6).
@@ -10390,8 +10511,6 @@ export interface components {
             duration_ms?: number | null;
             /** Evidence Ledger */
             evidence_ledger?: components["schemas"]["EvidenceLedgerEntryRest"][];
-            /** Followups */
-            followups?: string[];
             /** Generation Ms */
             generation_ms?: number | null;
             /** Id */
@@ -10549,7 +10668,7 @@ export interface components {
          *
          *     Product identity is ``ref``. Internally ``(id, origin, provider_id)`` is still unique
          *     — the same model id may appear under several BYOK providers (and once as a platform
-         *     row), so the picker groups by provider.
+         *     row). Composer pickers are a flat list; the settings page groups by channel.
          */
         ModelCatalogItem: {
             /**
@@ -10560,7 +10679,7 @@ export interface components {
             available: boolean;
             /**
              * Badge
-             * @description Curated display badge rendered as-is by clients (e.g. 免费额度). Null when none — never inferred from model id suffixes.
+             * @description Display badge rendered as-is by clients. Curated SKU marks (e.g. 免费额度) only. Platform origin is unmarked. Null when none — never inferred from model id suffixes.
              */
             badge?: string | null;
             /**
@@ -10573,6 +10692,12 @@ export interface components {
              * @description Context window in tokens (display hint; null if unknown).
              */
             context_length?: number | null;
+            /**
+             * Custom
+             * @description True when this BYOK row was opened by hand-fill (enabled_refs) rather than vendor seed or GET /models. Clients may badge it 自定义. Inference ignores this flag.
+             * @default false
+             */
+            custom: boolean;
             /** Display Name */
             display_name: string;
             /** Id */
@@ -10616,13 +10741,32 @@ export interface components {
              * @description Whether the user has at least one BYOK provider configured.
              */
             byok_configured: boolean;
+            /** @description Account last-used composer snapshot. New chats start from this; null = follow the starred assembly until the picker writes one. */
+            composer_model?: components["schemas"]["ConversationModelOverride"] | null;
+            /**
+             * Composer Model Knobs
+             * @description Last effort / context per catalog ref (@platform/{id} or @byok/{provider_id}/{id}). Switching a model restores that leaf; missing key = vendor default / window.
+             */
+            composer_model_knobs?: {
+                [key: string]: components["schemas"]["ComposerModelKnobs"];
+            };
             current: components["schemas"]["ModelCatalogCurrent"];
+            /**
+             * Enabled Refs
+             * @description BYOK catalog refs this account opened onto composer pickers. Connecting a provider does not add its directory here; Settings · 模型 is the inventory. Inference ignores this set.
+             */
+            enabled_refs?: string[];
+            /**
+             * Hidden Refs
+             * @description Catalog refs this account hid from composer pickers. Platform rows default on; a ref here stays off the picker. The models list is the full catalog; inference ignores this set.
+             */
+            hidden_refs?: string[];
             /** Models */
             models: components["schemas"]["ModelCatalogItem"][];
         };
         /**
          * ModelCostLine
-         * @description One model's call-level spend over a window — admin per-model payroll.
+         * @description One model's call-level spend over a window (account 用量 / admin 看板).
          *
          *     Aggregated from ``cost_calls`` (``GROUP BY model``), never from
          *     ``cost_events.model`` (that column only records the run's first call; multi-model
@@ -10645,6 +10789,29 @@ export interface components {
             tokens_total: number;
         };
         /**
+         * ModelDisplayNameUpdate
+         * @description ``PUT /v1/users/me/models/display-names`` — one BYOK catalog alias.
+         */
+        ModelDisplayNameUpdate: {
+            /**
+             * Display Name
+             * @description Shown name for this connected model. Null or blank reverts to the catalog brand. Platform refs are rejected.
+             */
+            display_name?: string | null;
+            /**
+             * Ref
+             * @description Catalog identity ``@byok/{provider_id}/{id}``.
+             */
+            ref: string;
+        };
+        /** ModelDisplayNameView */
+        ModelDisplayNameView: {
+            /** Display Name */
+            display_name?: string | null;
+            /** Ref */
+            ref: string;
+        };
+        /**
          * ModelPriceCard
          * @description Curated unit prices per 1M tokens as decimal strings (money is never float).
          */
@@ -10655,17 +10822,28 @@ export interface components {
             cache_miss?: string | null;
             /**
              * Currency
-             * @description ISO-4217. Catalog cards are curated CNY, not live USD.
+             * @description ISO-4217. Catalog cards are curated selling CNY (1 积分 = ¥1 卖价).
              * @default CNY
              * @constant
              */
             currency: "CNY";
+            /**
+             * Multiplier
+             * @description Sell rate vs that model's official CNY card, decimal string. Platform Flash is 0.25; Claude 0.3; GPT-6 0.18; 1 = official. Picker row shows this. BYOK rows stay 1.
+             * @default 1
+             */
+            multiplier: string;
             /** Output */
             output?: string | null;
+            /**
+             * Quota Multiplier
+             * @description Credit-spend rate vs platform Flash off-peak sell (1M input + 1M output), integer string. 1 = same 积分 as Flash. Null on BYOK / unpriced. Official-vs-vendor sell rate stays in multiplier. Picker card shows this.
+             */
+            quota_multiplier?: string | null;
         };
         /**
          * ModelProfileSlot
-         * @description One slot in a model combination (main / worker / background / vision).
+         * @description One slot in a model combination (main / worker).
          */
         ModelProfileSlot: {
             /** Model */
@@ -10711,7 +10889,7 @@ export interface components {
             code: "upstream_protocol_unsupported";
             /**
              * Required Protocol
-             * @description Protocol this catalog row needs that is unavailable on this origin. Platform greys both; BYOK OpenCode already speaks anthropic_messages.
+             * @description Protocol this catalog row needs that is unavailable on this origin. Platform greys unpriced off-protocol ids; priced Claude / GPT stay selectable. BYOK OpenCode already speaks both protocols.
              * @enum {string}
              */
             required_protocol: "openai_responses" | "anthropic_messages";
@@ -10812,6 +10990,11 @@ export interface components {
              */
             updated_at: string;
         };
+        /** OfficialDeepSeekProviderView */
+        OfficialDeepSeekProviderView: {
+            /** Label */
+            label: string;
+        };
         /** PasswordForgotRequest */
         PasswordForgotRequest: {
             /** Email */
@@ -10906,7 +11089,7 @@ export interface components {
          * @description Conversation boundary (运行时单一真相源).
          */
         PermissionAxesModel: {
-            /** @default folder */
+            /** @default computer */
             boundary: components["schemas"]["WorkspaceBoundary"];
         };
         /**
@@ -11192,8 +11375,7 @@ export interface components {
          * RecordTurnResponse
          * @description The persisted ids for a recorded local turn (the desktop reconciles its
          *     optimistic user/assistant bubbles against these; ``title`` is set only when this
-         *     turn minted the conversation's first title; ``followups`` is always null on new
-         *     turns — chips mint is offline; historical rows may still carry the column).
+         *     turn minted the conversation's first title).
          *
          *     ``noop=True`` means the server intentionally skipped an assistant row (empty
          *     body + no process state). Desktop may delete the outbox only when
@@ -11203,8 +11385,6 @@ export interface components {
         RecordTurnResponse: {
             /** Assistant Message Id */
             assistant_message_id?: string | null;
-            /** Followups */
-            followups?: string[] | null;
             /**
              * Noop
              * @default false
@@ -11214,6 +11394,52 @@ export interface components {
             title?: string | null;
             /** User Message Id */
             user_message_id: string;
+        };
+        /** RedeemSeatRequest */
+        RedeemSeatRequest: {
+            /** Code */
+            code: string;
+        };
+        /** RedemptionCodeLine */
+        RedemptionCodeLine: {
+            /** Batch Id */
+            batch_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Id */
+            id: string;
+            /** Prefix */
+            prefix: string;
+            /** Redeemed At */
+            redeemed_at?: string | null;
+            /** Redeemed By */
+            redeemed_by?: string | null;
+            /**
+             * Sku
+             * @enum {string}
+             */
+            sku: "starter" | "plus" | "flagship";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "unused" | "redeemed" | "void";
+        };
+        /** RedemptionCodeListResponse */
+        RedemptionCodeListResponse: {
+            /** Data */
+            data: components["schemas"]["RedemptionCodeLine"][];
+            /** Total */
+            total: number;
+            /** Unused Flagship */
+            unused_flagship: number;
+            /** Unused Plus */
+            unused_plus: number;
+            /** Unused Starter */
+            unused_starter: number;
         };
         /**
          * RegenerateMessageRequest
@@ -11729,24 +11955,16 @@ export interface components {
             /** Turn Warning */
             turn_warning?: string | null;
         };
-        /** SearchConnectionFailureRequest */
-        SearchConnectionFailureRequest: {
-            /**
-             * Message
-             * @default
-             */
-            message: string;
-        };
         /** SearchConnectionResponse */
         SearchConnectionResponse: {
-            cleversee?: components["schemas"]["SearchSlotResponse"] | null;
+            deepseek?: components["schemas"]["SearchSlotResponse"] | null;
+            official_deepseek_provider?: components["schemas"]["OfficialDeepSeekProviderView"] | null;
             quota: components["schemas"]["SearchQuotaView"];
-            searxng?: components["schemas"]["SearchSlotResponse"] | null;
             /**
              * Selected
              * @enum {string}
              */
-            selected: "platform" | "cleversee" | "searxng";
+            selected: "platform" | "deepseek";
         };
         /**
          * SearchItem
@@ -11777,6 +11995,23 @@ export interface components {
             /** Updated At */
             updated_at?: string | null;
         };
+        /**
+         * SearchQuotaStatus
+         * @description Platform search uses in the same UTC day / month windows as the cost meters.
+         *
+         *     ``0`` on a limit means that window is unlimited. Own DeepSeek search does not
+         *     count. Reset instants stay on the search-connection payload.
+         */
+        SearchQuotaStatus: {
+            /** Daily Limit */
+            daily_limit: number;
+            /** Daily Used */
+            daily_used: number;
+            /** Monthly Limit */
+            monthly_limit: number;
+            /** Monthly Used */
+            monthly_used: number;
+        };
         /** SearchQuotaView */
         SearchQuotaView: {
             /** Daily Limit */
@@ -11797,11 +12032,9 @@ export interface components {
         };
         /**
          * SearchRouteView
-         * @description Sidecar-visible route. Never includes an API key.
+         * @description Sidecar-visible route. Never includes an API key or a direct URL.
          */
         SearchRouteView: {
-            /** Base Url */
-            base_url?: string | null;
             /**
              * Kind
              * @enum {string}
@@ -11811,11 +12044,9 @@ export interface components {
              * Protocol
              * @enum {string}
              */
-            protocol: "searxng" | "cleversee";
+            protocol: "searxng" | "deepseek";
             /** Provider Id */
             provider_id?: string | null;
-            /** Proxy */
-            proxy: boolean;
         };
         /**
          * SearchSection
@@ -11836,7 +12067,7 @@ export interface components {
              * Engine
              * @enum {string}
              */
-            engine: "platform" | "cleversee" | "searxng";
+            engine: "platform" | "deepseek";
         };
         /** SearchSlotResponse */
         SearchSlotResponse: {
@@ -11847,10 +12078,35 @@ export interface components {
             /** Message */
             message?: string | null;
             /**
+             * Source
+             * @constant
+             */
+            source: "provider";
+            /**
              * Status
              * @enum {string}
              */
             status: "connected" | "needs_reconnect";
+        };
+        /**
+         * SeatStatus
+         * @description Current published seat on the account (设置 · 订阅 / 用量).
+         */
+        SeatStatus: {
+            /** Pending Plan */
+            pending_plan?: ("starter" | "plus" | "flagship") | null;
+            /**
+             * Plan
+             * @enum {string}
+             */
+            plan: "basic" | "starter" | "plus" | "flagship";
+            /**
+             * Store Url
+             * @default
+             */
+            store_url: string;
+            /** Until */
+            until?: string | null;
         };
         /**
          * SendChatMessageRequest
@@ -11903,8 +12159,6 @@ export interface components {
              * @default false
              */
             requires_tools: boolean;
-            /** Table Selection */
-            table_selection?: string[];
         };
         /** SessionListResponse */
         SessionListResponse: {
@@ -12367,141 +12621,6 @@ export interface components {
          * @enum {string}
          */
         SuspensionKind: "ask_user";
-        /** TableColumn */
-        TableColumn: {
-            /** Id */
-            id: string;
-            /** Label */
-            label: string;
-            /** Options */
-            options?: {
-                [key: string]: unknown;
-            }[] | null;
-            /** Type */
-            type: string;
-        };
-        /** TableConversationResponse */
-        TableConversationResponse: {
-            /** Conversation Id */
-            conversation_id: string;
-        };
-        /** TableDetail */
-        TableDetail: {
-            /** Active View Id */
-            active_view_id: string;
-            /** Columns */
-            columns: components["schemas"]["TableColumn"][];
-            /** Conversation Id */
-            conversation_id?: string | null;
-            /** Created At */
-            created_at?: string | null;
-            /** Id */
-            id: string;
-            /** Rows */
-            rows: components["schemas"]["TableRowOut"][];
-            /** Schema Version */
-            schema_version: number;
-            /** Source Path */
-            source_path?: string | null;
-            /** Title */
-            title: string;
-            /** Updated At */
-            updated_at?: string | null;
-            /** Views */
-            views: components["schemas"]["TableViewOut"][];
-        };
-        /** TableOpsRequest */
-        TableOpsRequest: {
-            /**
-             * Confirm
-             * @default false
-             */
-            confirm: boolean;
-            /** Ops */
-            ops: {
-                [key: string]: unknown;
-            }[];
-            /** Schema Baseline */
-            schema_baseline?: number | null;
-        };
-        /** TableOpsResult */
-        TableOpsResult: {
-            /** Batch Id */
-            batch_id?: string | null;
-            /**
-             * Conflict
-             * @default false
-             */
-            conflict: boolean;
-            /** Error */
-            error?: string | null;
-            /** Level */
-            level: string;
-            /**
-             * Needs Confirmation
-             * @default false
-             */
-            needs_confirmation: boolean;
-            /** Ok */
-            ok: boolean;
-            /** Summary */
-            summary: string;
-            table?: components["schemas"]["TableDetail"] | null;
-        };
-        /** TableRowOut */
-        TableRowOut: {
-            /** Cells */
-            cells: {
-                [key: string]: unknown;
-            };
-            /** Id */
-            id: string;
-            /** Position */
-            position: number;
-        };
-        /** TableSummary */
-        TableSummary: {
-            /** Conversation Id */
-            conversation_id?: string | null;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /** Id */
-            id: string;
-            /** Row Count */
-            row_count: number;
-            /** Schema Version */
-            schema_version: number;
-            /** Source Path */
-            source_path?: string | null;
-            /** Title */
-            title: string;
-            /**
-             * Updated At
-             * Format: date-time
-             */
-            updated_at: string;
-        };
-        /** TableViewOut */
-        TableViewOut: {
-            /** Config */
-            config: {
-                [key: string]: unknown;
-            };
-            /** Display Mode */
-            display_mode: string;
-            /** Id */
-            id: string;
-            /**
-             * Is Default
-             * @default false
-             */
-            is_default: boolean;
-            /** Name */
-            name: string;
-        };
         /**
          * TeamBatchInFlight
          * @description 本波 kickoff 编制已派出、尚未全部收工。``worker_count`` 不含 captain / 历史队员。
@@ -12987,6 +13106,9 @@ export interface components {
             assembly_id?: string | null;
             /** Deep Research Auto */
             deep_research_auto?: boolean | null;
+            /** Delegate Mode */
+            delegate_mode?: boolean | null;
+            model_override?: components["schemas"]["ConversationModelOverride"] | null;
             /** Pinned */
             pinned?: boolean | null;
             /** Title */
@@ -13000,11 +13122,6 @@ export interface components {
             who_can_dm?: ("anyone" | "friends") | null;
             /** Who Can Friend */
             who_can_friend?: ("anyone" | "group_members" | "nobody") | null;
-        };
-        /** UpdateDocRequest */
-        UpdateDocRequest: {
-            /** Title */
-            title?: string | null;
         };
         /** UpdateFolderMemberRequest */
         UpdateFolderMemberRequest: {
@@ -13031,12 +13148,11 @@ export interface components {
         };
         /**
          * UpdateLlmModelProfileRequest
-         * @description Partial update. Explicit null on worker/background/vision clears that slot.
+         * @description Partial update. Explicit null on worker clears that slot.
          *
          *     Changing the model does not release a locked recipe.
          */
         UpdateLlmModelProfileRequest: {
-            background?: components["schemas"]["ModelProfileSlot"] | null;
             /**
              * Context Budget
              * @description Shorter context ceiling in tokens. Null = the main model's own window. Omitted = unchanged.
@@ -13051,13 +13167,12 @@ export interface components {
             /** Name */
             name?: string | null;
             /**
-             * Omit Factory Catalog
-             * @description Omit the three factory skill rows on this assembly. Omitted = unchanged.
+             * Omitted Factory Skills
+             * @description Official HOW names to leave off this assembly. Omitted = unchanged. Empty list = every factory row stays.
              */
-            omit_factory_catalog?: boolean | null;
+            omitted_factory_skills?: string[] | null;
             /** Reasoning Effort */
             reasoning_effort?: string | null;
-            vision?: components["schemas"]["ModelProfileSlot"] | null;
             worker?: components["schemas"]["ModelProfileSlot"] | null;
         };
         /**
@@ -13073,6 +13188,20 @@ export interface components {
             base_url?: string | null;
             /** Label */
             label?: string | null;
+            /**
+             * Vendor Id
+             * @description Vendor identity for protocol dispatch. Independent of base_url.
+             */
+            vendor_id?: string | null;
+        };
+        /** UpdateMcpServerRequest */
+        UpdateMcpServerRequest: {
+            /** Bearer */
+            bearer?: string | null;
+            /** Name */
+            name?: string | null;
+            /** Url */
+            url?: string | null;
         };
         /**
          * UpdateMembershipRequest
@@ -13145,11 +13274,6 @@ export interface components {
              */
             username?: string | null;
         };
-        /** UpdateTableRequest */
-        UpdateTableRequest: {
-            /** Title */
-            title?: string | null;
-        };
         /**
          * UpdatesPolicyResponse
          * @description Desktop update policy: kill switch + hard minimum client version.
@@ -13183,6 +13307,66 @@ export interface components {
              * @description Plaintext PAT / OAuth token (AES-256-GCM at rest; never returned).
              */
             token: string;
+        };
+        /**
+         * UsageActivityLine
+         * @description One conversation (or account-level AI 改写) in the usage activity list.
+         */
+        UsageActivityLine: {
+            /** Conversation Id */
+            conversation_id?: string | null;
+            cost: components["schemas"]["CostBreakdown"];
+            /**
+             * Deleted
+             * @default false
+             */
+            deleted: boolean;
+            estimated_cost?: components["schemas"]["CostBreakdown"] | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "conversation" | "assist";
+            /**
+             * Last At
+             * Format: date-time
+             */
+            last_at: string;
+            /** Models */
+            models?: string[];
+            /** Title */
+            title: string;
+            /** Turns */
+            turns: number;
+            usage: components["schemas"]["UsageBreakdown"];
+        };
+        /**
+         * UsageActivityPage
+         * @description Paginated conversation spend (``GET /usage/activity``).
+         *
+         *     ``usage`` / ``cost`` / ``estimated_cost`` are the filtered window totals
+         *     (every matching conversation, not the current page). ``total`` is the
+         *     conversation-row count for that same filter.
+         */
+        UsageActivityPage: {
+            cost: components["schemas"]["CostBreakdown"];
+            /** Data */
+            data: components["schemas"]["UsageActivityLine"][];
+            estimated_cost?: components["schemas"]["CostBreakdown"] | null;
+            /** Model */
+            model?: string | null;
+            /** Page */
+            page: number;
+            /** Page Size */
+            page_size: number;
+            /** Total */
+            total: number;
+            usage: components["schemas"]["UsageBreakdown"];
+            /**
+             * Window
+             * @enum {string}
+             */
+            window: "today" | "7d" | "month";
         };
         /**
          * UsageBreakdown
@@ -13227,15 +13411,19 @@ export interface components {
          * @description Account dashboard payload (``GET /usage/summary``).
          *
          *     Money fields are nano-CNY; ``CostBreakdown.cny_total`` is already yuan.
-         *     API no longer ships an FX rate.
+         *     API no longer ships an FX rate. Activity rows are a separate list endpoint.
          */
         UsageSummary: {
             /** Billing Mode */
             billing_mode: string;
             month: components["schemas"]["UsageWindow"];
+            /** Month By Model */
+            month_by_model?: components["schemas"]["ModelCostLine"][];
             quota: components["schemas"]["QuotaStatus"];
             /** Recent Daily Cost */
             recent_daily_cost: components["schemas"]["DailyCost"][];
+            search: components["schemas"]["SearchQuotaStatus"];
+            seat: components["schemas"]["SeatStatus"];
             today: components["schemas"]["UsageWindow"];
         };
         /**
@@ -13337,6 +13525,29 @@ export interface components {
             type: string;
         };
         /**
+         * VisionAcceptUpdate
+         * @description ``PUT /v1/users/me/models/vision-accept`` — one BYOK catalog declare.
+         */
+        VisionAcceptUpdate: {
+            /**
+             * Accept
+             * @description True = this connected model accepts native image parts. False clears the declare. Platform refs are rejected.
+             */
+            accept: boolean;
+            /**
+             * Ref
+             * @description Catalog identity ``@byok/{provider_id}/{id}``.
+             */
+            ref: string;
+        };
+        /** VisionAcceptView */
+        VisionAcceptView: {
+            /** Accept */
+            accept: boolean;
+            /** Ref */
+            ref: string;
+        };
+        /**
          * WorkspaceBindingResponse
          * @description A conversation's resolved workspace mode + where its binding lives.
          *
@@ -13365,13 +13576,14 @@ export interface components {
          * WorkspaceBoundary
          * @description What this conversation may do. One value, not three axes.
          *
-         *     ``read`` — look only. ``folder`` — change this folder and run inside it
-         *     (default). ``computer`` — folder plus the local Host face. Stored as
-         *     ``permission_axes.boundary``. Checkpoints, breakers, and always-confirm
-         *     commands are orthogonal.
+         *     ``read`` — look only. ``folder`` — change this folder and run inside it.
+         *     ``computer`` — folder plus the local Host face (factory default; web /
+         *     no local engine clamp to folder). ``full`` — skip remaining confirmation
+         *     cards (push / install / attach / MCP); Host only on a local engine.
+         *     Stored as ``permission_axes.boundary``. Breaker DENY / FORCE stay orthogonal.
          * @enum {string}
          */
-        WorkspaceBoundary: "read" | "folder" | "computer";
+        WorkspaceBoundary: "read" | "folder" | "computer" | "full";
         /**
          * WorkspaceEditDoc
          * @description Full text of a cloud workspace file for in-panel editing, plus CAS baseline.
@@ -14741,6 +14953,114 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["PlatformCredentialView"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_redemption_codes_v1_admin_redemption_codes_get: {
+        parameters: {
+            query?: {
+                sku?: ("starter" | "plus" | "flagship") | null;
+                status?: ("unused" | "redeemed" | "void") | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RedemptionCodeListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_redemption_codes_v1_admin_redemption_codes_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateRedemptionCodesRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreateRedemptionCodesResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    void_redemption_code_v1_admin_redemption_codes__code_id__void_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                code_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -20140,336 +20460,6 @@ export interface operations {
             };
         };
     };
-    list_docs_v1_docs_get: {
-        parameters: {
-            query?: {
-                folder_id?: string | null;
-            };
-            header?: {
-                authorization?: string | null;
-            };
-            path?: never;
-            cookie?: {
-                access_token?: string | null;
-            };
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DocSummary"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    create_doc_v1_docs_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-            };
-            path?: never;
-            cookie?: {
-                access_token?: string | null;
-            };
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CreateDocRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DocSummary"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_doc_v1_docs__doc_id__get: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-            };
-            path: {
-                doc_id: string;
-            };
-            cookie?: {
-                access_token?: string | null;
-            };
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DocDetail"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    delete_doc_v1_docs__doc_id__delete: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-            };
-            path: {
-                doc_id: string;
-            };
-            cookie?: {
-                access_token?: string | null;
-            };
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["StatusResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    update_doc_v1_docs__doc_id__patch: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-            };
-            path: {
-                doc_id: string;
-            };
-            cookie?: {
-                access_token?: string | null;
-            };
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["UpdateDocRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DocSummary"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    write_doc_body_v1_docs__doc_id__body_put: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-            };
-            path: {
-                doc_id: string;
-            };
-            cookie?: {
-                access_token?: string | null;
-            };
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["DocBodyWriteRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DocWriteResult"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_doc_shares_v1_docs__doc_id__shares_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-            };
-            path: {
-                doc_id: string;
-            };
-            cookie?: {
-                access_token?: string | null;
-            };
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ShareListResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    publish_doc_share_v1_docs__doc_id__shares_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-            };
-            path: {
-                doc_id: string;
-            };
-            cookie?: {
-                access_token?: string | null;
-            };
-        };
-        requestBody?: {
-            content: {
-                "application/json": components["schemas"]["CreateShareRequest"] | null;
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ShareSummary"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    revoke_doc_share_v1_docs__doc_id__shares__share_id__delete: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-            };
-            path: {
-                doc_id: string;
-                share_id: string;
-            };
-            cookie?: {
-                access_token?: string | null;
-            };
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["StatusResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     list_documents_v1_documents_get: {
         parameters: {
             query?: {
@@ -21487,41 +21477,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    inference_search_connection_failure_v1_inference_search_connection_failure_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SearchConnectionFailureRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["StatusResponse"];
                 };
             };
             /** @description Validation Error */
@@ -22932,6 +22887,43 @@ export interface operations {
             };
         };
     };
+    redeem_seat_v1_seats_redeem_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RedeemSeatRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SeatStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_skill_catalog_v1_skill_catalog_get: {
         parameters: {
             query?: {
@@ -23291,82 +23283,13 @@ export interface operations {
             };
         };
     };
-    list_tables_v1_tables_get: {
+    get_usage_activity_v1_usage_activity_get: {
         parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-            };
-            path?: never;
-            cookie?: {
-                access_token?: string | null;
-            };
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TableSummary"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    create_table_v1_tables_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-            };
-            path?: never;
-            cookie?: {
-                access_token?: string | null;
-            };
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CreateTableRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TableDetail"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_table_by_source_v1_tables_by_source_get: {
-        parameters: {
-            query: {
-                path: string;
-                folder_id?: string | null;
-                conversation_id?: string | null;
+            query?: {
+                window?: "today" | "7d" | "month";
+                model?: string | null;
+                page?: number;
+                page_size?: number;
             };
             header?: {
                 authorization?: string | null;
@@ -23384,190 +23307,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TableSummary"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_table_v1_tables__table_id__get: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-            };
-            path: {
-                table_id: string;
-            };
-            cookie?: {
-                access_token?: string | null;
-            };
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TableDetail"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    delete_table_v1_tables__table_id__delete: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-            };
-            path: {
-                table_id: string;
-            };
-            cookie?: {
-                access_token?: string | null;
-            };
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["StatusResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    update_table_v1_tables__table_id__patch: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-            };
-            path: {
-                table_id: string;
-            };
-            cookie?: {
-                access_token?: string | null;
-            };
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["UpdateTableRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TableSummary"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    ensure_table_conversation_v1_tables__table_id__conversation_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-            };
-            path: {
-                table_id: string;
-            };
-            cookie?: {
-                access_token?: string | null;
-            };
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TableConversationResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    apply_table_ops_v1_tables__table_id__ops_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-            };
-            path: {
-                table_id: string;
-            };
-            cookie?: {
-                access_token?: string | null;
-            };
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["TableOpsRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TableOpsResult"];
+                    "application/json": components["schemas"]["UsageActivityPage"];
                 };
             };
             /** @description Validation Error */
@@ -24318,6 +24058,257 @@ export interface operations {
             };
         };
     };
+    list_mcp_servers_v1_users_me_mcp_servers_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["McpServerListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_mcp_server_v1_users_me_mcp_servers_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateMcpServerRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["McpServerView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mcp_oauth_callback_v1_users_me_mcp_servers_oauth_callback_get: {
+        parameters: {
+            query?: {
+                code?: string;
+                state?: string;
+                error?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_mcp_server_v1_users_me_mcp_servers__server_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                server_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StatusResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_mcp_server_v1_users_me_mcp_servers__server_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                server_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateMcpServerRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["McpServerView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_mcp_oauth_v1_users_me_mcp_servers__server_id__oauth_start_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                server_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["McpOAuthStartRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["McpOAuthStartResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    test_mcp_server_v1_users_me_mcp_servers__server_id__test_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                server_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["McpServerTestResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_user_models_v1_users_me_models_get: {
         parameters: {
             query?: never;
@@ -24338,6 +24329,154 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ModelCatalogResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_composer_model_v1_users_me_models_composer_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConversationModelOverride"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationModelOverride"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_model_display_name_v1_users_me_models_display_names_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ModelDisplayNameUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelDisplayNameView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_hidden_model_refs_v1_users_me_models_hidden_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HiddenModelRefsUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HiddenModelRefsView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_vision_accept_v1_users_me_models_vision_accept_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VisionAcceptUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VisionAcceptView"];
                 };
             };
             /** @description Validation Error */
@@ -24384,44 +24523,7 @@ export interface operations {
             };
         };
     };
-    connect_cleversee_v1_users_me_search_connection_cleversee_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-            };
-            path?: never;
-            cookie?: {
-                access_token?: string | null;
-            };
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ConnectCleverSeeRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SearchConnectionResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    disconnect_cleversee_v1_users_me_search_connection_cleversee_delete: {
+    connect_deepseek_v1_users_me_search_connection_deepseek_post: {
         parameters: {
             query?: never;
             header?: {
@@ -24454,44 +24556,7 @@ export interface operations {
             };
         };
     };
-    connect_searxng_v1_users_me_search_connection_searxng_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-            };
-            path?: never;
-            cookie?: {
-                access_token?: string | null;
-            };
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ConnectSearxngRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SearchConnectionResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    disconnect_searxng_v1_users_me_search_connection_searxng_delete: {
+    disconnect_deepseek_v1_users_me_search_connection_deepseek_delete: {
         parameters: {
             query?: never;
             header?: {

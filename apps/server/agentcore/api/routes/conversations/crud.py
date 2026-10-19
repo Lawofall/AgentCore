@@ -200,7 +200,7 @@ async def create_conversation(
             )
             if access is None or not access.can_write:
                 raise AuthorizationError("只读成员不能在此文件夹新建对话")
-        # Session permission axes: explicit body wins; else seed from user recipe default.
+        # Session permission axes: explicit body wins; else last-picked (computer if none).
         if body.permission_axes is not None:
             axes = body.permission_axes.to_axes().to_dict()
         else:
@@ -213,6 +213,17 @@ async def create_conversation(
             pin = await profile_svc.ensure_profile_usable(user.user_id, body.assembly_id)
         else:
             pin = await profile_svc.snapshot_default_profile_id(user.user_id)
+        override_payload = None
+        if "model_override" in body.model_fields_set and body.model_override is not None:
+            override_payload = await profile_svc.normalize_conversation_override(
+                user.user_id, body.model_override
+            )
+            from agentcore.db.repositories import UserRepository
+            from agentcore.llm.model_visibility import byok_refs_from_override
+
+            await UserRepository(repo._session).enable_picker_refs(
+                user.user_id, byok_refs_from_override(override_payload)
+            )
         # Project chats inherit the project's workspace — never write session-level
         # local_* / container columns. 裸聊 keeps desktop local-first intent.
         container_root = body.local_container_root_id if body.folder_id is None else None
@@ -224,6 +235,8 @@ async def create_conversation(
                 local_container_root_id=container_root,
                 permission_axes=axes,
                 assembly_id=pin,
+                model_override=override_payload,
+                delegate_mode=body.delegate_mode,
             )
         else:
             conv, created = await repo.create_idempotent(
@@ -234,6 +247,8 @@ async def create_conversation(
                 local_container_root_id=container_root,
                 permission_axes=axes,
                 assembly_id=pin,
+                model_override=override_payload,
+                delegate_mode=body.delegate_mode,
             )
 
     # The create itself was invisible in production: the 8 duplicate-conversation
@@ -303,6 +318,12 @@ async def duplicate_conversation(
         permission_axes=dict(src.permission_axes or {}),
         deep_research_auto=bool(getattr(src, "deep_research_auto", False)),
         assembly_id=src_pin,
+        model_override=(
+            dict(src.model_override)
+            if isinstance(getattr(src, "model_override", None), dict)
+            else None
+        ),
+        delegate_mode=bool(getattr(src, "delegate_mode", False)),
     )
     count = await msg_repo.copy_through(
         conversation_id, new_conv.id, until_message_id=body.until_message_id
@@ -635,10 +656,10 @@ async def set_permission_axes(
     user: AuthUser,
     repo: ConversationRepository = Depends(get_conversation_repo),
 ):
-    """Switch the conversation boundary (升到「这台电脑」的确认由客户端负责).
+    """Switch the conversation boundary (升到「这台电脑」/「完全权限」的确认由客户端负责).
 
     Takes effect on the next turn / durable resume (gate is built at turn entry).
-    Body is ``{"boundary": "read" | "folder" | "computer"}``.
+    Body is ``{"boundary": "read" | "folder" | "computer" | "full"}``.
     """
     conv = await repo.get_by_id(conversation_id, user_id=user.user_id)
     if not conv:
@@ -688,6 +709,8 @@ async def update_conversation(
         "title",
         "deep_research_auto",
         "assembly_id",
+        "model_override",
+        "delegate_mode",
     }
     if shared_write:
         await _require_conversation_write(conversation_id, user.user_id, repo._session)
@@ -706,6 +729,12 @@ async def update_conversation(
         )
         if updated:
             conv = updated
+    if "delegate_mode" in fields and body.delegate_mode is not None:
+        updated = await repo.set_delegate_mode(
+            conversation_id, body.delegate_mode, user_id=user.user_id
+        )
+        if updated:
+            conv = updated
     # 换这场用的装配。显式 null 再钉当时星标。
     if "assembly_id" in fields:
         from agentcore.llm.model_profiles import LlmModelProfileService
@@ -719,6 +748,25 @@ async def update_conversation(
                 user.user_id, profile_id
             )
         updated = await repo.set_model_profile(conversation_id, profile_id, user_id=user.user_id)
+        if updated:
+            conv = updated
+    if "model_override" in fields:
+        from agentcore.llm.model_profiles import LlmModelProfileService
+
+        payload = None
+        if body.model_override is not None:
+            payload = await LlmModelProfileService(
+                repo._session
+            ).normalize_conversation_override(user.user_id, body.model_override)
+            from agentcore.db.repositories import UserRepository
+            from agentcore.llm.model_visibility import byok_refs_from_override
+
+            await UserRepository(repo._session).enable_picker_refs(
+                user.user_id, byok_refs_from_override(payload)
+            )
+        updated = await repo.set_model_override(
+            conversation_id, payload, user_id=user.user_id
+        )
         if updated:
             conv = updated
     return await _orm_summary(repo, user.user_id, conv)

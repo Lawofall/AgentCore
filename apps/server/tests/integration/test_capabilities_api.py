@@ -5,6 +5,11 @@ worker mutation, annotated with reach), the system Skills (summary + body), and 
 CEO / worker system-prompt templates — the data the desktop 能力图鉴 renders.
 """
 
+from agentcore.tools.builtin.delegate.schema import (
+    DELEGATE_DESCRIPTION,
+    DELEGATE_DESCRIPTION_PREFER,
+    NESTED_DELEGATE_DESCRIPTION,
+)
 from tests.integration.conftest import register_and_login
 
 
@@ -54,6 +59,12 @@ async def test_capabilities_returns_full_catalog(client):
     assert "summary" in sample
     assert sample["blurb"]
     assert sample["blurb"] != sample["summary"]
+    delegate = tools["delegate"]
+    assert delegate["description"] == DELEGATE_DESCRIPTION
+    assert delegate["description_prefer"] == DELEGATE_DESCRIPTION_PREFER
+    assert NESTED_DELEGATE_DESCRIPTION not in delegate["description"]
+    assert NESTED_DELEGATE_DESCRIPTION not in delegate["description_prefer"]
+    assert tools["web_search"]["description_prefer"] == ""
 
 
 async def test_capabilities_lists_system_skills_with_body(client):

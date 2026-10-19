@@ -72,6 +72,7 @@ from .observe import (
     table_next,
 )
 from .path_hints import enrich_missing_path_message
+from .prepare_path import TOOL_PATH_DESCRIPTION
 
 # Safety cap for one read view (disk original text). Distinct from
 # retired sliding-clear ``min_chars`` and worker token ceilings — do not reuse those.
@@ -456,7 +457,7 @@ class FileReadTool:
                     "file_path": {
                         "type": "string",
                         "description": (
-                            "工作区相对 POSIX（`.`=根）。"
+                            f"{TOOL_PATH_DESCRIPTION}"
                             "Office/PDF 抽文本；表格默认不抽。"
                         ),
                     },
@@ -910,16 +911,13 @@ class FileListTool:
     def schema(self) -> ToolSchema:
         return ToolSchema(
             name="file_list",
-            description=(
-                "列出目录当前层。"
-                "已挂载区外用 `external/<别名>/`。"
-            ),
+            description="列出目录当前层。",
             parameters={
                 "type": "object",
                 "properties": {
                     "directory": {
                         "type": "string",
-                        "description": "工作区相对 POSIX。",
+                        "description": TOOL_PATH_DESCRIPTION,
                         "default": ".",
                     },
                 },

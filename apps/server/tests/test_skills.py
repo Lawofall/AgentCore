@@ -484,6 +484,7 @@ def test_skill_layer_keys_and_pointers():
     """一层一处：键在所有者，不在别层。不钉目录摘要、不钉教学中文。"""
     from agentcore.tools.builtin.delegate.schema import (
         DELEGATE_DESCRIPTION,
+        DELEGATE_DESCRIPTION_PREFER,
         DELEGATE_PARAMETERS,
     )
 
@@ -491,6 +492,7 @@ def test_skill_layer_keys_and_pointers():
     top_props = DELEGATE_PARAMETERS["properties"]
 
     assert "target_folder_id" not in DELEGATE_DESCRIPTION
+    assert "target_folder_id" not in DELEGATE_DESCRIPTION_PREFER
     assert "depends_on" in task_props
     assert "playbook" not in top_props
     assert "playbook_args" not in top_props

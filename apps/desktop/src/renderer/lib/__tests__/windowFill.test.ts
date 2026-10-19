@@ -55,6 +55,7 @@ describe("catalogContextLength", () => {
       vendor: "DeepSeek",
       ref: "@platform/deepseek-v4-flash",
       available: true,
+      custom: false,
       context_length: 1_000_000,
     },
     {
@@ -64,6 +65,7 @@ describe("catalogContextLength", () => {
       vendor: "OpenCode",
       ref: "@platform/opencode-zen-free",
       available: true,
+      custom: false,
       context_length: 200_000,
     },
   ];

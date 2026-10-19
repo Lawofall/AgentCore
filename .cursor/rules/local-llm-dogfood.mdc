@@ -12,7 +12,7 @@ alwaysApply: false
 - **症状**：eval / 探针报缺 key、或踩过期 / 线上池的 `PLATFORM_API_KEY`。
 - **原因**：clone 默认应走测试账号自己的 Key，不是平台 key；同构档也必须用**本机独立**平台 Key。
 - **对策（默认档）**：`dev` / `devpassword`（`DEV_USERNAME` / `DEV_PASSWORD` 可覆盖）+ 账号已配 **OpenCode Zen**（如 `deepseek-v4-flash-free`）；先 `uv run python scripts/seed_dev_user.py`，再设置页或 `scripts/set_dev_llm_key.py`。
-- **对策（同构档）**：本机 `.env` `BILLING_MODE=platform` + 独立 `PLATFORM_*`（Go + `deepseek-v4-flash`）+ 重启 api；`uv run python scripts/set_quota.py dev --unlimited`。禁止复制生产池 Key。
+- **对策（同构档）**：本机 `.env` `BILLING_MODE=platform` + 独立 `PLATFORM_*`（任意兼容上游 + 将写入 allowlist 的 id）+ 重启 api；`uv run python scripts/set_quota.py dev --unlimited`。禁止复制生产池 Key。现网对齐的端点与 id 不在公开规则。
 
 ## 改 prompt / runtime 后仍像旧核
 

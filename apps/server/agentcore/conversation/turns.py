@@ -9,7 +9,6 @@ from agentcore.conversation.common import (
     preview,
     resolve_folder_local_binding,
     resolve_local_binding,
-    resolve_permission_axes,
     resolve_profile_set,
     resolve_turn_file_workspace,
     schedule_title_generation,
@@ -42,7 +41,6 @@ from agentcore.db.base import async_session_factory
 from agentcore.db.repositories import (
     ConversationRepository,
     MessageRepository,
-    TableRepository,
 )
 from agentcore.llm.resolve import LLMCredentials, resolve_turn_model
 from agentcore.runtime.checkpoints import CheckpointResponse
@@ -63,6 +61,7 @@ from agentcore.runtime.turn.ceo_continue import (
     restore_ceo_continue_lock,
 )
 from agentcore.runtime.turn.runs import turn_runs
+from agentcore.runtime.turn.snapshot import ConversationSnapshot
 from agentcore.workspace.attachments import persist_attachments
 
 logger = get_logger(__name__)
@@ -92,7 +91,6 @@ async def stream_chat(
     llm_supports_tools: bool | None = None,
     x_client_platform: str | None = None,
     agent_mentions: list[dict] | None = None,
-    table_selection: list[str] | None = None,
     existing_user_message_id: str | None = None,
 ) -> None:
     """Main entry: persist user message, run pipeline, persist assistant reply.
@@ -121,14 +119,7 @@ async def stream_chat(
             else:
                 local_binding = await resolve_local_binding(session, conv)
             profile_set = await resolve_profile_set(session, conv, user_id)
-            permission_axes = await resolve_permission_axes(session, conversation_id)
-
-            # If this conversation is a table's dedicated thread, hand its table id
-            # to the pipeline so ``<表格>`` facts can render.
-            table = await TableRepository(session).get_by_conversation_id(
-                conversation_id, user_id=user_id
-            )
-            table_id = table.id if table else None
+            snapshot = ConversationSnapshot.from_row(conv)
 
         backend = await build_turn_backend(
             user_id=user_id,
@@ -186,16 +177,13 @@ async def stream_chat(
                     conversation_id=conversation_id,
                     user_message=user_message,
                     user_id=user_id,
-                    folder_id=folder_id,
+                    conversation=snapshot,
                     sink=sink,
                     history=drop_trailing_user_turn(history),
                     attachments=resident_attachments,
                     backend=backend,
                     llm_credentials=llm_credentials,
                     profile_set=profile_set,
-                    permission_axes=permission_axes,
-                    table_id=table_id,
-                    table_selection=table_selection,
                     llm_supports_tools=llm_supports_tools,
                     x_client_platform=x_client_platform,
                     agent_mentions=agent_mentions,
@@ -319,11 +307,7 @@ async def regenerate_chat(
             else:
                 local_binding = await resolve_local_binding(session, conv)
             profile_set = await resolve_profile_set(session, conv, user_id)
-            permission_axes = await resolve_permission_axes(session, conversation_id)
-            table = await TableRepository(session).get_by_conversation_id(
-                conversation_id, user_id=user_id
-            )
-            table_id = table.id if table else None
+            snapshot = ConversationSnapshot.from_row(conv)
 
             if (
                 edited_content is not None
@@ -365,15 +349,13 @@ async def regenerate_chat(
             conversation_id=conversation_id,
             user_message=user_message,
             user_id=user_id,
-            folder_id=folder_id,
+            conversation=snapshot,
             sink=sink,
             history=drop_trailing_user_turn(history),
             attachments=None,
             backend=backend,
             llm_credentials=llm_credentials,
             profile_set=profile_set,
-            permission_axes=permission_axes,
-            table_id=table_id,
             llm_supports_tools=llm_supports_tools,
             agent_mentions=stored_mentions or None,
         )
@@ -453,9 +435,9 @@ async def resume_chat(
             else:
                 local_binding = await resolve_local_binding(session, conv)
             profile_set = await resolve_profile_set(session, conv, user_id)
-            # Conversation permission mode (not frozen into the frame): a mid-pause
+            # Current session snapshot (not frozen into the frame): a mid-pause
             # switch applies to the resumed continuation.
-            permission_axes = await resolve_permission_axes(session, conversation_id)
+            snapshot = ConversationSnapshot.from_row(conv)
 
         await compact_before_turn(
             conversation_id,
@@ -464,10 +446,6 @@ async def resume_chat(
 
         async with async_session_factory() as session:
             history = await load_chat_context(session, conversation_id)
-            table = await TableRepository(session).get_by_conversation_id(
-                conversation_id, user_id=user_id
-            )
-            table_id = table.id if table else None
 
         backend = await build_turn_backend(
             user_id=user_id,
@@ -564,7 +542,6 @@ async def resume_chat(
                             sink=sink,
                             backend=backend,
                             history=drop_trailing_user_turn(history),
-                            table_id=table_id,
                             llm_credentials=llm_credentials,
                             profile_set=profile_set,
                             session_saver=session_saver,
@@ -572,7 +549,7 @@ async def resume_chat(
                             suspension_saver=suspension_saver,
                             suspension_deleter=suspension_deleter,
                             llm_supports_tools=llm_supports_tools,
-                            permission_axes=permission_axes,
+                            conversation=snapshot,
                             x_client_platform=x_client_platform,
                         )
                 except asyncio.CancelledError:
@@ -801,7 +778,7 @@ async def continue_chat(
             else:
                 local_binding = await resolve_local_binding(session, conv)
             profile_set = await resolve_profile_set(session, conv, user_id)
-            permission_axes = await resolve_permission_axes(session, conversation_id)
+            snapshot = ConversationSnapshot.from_row(conv)
             entries = await TurnJournalRepository(session).load(message_id)
 
         if not entries:
@@ -819,10 +796,6 @@ async def continue_chat(
 
         async with async_session_factory() as session:
             history = await load_chat_context(session, conversation_id)
-            table = await TableRepository(session).get_by_conversation_id(
-                conversation_id, user_id=user_id
-            )
-            table_id = table.id if table else None
 
         backend = await build_turn_backend(
             user_id=user_id,
@@ -895,7 +868,6 @@ async def continue_chat(
                         sink=sink,
                         backend=backend,
                         history=drop_trailing_user_turn(history) if history else None,
-                        table_id=table_id,
                         folder_id=ws_folder_id,
                         llm_credentials=llm_credentials,
                         profile_set=profile_set,
@@ -904,7 +876,7 @@ async def continue_chat(
                         suspension_saver=suspension_saver,
                         suspension_deleter=suspension_deleter,
                         llm_supports_tools=llm_supports_tools,
-                        permission_axes=permission_axes,
+                        conversation=snapshot,
                         trace_id=trace_id,
                     )
                 except asyncio.CancelledError:

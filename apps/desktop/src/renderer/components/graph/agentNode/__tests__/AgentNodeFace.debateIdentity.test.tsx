@@ -94,4 +94,12 @@ describe("AgentNodeCardFace · debate identity", () => {
     expect(screen.getByText(/2\.1k 字/)).toBeTruthy();
     expect(screen.queryByText("▋")).toBeNull();
   });
+
+  it("keeps the billed model id in peek copy", () => {
+    const d = debateNode({
+      model: "deepseek-v4.1-flash",
+    });
+    const p = buildAgentNodePresentation(d);
+    expect(p.modelText).toBe("deepseek-v4.1-flash");
+  });
 });

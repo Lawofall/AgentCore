@@ -1,15 +1,21 @@
-"""BYOK vendor presets — catalog seed + off-protocol ids.
+"""BYOK vendor presets — catalog seed + off-protocol kind.
 
 Table source: ``byok_provider_presets.json`` next to this module (desktop form
-loads the same file). Catalog merge matches providers by normalized ``base_url``;
-unknown endpoints get no preset rows.
+loads the same file). Catalog merge matches providers by saved ``vendor_id``;
+``custom`` vendors get discovery only. URL matching is only for filling a
+preset's default endpoint and OpenCode session headers.
 
-Off-protocol model ids live in :data:`BYOK_OFF_PROTOCOL_MODELS` — the single
-exact-id map for OpenCode seed exclusion, BYOK ``/responses`` catalog
-unavailability, **and** platform-allowlist catalog unavailability.
-``/messages`` ids stay in the map (dispatch) but the OpenCode BYOK picker
-lists them as selectable. Name kept (historical); both origins call
-:func:`off_protocol_kind`.
+:func:`off_protocol_kind` is the single lookup for OpenCode seed exclusion,
+platform-allowlist greying, and protocol family. Family rules cover OpenCode
+SKU churn (``claude-*`` → ``/messages``; ``gpt-`` / ``grok-`` / ``muse-*`` →
+``/responses``; Qwen 3.x plus/max → ``/messages``).
+:data:`BYOK_OFF_PROTOCOL_MODELS` is exact overrides only (ids that are not a
+family, e.g. ``union-alpha``). Bare ids only — a ``provider/`` slug never
+matches a family (OpenRouter ``anthropic/…`` stays chat/completions). Dispatch
+uses saved vendor identity, not ``base_url``: OpenAI vendor always
+``/responses``; OpenCode lists ``/messages`` and ``/responses`` as selectable.
+Platform greys unpriced off-protocol ids; priced allowlist rows stay
+Chat Completions selectable.
 """
 
 from __future__ import annotations
@@ -20,6 +26,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Literal, cast
+from urllib.parse import urlparse
 
 OffProtocolKind = Literal["openai_responses", "anthropic_messages"]
 
@@ -58,41 +65,121 @@ def _off_protocol_from_raw(raw: Mapping[str, Any]) -> dict[str, OffProtocolKind]
 
 _RAW = _load_raw()
 
-# Exact ids only — never substring / regex. Shared by BYOK (OpenCode Go/Zen
-# discovery) and platform (operator allowlist). OpenCode ``GET /models`` still
-# returns these; they stay out of chat/completions seeds. ``/responses`` ids
-# are listed-but-unselectable on OpenCode BYOK; ``/messages`` ids are
-# selectable there. Platform greys both kinds. Not dropped at discovery /
-# allowlist.
+# Exact overrides only. Family rules in :func:`off_protocol_kind` are the
+# default; a row here wins when the id is not a family (or must disagree).
 BYOK_OFF_PROTOCOL_MODELS: Mapping[str, OffProtocolKind] = MappingProxyType(
     _off_protocol_from_raw(_RAW)
 )
 
+_FAMILY_RESPONSES_PREFIXES = ("gpt-", "grok-", "muse-")
+
+
+def _family_off_protocol(model_id: str) -> OffProtocolKind | None:
+    """Bare-id family → protocol. Slugs with ``/`` never match."""
+    key = (model_id or "").strip().lower()
+    if not key or "/" in key:
+        return None
+    if key.startswith("claude-"):
+        return "anthropic_messages"
+    if key.startswith(_FAMILY_RESPONSES_PREFIXES):
+        return "openai_responses"
+    if key.startswith("qwen3.") and key.endswith(("-plus", "-max")):
+        return "anthropic_messages"
+    return None
+
 
 def off_protocol_kind(model_id: str) -> OffProtocolKind | None:
-    """Required upstream protocol if ``model_id`` is a known off-protocol id.
+    """Required upstream protocol for ``model_id``, or None for chat/completions.
 
-    Origin-agnostic lookup (BYOK OpenCode rows and platform allowlist rows).
+    Exact JSON overrides win; otherwise a bare-id family. Origin-agnostic
+    (BYOK OpenCode rows and platform allowlist). Dispatch still gates
+    ``/messages`` on the OpenCode endpoint.
     """
-    return BYOK_OFF_PROTOCOL_MODELS.get((model_id or "").strip())
+    mid = (model_id or "").strip()
+    if not mid:
+        return None
+    exact = BYOK_OFF_PROTOCOL_MODELS.get(mid)
+    if exact is not None:
+        return exact
+    return _family_off_protocol(mid)
 
 
-def uses_anthropic_messages_wire(model_id: str, base_url: str) -> bool:
+BYOK_CUSTOM_VENDOR_ID = "custom"
+
+
+def is_opencode_vendor(vendor_id: str) -> bool:
+    """True when this 服务商 was saved as OpenCode Zen or Go."""
+    return (vendor_id or "").strip() in _OPENCODE_PRESET_IDS
+
+
+def uses_anthropic_messages_wire(model_id: str, vendor_id: str) -> bool:
     """True when this OpenCode leaf must POST ``/messages`` for ``model_id``.
 
-    OpenCode BYOK catalog lists the same ids as selectable. Dispatch uses this
-    so a Zen/Go key can serve Flash via ``/chat/completions`` and Claude via
-    ``/messages``. Non-OpenCode relays with a coinciding id stay on chat
-    completions (OpenRouter Claude uses ``anthropic/…`` slugs, not these ids).
+    Protocol follows vendor identity, not the stored URL. OpenCode BYOK lists
+    the same ids as selectable. Dispatch uses this so a Zen/Go key can serve
+    Flash via ``/chat/completions`` and Claude via ``/messages``. OpenRouter
+    and custom vendors stay on chat completions even if the id coincides.
     """
     if off_protocol_kind(model_id) != "anthropic_messages":
         return False
-    return is_opencode_byok_endpoint(base_url)
+    return is_opencode_vendor(vendor_id)
+
+
+def uses_openai_responses_wire(model_id: str, vendor_id: str) -> bool:
+    """True when this leaf must POST ``/responses`` for ``model_id``.
+
+    Protocol follows vendor identity (LiteLLM ``openai/`` + ``api_base``), not
+    whether ``base_url`` equals ``api.openai.com``. OpenAI vendor: every chat
+    turn. OpenCode Zen/Go: the ``gpt-`` / ``grok-`` / ``muse-*`` family.
+    OpenRouter and custom vendors stay on chat completions.
+    """
+    vid = (vendor_id or "").strip()
+    if vid == "openai":
+        return True
+    if off_protocol_kind(model_id) != "openai_responses":
+        return False
+    return is_opencode_vendor(vid)
+
+
+_OPENAI_NON_CHAT_MARKERS = (
+    "-transcribe",
+    "-tts",
+    "-audio",
+    "-realtime",
+    "-search-preview",
+    "gpt-image",
+    "chatgpt-image",
+)
+
+
+def is_openai_chat_model_id(model_id: str) -> bool:
+    """True for official OpenAI chat/reasoning ids (drop whisper / TTS / image)."""
+    key = (model_id or "").strip().lower()
+    if not key or "/" in key:
+        return False
+    if key.startswith(
+        (
+            "whisper",
+            "tts-",
+            "dall-e",
+            "text-embedding",
+            "davinci",
+            "babbage",
+            "omni-moderation",
+            "sora",
+        )
+    ):
+        return False
+    if any(marker in key for marker in _OPENAI_NON_CHAT_MARKERS):
+        return False
+    if key.startswith(("gpt-", "chatgpt-")):
+        return True
+    return key in {"o1", "o3", "o4"} or key.startswith(("o1-", "o3-", "o4-"))
 
 
 def chat_completions_seed(*model_ids: str) -> tuple[str, ...]:
-    """Drop known off-protocol ids from a seed. OpenCode Go/Zen seeds use this."""
-    return tuple(mid for mid in model_ids if mid not in BYOK_OFF_PROTOCOL_MODELS)
+    """Drop off-protocol ids from a seed. OpenCode Go/Zen seeds use this."""
+    return tuple(mid for mid in model_ids if off_protocol_kind(mid) is None)
 
 
 @dataclass(frozen=True)
@@ -151,6 +238,24 @@ def _presets_from_raw(raw: Mapping[str, Any]) -> tuple[ByokProviderPreset, ...]:
 
 BYOK_PROVIDER_PRESETS: tuple[ByokProviderPreset, ...] = _presets_from_raw(_RAW)
 
+_PRESET_BY_ID: dict[str, ByokProviderPreset] = {
+    preset.id: preset for preset in BYOK_PROVIDER_PRESETS
+}
+BYOK_VENDOR_IDS: frozenset[str] = frozenset(_PRESET_BY_ID) | {BYOK_CUSTOM_VENDOR_ID}
+
+
+def parse_vendor_id(raw: str | None) -> str | None:
+    """Canonical vendor id, or None when missing / unknown."""
+    vid = (raw or "").strip()
+    if vid in BYOK_VENDOR_IDS:
+        return vid
+    return None
+
+
+def preset_for_vendor(vendor_id: str) -> ByokProviderPreset | None:
+    """Preset row for a saved vendor id. ``custom`` and unknowns are None."""
+    return _PRESET_BY_ID.get((vendor_id or "").strip())
+
 
 def normalize_byok_base_url(url: str) -> str:
     """Normalize base_url for preset matching (case, trailing slashes)."""
@@ -158,6 +263,31 @@ def normalize_byok_base_url(url: str) -> str:
     while normalized.endswith("/"):
         normalized = normalized[:-1]
     return normalized
+
+
+def canonicalize_byok_api_root(url: str) -> str:
+    """Turn a console origin into the OpenAI-compat API root.
+
+    Relays often copy ``https://host`` (the website). Outbound calls are
+    ``{root}/models`` and ``{root}/chat/completions``, so an empty path is
+    stored and used as ``{origin}/v1``. Preset official endpoints (DeepSeek
+    origin, Ark ``/api/v3``, …) stay as-is. A path that is already present
+    is not rewritten. Trailing slashes are stripped. This is the write /
+    outbound rule — not a dual-path retry.
+    """
+    stripped = url.strip()
+    if not stripped:
+        return stripped
+    while stripped.endswith("/"):
+        stripped = stripped[:-1]
+        if not stripped:
+            return url.strip()
+    if match_byok_provider_preset(stripped) is not None:
+        return stripped
+    parsed = urlparse(stripped)
+    if parsed.scheme and parsed.netloc and parsed.path in ("", "/"):
+        return f"{stripped}/v1"
+    return stripped
 
 
 def _preset_base_urls(preset: ByokProviderPreset) -> tuple[str, ...]:
@@ -200,35 +330,31 @@ def is_opencode_byok_endpoint(base_url: str) -> bool:
     return preset is not None and preset.id in ("opencode_go", "opencode_zen")
 
 
-def seed_model_for_base_url(base_url: str) -> str:
-    """Preset default model for this endpoint, or empty when unmatched/custom.
-
-    Used to seed the first「模型组合」on provider create. Not a user-facing field
-    and not a connectivity-test model.
-    """
-    preset = match_byok_provider_preset(base_url)
+def seed_model_for_vendor(vendor_id: str) -> str:
+    """Preset default model for this vendor, or empty when custom/unknown."""
+    preset = preset_for_vendor(vendor_id)
     if preset is None:
         return ""
     return (preset.default_model or "").strip()
 
 
-def preset_models_for_base_url(base_url: str) -> tuple[str, ...]:
-    """Model ids from the matching vendor preset, or empty when unknown/custom.
+def preset_models_for_vendor(vendor_id: str) -> tuple[str, ...]:
+    """Model ids from this vendor's preset, or empty when custom/unknown.
 
     OpenCode Go/Zen seeds are filtered through :func:`chat_completions_seed` so a
     leaked off-protocol id in the tuple cannot re-enter the catalog via presets.
     """
-    preset = match_byok_provider_preset(base_url)
+    preset = preset_for_vendor(vendor_id)
     if preset is None:
         return ()
-    if is_opencode_byok_endpoint(base_url):
+    if is_opencode_vendor(vendor_id):
         return chat_completions_seed(*preset.models)
     return preset.models
 
 
-def hide_from_picker_ids(base_url: str) -> frozenset[str]:
-    """Exact ids a matched preset omits from new picker rows (empty if unmatched)."""
-    preset = match_byok_provider_preset(base_url)
+def hide_from_picker_ids_for_vendor(vendor_id: str) -> frozenset[str]:
+    """Exact ids this vendor omits from new picker rows (empty if custom)."""
+    preset = preset_for_vendor(vendor_id)
     if preset is None:
         return frozenset()
     return frozenset(preset.hide_from_picker)

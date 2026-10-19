@@ -254,8 +254,8 @@ async def edit_queued_item(
     Holds the queue mutation lock across the user-row write and the memory
     update. The row write must land first; if it does not, memory stays.
     Already started / unknown id / missing user row → None.
-    ``queue_id``, ``user_message_id``, order, credentials, ``interjection_id``,
-    and ``table_selection`` are left as they were at enqueue.
+    ``queue_id``, ``user_message_id``, order, credentials, and ``interjection_id``
+    are left as they were at enqueue.
     """
     from agentcore.conversation.midflight_persist import update_midflight_user_message
 
@@ -356,7 +356,6 @@ async def deliver_in_flight(
     user_id: str,
     attachments: list[dict[str, Any]] | None = None,
     agent_mentions: list[dict[str, Any]] | None = None,
-    table_selection: list[str] | None = None,
     requires_tools: bool = False,
     x_client_platform: str | None = None,
     origin_device_id: str | None = None,
@@ -394,7 +393,6 @@ async def deliver_in_flight(
 
     raw_attachments = list(attachments or [])
     raw_agent_mentions = list(agent_mentions or [])
-    raw_table_selection = list(table_selection or [])
     coord = active_coordination_for_conversation(conversation_id)
     coord_active = coord is not None and coord.active
     try_interject = delivery == "steer" and coord_active
@@ -462,7 +460,6 @@ async def deliver_in_flight(
             user_id=user_id,
             attachments=raw_attachments,
             agent_mentions=raw_agent_mentions,
-            table_selection=raw_table_selection,
             requires_tools=requires_tools,
             x_client_platform=x_client_platform,
             origin_device_id=origin_device_id,
@@ -504,7 +501,6 @@ async def deliver_in_flight(
             user_id=user_id,
             attachments=raw_attachments,
             agent_mentions=raw_agent_mentions,
-            table_selection=raw_table_selection,
             requires_tools=requires_tools,
             x_client_platform=x_client_platform,
             origin_device_id=origin_device_id,

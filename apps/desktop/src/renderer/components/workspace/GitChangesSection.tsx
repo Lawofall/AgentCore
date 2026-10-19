@@ -2,6 +2,7 @@
  * U2/U3：「改动」tab 内 Git 轨 —— staged/unstaged 列表 + stage/commit/push/pull/fetch。
  * 与回合 zip 轨正交；冲突仅诚实横幅 + 打开文件（否决三方 merge UI）。
  */
+import { DiffRows } from "@/components/diff/DiffRows";
 import { Button, Textarea } from "@/components/ui";
 import type { PresentGitRepoStatus } from "@/lib/gitRepoStatus";
 import {
@@ -206,26 +207,7 @@ function DiffPreview({ text }: { text: string }) {
   }
   return (
     <div className="max-h-72 overflow-auto rounded-lg border border-border/60 font-mono text-xs leading-relaxed">
-      {rows.map((l, i) => (
-        <div
-          // biome-ignore lint/suspicious/noArrayIndexKey: positional diff rows
-          key={i}
-          className={`flex ${
-            l.type === "add"
-              ? "bg-success/10 text-foreground"
-              : l.type === "del"
-                ? "bg-destructive/10 text-foreground"
-                : "text-muted-foreground"
-          }`}
-        >
-          <span className="w-5 shrink-0 select-none text-center text-muted-foreground/50">
-            {l.type === "add" ? "+" : l.type === "del" ? "-" : " "}
-          </span>
-          <span className="whitespace-pre-wrap break-words pr-2">
-            {l.text || " "}
-          </span>
-        </div>
-      ))}
+      <DiffRows lines={rows} />
     </div>
   );
 }

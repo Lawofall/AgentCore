@@ -155,6 +155,19 @@ describe("ConversationItem onActivate", () => {
     expect(screen.getByLabelText("归档")).toBeTruthy();
   });
 
+  it("conversation titles use list ink, including the current row", () => {
+    render(
+      <MemoryRouter initialEntries={["/conversations/c1"]}>
+        <TooltipProvider>
+          <ConversationItem conversation={conv} />
+        </TooltipProvider>
+      </MemoryRouter>,
+    );
+    expect(screen.getByText("当前会话").className).toContain(
+      "text-sidebar-list",
+    );
+  });
+
   it("marks the row current only when the canvas is this conversation", () => {
     const { unmount } = render(
       <MemoryRouter initialEntries={["/conversations/c1"]}>

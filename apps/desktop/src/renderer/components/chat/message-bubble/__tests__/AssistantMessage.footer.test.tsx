@@ -377,26 +377,6 @@ describe("AssistantMessage empty-response single surface", () => {
     expect(screen.queryByText(/设置 · 服务商/)).toBeNull();
   });
 
-  it("legacy oauth_expired diagnosis：空壳不进气泡，无 Sub2API / 降级完成", () => {
-    renderBubble(
-      settledMessage({
-        id: "empty-oauth",
-        content: "",
-        finishReason: "degraded",
-        error: {
-          code: "LLM_EMPTY_RESPONSE",
-          message:
-            "模型空响应 · 上游返回了网页或登录页，请检查服务商地址与鉴权",
-          context: { empty_diagnosis: "oauth_expired" },
-        },
-      }),
-    );
-    expect(screen.queryByText(/上游返回了网页或登录页/)).toBeNull();
-    expect(screen.queryByText(/Sub2API/)).toBeNull();
-    expect(screen.queryByText(/降级完成/)).toBeNull();
-    expect(screen.queryByText("空响应收尾")).toBeNull();
-  });
-
   it("degraded 有正文时不贴软收尾灰标", () => {
     renderBubble(
       settledMessage({

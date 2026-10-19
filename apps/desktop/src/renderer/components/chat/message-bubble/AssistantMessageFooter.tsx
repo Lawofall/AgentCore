@@ -17,7 +17,7 @@ import { copyText } from "@/lib/clipboard";
 import { type SpendLine, sumSpendUsage } from "@/lib/cost";
 import {
   formatCompact,
-  formatDisplayCost,
+  formatCostBill,
   formatDuration,
   formatOutputSpeed,
   formatTtft,
@@ -242,14 +242,7 @@ function UsagePopoverButton({
               const tokens = line.usage
                 ? line.usage.input + line.usage.output
                 : 0;
-              const money =
-                line.money != null
-                  ? formatDisplayCost(
-                      line.money.nano,
-                      line.money.estimated,
-                      line.money.currency,
-                    )
-                  : null;
+              const money = formatCostBill(line.billed, line.extra);
               const bits = [
                 money,
                 tokens > 0 ? formatCompact(tokens) : null,

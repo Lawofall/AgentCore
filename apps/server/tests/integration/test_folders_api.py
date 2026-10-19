@@ -395,12 +395,12 @@ async def test_soft_delete_keeps_member_updated_at(client, session_factory):
     async with session_factory() as s:
         row = (
             await s.execute(
-                select(Conversation.updated_at, Conversation.archived).where(
-                    Conversation.id == conv
-                )
+                select(
+                    Conversation.updated_at, Conversation.archived_by_folder_delete
+                ).where(Conversation.id == conv)
             )
         ).one()
-    assert row.archived is True
+    assert row.archived_by_folder_delete is True
     assert row.updated_at == before
 
 

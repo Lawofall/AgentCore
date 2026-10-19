@@ -306,6 +306,27 @@ def test_reasoning_effort_spec_absent_when_leaf_does_not_send():
     assert reasoning_effort_spec("glm-5.2") is None
 
 
+def test_resolve_gpt5_and_gpt6_effort_and_omit_temperature():
+    gpt5 = resolve_wire_dialect("gpt-5")
+    assert gpt5.omit_temperature is True
+    assert gpt5.reasoning_effort_options == ("minimal", "low", "medium", "high")
+    assert gpt5.reasoning_effort_default == "medium"
+    # Completions thinking.type is DeepSeek-shaped; Responses sends reasoning.
+    assert gpt5.thinking_type_switch is False
+    assert gpt5.use_max_completion_tokens is False
+    spec = reasoning_effort_spec("gpt-5")
+    assert spec is not None
+    assert spec[0] == ("minimal", "low", "medium", "high")
+    assert spec[1] == "medium"
+
+    astra = resolve_wire_dialect("gpt-6-astra")
+    assert astra.omit_temperature is True
+    assert astra.reasoning_effort_options == ("low", "medium", "high")
+    assert astra.reasoning_effort_default == "medium"
+    assert "none" not in astra.reasoning_effort_options
+    assert "minimal" not in astra.reasoning_effort_options
+
+
 def test_effective_reasoning_effort_snaps_and_skips():
     from agentcore.llm.provider.wire_dialect import effective_reasoning_effort
 

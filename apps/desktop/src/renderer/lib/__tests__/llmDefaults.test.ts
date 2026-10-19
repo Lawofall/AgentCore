@@ -1,10 +1,12 @@
 import {
+  PLATFORM_GROUP_LABEL,
   PLATFORM_POINTER_ID,
   buildDefaultProviderGroups,
   catalogItemBadge,
   decodePointer,
   encodePointer,
   modelInChannelCatalog,
+  originBadge,
   pointerValue,
   unavailableReasonCopy,
 } from "@/lib/llmDefaults";
@@ -20,13 +22,14 @@ function provider(
   return {
     label: "",
     base_url: "https://api.example.com/v1",
+    vendor_id: "custom",
     status: "unchecked",
     ...over,
   };
 }
 
 function catalogItem(
-  over: Partial<ModelCatalogItem> & { id: string },
+  over: Partial<ModelCatalogItem> & { id: string; badge?: string | null },
 ): ModelCatalogItem {
   const origin = over.origin ?? "byok";
   const provider_id = over.provider_id ?? (origin === "platform" ? null : "p1");
@@ -39,7 +42,11 @@ function catalogItem(
     provider_id,
     ...over,
   };
-  return { ...row, ref: catalogItemRef(row) };
+  return {
+    ...row,
+    custom: over.custom ?? false,
+    ref: catalogItemRef(row),
+  };
 }
 
 function catalog(models: ModelCatalogItem[]): ModelCatalog {
@@ -103,7 +110,7 @@ describe("encode/decode pointer", () => {
 });
 
 describe("buildDefaultProviderGroups", () => {
-  it("groups byok models under their provider and omits the platform catalog", () => {
+  it("lists platform catalog as a live 平台 channel ahead of BYOK providers", () => {
     const groups = buildDefaultProviderGroups(
       [
         provider({
@@ -131,12 +138,36 @@ describe("buildDefaultProviderGroups", () => {
         }),
       ]),
     );
-    expect(groups.map((g) => g.providerLabel)).not.toContain("平台额度");
-    expect(groups.flatMap((g) => g.models.map((m) => m.model))).not.toContain(
-      "platform-flash",
-    );
+    expect(groups[0]?.providerId).toBe(PLATFORM_POINTER_ID);
+    expect(groups[0]?.providerLabel).toBe(PLATFORM_GROUP_LABEL);
+    expect(groups[0]?.orphan).toBeFalsy();
+    expect(groups[0]?.models.map((m) => m.model)).toEqual(["platform-flash"]);
+    expect(groups[0]?.models[0]?.label).toBe("Flash");
+    expect(groups[0]?.models[0]?.badge).toBeNull();
+    expect(groups[0]?.models[0]?.vendor).toBe("V");
     expect(groups.map((g) => g.providerLabel)).toContain("DeepSeek");
     expect(groups.map((g) => g.providerLabel)).toContain("OpenAI");
+    const deepseek = groups.find((g) => g.providerId === "p1");
+    expect(deepseek?.models.map((m) => m.model)).not.toContain(
+      "platform-flash",
+    );
+  });
+
+  it("keeps a curated platform SKU badge instead of stamping 平台", () => {
+    const groups = buildDefaultProviderGroups(
+      [],
+      catalog([
+        catalogItem({
+          id: "flash-free",
+          origin: "platform",
+          display_name: "Flash",
+          provider_id: null,
+          badge: "免费额度",
+        }),
+      ]),
+    );
+    expect(groups[0]?.models[0]?.label).toBe("Flash");
+    expect(groups[0]?.models[0]?.badge).toBe("免费额度");
   });
 
   it("folds live slot models with catalog display names", () => {
@@ -298,6 +329,38 @@ describe("buildDefaultProviderGroups", () => {
     ).toBe("免费额度");
   });
 
+  it("maps catalog custom rows to handFilled inventory options", () => {
+    const groups = buildDefaultProviderGroups(
+      [provider({ id: "p1", label: "Relay" })],
+      catalog([
+        catalogItem({
+          id: "deepseek-v4.1-flash",
+          provider_id: "p1",
+          display_name: "deepseek-v4.1-flash",
+          custom: true,
+        }),
+        catalogItem({
+          id: "claude-sonnet",
+          provider_id: "p1",
+          display_name: "Claude Sonnet",
+        }),
+      ]),
+    );
+    const flash = groups[0].models.find(
+      (m) => m.model === "deepseek-v4.1-flash",
+    );
+    const sonnet = groups[0].models.find((m) => m.model === "claude-sonnet");
+    expect(flash).toEqual(
+      expect.objectContaining({
+        custom: false,
+        handFilled: true,
+      }),
+    );
+    expect(sonnet?.handFilled).toBeFalsy();
+    expect(modelInChannelCatalog(groups[0], "deepseek-v4.1-flash")).toBe(false);
+    expect(modelInChannelCatalog(groups[0], "claude-sonnet")).toBe(true);
+  });
+
   it("modelInChannelCatalog ignores custom-only fold-ins", () => {
     const groups = buildDefaultProviderGroups(
       [provider({ id: "p1", label: "DeepSeek" })],
@@ -369,6 +432,19 @@ describe("buildDefaultProviderGroups", () => {
       ]),
     );
     expect(groups[0].models.map((m) => m.model)).toEqual(["deepseek-flash"]);
+  });
+});
+
+describe("originBadge", () => {
+  it("does not stamp 平台 on platform origin", () => {
+    expect(originBadge("platform")).toBeNull();
+    expect(originBadge("platform", "  ")).toBeNull();
+    expect(originBadge("platform", "免费额度")).toBe("免费额度");
+  });
+
+  it("leaves BYOK curated badges alone and does not invent a 平台 mark", () => {
+    expect(originBadge("byok")).toBeNull();
+    expect(originBadge("byok", "免费额度")).toBe("免费额度");
   });
 });
 

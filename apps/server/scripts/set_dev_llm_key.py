@@ -67,7 +67,11 @@ async def run(args: argparse.Namespace) -> None:
             pid = providers[0]["id"]
             resp = await client.patch(f"{base}/{pid}", headers=headers, json={"api_key": key})
         else:
-            resp = await client.post(base, headers=headers, json={"label": "DeepSeek", "api_key": key})
+            resp = await client.post(
+                base,
+                headers=headers,
+                json={"label": "DeepSeek", "api_key": key, "vendor_id": "deepseek"},
+            )
         if resp.status_code not in (200, 201):
             raise SystemExit(f"保存失败 {resp.status_code}: {resp.text}")
         pj = resp.json()

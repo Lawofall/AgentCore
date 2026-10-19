@@ -75,7 +75,6 @@ class QueuedTurn:
     content: str
     attachments: list[dict[str, Any]] = field(default_factory=list)
     agent_mentions: list[dict[str, Any]] = field(default_factory=list)
-    table_selection: list[str] = field(default_factory=list)
     requires_tools: bool = False
     x_client_platform: str | None = None
     # Which device sent this message. Captured at enqueue because the drain runs
@@ -591,7 +590,6 @@ async def _start_queued_turn(conversation_id: str, item: QueuedTurn) -> None:
                 llm_supports_tools=item.llm_supports_tools,
                 x_client_platform=item.x_client_platform,
                 agent_mentions=item.agent_mentions,
-                table_selection=item.table_selection or None,
                 existing_user_message_id=item.user_message_id,
             )
         )
@@ -609,7 +607,6 @@ def new_queued_turn(
     user_id: str,
     attachments: list[dict[str, Any]] | None = None,
     agent_mentions: list[dict[str, Any]] | None = None,
-    table_selection: list[str] | None = None,
     requires_tools: bool = False,
     x_client_platform: str | None = None,
     origin_device_id: str | None = None,
@@ -626,7 +623,6 @@ def new_queued_turn(
         content=content,
         attachments=list(attachments or []),
         agent_mentions=list(agent_mentions or []),
-        table_selection=list(table_selection or []),
         requires_tools=requires_tools,
         x_client_platform=x_client_platform,
         origin_device_id=origin_device_id,

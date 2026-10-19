@@ -77,7 +77,6 @@ def _prepared(tmp_path: Path, *, member_turn: bool) -> PreparedTurn:
         worker_envelope="",
         worker_tools=ToolRegistry(),
         skill_registry=object(),
-        table_context="",
         base_tool_context=ToolContext.create(
             execution_id="e",
             run_id="r",
@@ -86,7 +85,6 @@ def _prepared(tmp_path: Path, *, member_turn: bool) -> PreparedTurn:
             user_id="u",
             conversation_id="c",
         ),
-        vision_cost_sink=[],
         attachment_context="",
         user_message="你好",
         native_image_parts=[],

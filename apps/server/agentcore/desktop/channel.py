@@ -56,6 +56,10 @@ class ExternalMountError(Exception):
 class HostOpError(Exception):
     """A Host op failed (desktop error, drop, timeout, or unsupported op)."""
 
+    def __init__(self, message: str, *, kind: str | None = None) -> None:
+        super().__init__(message)
+        self.kind = kind
+
 
 class McpOpError(Exception):
     """An MCP Client op failed (desktop error, drop, timeout, or server crash)."""
@@ -75,6 +79,11 @@ class HostOp(StrEnum):
     OS_LOG_SUMMARY = "host_os_log_summary"
     # P3 general host shell (CEO+worker · GRANTABLE · host_class · 禁 delegation 静默授)
     SHELL = "host_shell"
+    # Computer Use GUI (Windows) — attach / snapshot / click / type by UIA ref
+    GUI_ATTACH = "host_gui_attach"
+    GUI_SNAPSHOT = "host_gui_snapshot"
+    GUI_CLICK = "host_gui_click"
+    GUI_TYPE = "host_gui_type"
     OPEN_SETTINGS = "host_open_settings"
     # L3 controlled whitelist (worker · GRANTABLE · host_class only)
     AUDIO_SET_DEFAULT = "host_audio_set_default"
@@ -110,8 +119,8 @@ class DesktopClientChannel:
     ) -> dict[str, Any]:
         """Emit a mount request; return desktop ``value`` (no abs).
 
-        ``mode`` / ``root_id`` are transport-only (readonly silent; write
-        confirm upgrades the same session root). Event name is
+        ``mode`` / ``root_id`` are transport-only (desktop decides the
+        folder dialog from the conversation boundary). Event name is
         ``external_mount_required``.
         """
         request_id = new_id()
@@ -246,13 +255,20 @@ class DesktopClientChannel:
 
         if not isinstance(result, dict) or not result.get("ok"):
             detail = ""
+            kind: str | None = None
             if isinstance(result, dict):
                 err = result.get("error")
                 if isinstance(err, dict):
                     detail = str(err.get("detail", "") or "")
+                    raw_kind = err.get("kind")
+                    if isinstance(raw_kind, str) and raw_kind.strip():
+                        kind = raw_kind.strip()
                 elif err:
                     detail = str(err)
-            raise HostOpError(detail or f"本机 Host 操作失败（{op_name}）")
+            raise HostOpError(
+                detail or f"本机 Host 操作失败（{op_name}）",
+                kind=kind,
+            )
         value = result.get("value")
         return value if isinstance(value, dict) else {}
 

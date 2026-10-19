@@ -108,7 +108,7 @@ const editingAssembly = vi.hoisted(() => ({
   profile: null as {
     id: string;
     kind: "user" | "system";
-    omit_factory_catalog?: boolean;
+    omitted_factory_skills?: string[];
   } | null,
   pending: false,
 }));
@@ -342,11 +342,11 @@ describe("PromptCatalog 概览", () => {
     expect(screen.getByTestId("prompt-overview")).toBeTruthy();
   });
 
-  it("出厂开关和交代标题同一行", async () => {
+  it("交代标题行全部关闭，点卡开关只关这一条", async () => {
     editingAssembly.profile = {
       id: "mine",
       kind: "user",
-      omit_factory_catalog: false,
+      omitted_factory_skills: [],
     };
     vi.mocked(updateLlmModelProfile).mockResolvedValue(undefined as never);
     renderCatalog();
@@ -356,19 +356,49 @@ describe("PromptCatalog 概览", () => {
     const heading = screen.getByRole("heading", { name: "交代" });
     const row = heading.parentElement?.parentElement;
     if (!row) throw new Error("交代标题行缺失");
-    const toggle = within(row).getByRole("switch", { name: "出厂" });
+    expect(within(row).getByRole("button", { name: "全部关闭" })).toBeTruthy();
+    expect(within(row).queryByRole("button", { name: "全部打开" })).toBeNull();
     expect(within(row).getByRole("button", { name: "新建夹" })).toBeTruthy();
     expect(within(row).getByRole("button", { name: /^新建$/ })).toBeTruthy();
-    expect(screen.getByTestId("prompt-rail-shelf").contains(toggle)).toBe(
-      false,
-    );
-    expect(screen.getByTestId("prompt-rail-factory").contains(toggle)).toBe(
-      false,
-    );
+    expect(screen.queryByRole("switch", { name: "出厂" })).toBeNull();
+    const factory = screen.getByTestId("prompt-rail-factory");
+    const toggle = within(factory).getByRole("switch", { name: "薄技能" });
+    expect(screen.getByTestId("prompt-rail-shelf").contains(toggle)).toBe(true);
     fireEvent.click(toggle);
     await waitFor(() => {
       expect(updateLlmModelProfile).toHaveBeenCalledWith("mine", {
-        omit_factory_catalog: true,
+        omitted_factory_skills: ["thin_skill"],
+      });
+    });
+    vi.mocked(updateLlmModelProfile).mockClear();
+    fireEvent.click(within(row).getByRole("button", { name: "全部关闭" }));
+    await waitFor(() => {
+      expect(updateLlmModelProfile).toHaveBeenCalledWith("mine", {
+        omitted_factory_skills: ["thin_skill"],
+      });
+    });
+  });
+
+  it("出厂全关时标题行只留全部打开", async () => {
+    editingAssembly.profile = {
+      id: "mine",
+      kind: "user",
+      omitted_factory_skills: ["thin_skill"],
+    };
+    vi.mocked(updateLlmModelProfile).mockResolvedValue(undefined as never);
+    renderCatalog();
+    await waitFor(() => {
+      expect(screen.getByTestId("prompt-overview")).toBeTruthy();
+    });
+    const heading = screen.getByRole("heading", { name: "交代" });
+    const row = heading.parentElement?.parentElement;
+    if (!row) throw new Error("交代标题行缺失");
+    expect(within(row).getByRole("button", { name: "全部打开" })).toBeTruthy();
+    expect(within(row).queryByRole("button", { name: "全部关闭" })).toBeNull();
+    fireEvent.click(within(row).getByRole("button", { name: "全部打开" }));
+    await waitFor(() => {
+      expect(updateLlmModelProfile).toHaveBeenCalledWith("mine", {
+        omitted_factory_skills: [],
       });
     });
   });
@@ -733,6 +763,7 @@ const webSearchTool = {
   resident: true,
   summary: "联网检索",
   blurb: "按关键词在网上找资料和链接",
+  description_prefer: "",
   description: "联网检索：给出查询词。",
   parameters: {
     type: "object",
@@ -751,6 +782,7 @@ const hostTool = {
   resident: true,
   summary: "本机",
   blurb: "看本机屏幕、键鼠和已打开的应用",
+  description_prefer: "",
   description: "本机",
   parameters: { type: "object", properties: {} },
   approval: "grantable" as const,

@@ -51,7 +51,6 @@ _BODY_PREVIEW_MAX = 500
 
 class EmptyResponseDiagnosis(StrEnum):
     # Upstream returned HTML / login / gateway page instead of a chat completion.
-    # (Formerly oauth_expired — that name falsely implied Sub2API OAuth expiry.)
     UPSTREAM_NON_API = "upstream_non_api"
     CONTENT_FILTERED = "content_filtered"
     MODEL_UNKNOWN = "model_unknown"
@@ -128,13 +127,11 @@ def diagnose_empty_response(
 def _coerce_diagnosis(
     diagnosis: str | EmptyResponseDiagnosis | None,
 ) -> EmptyResponseDiagnosis | None:
-    """Normalize wire/journal diagnosis keys (incl. legacy oauth_expired)."""
+    """Accept an enum member or its wire value; unknown keys are dropped."""
     if diagnosis is None:
         return None
     if isinstance(diagnosis, EmptyResponseDiagnosis):
         return diagnosis
-    if diagnosis == "oauth_expired":
-        return EmptyResponseDiagnosis.UPSTREAM_NON_API
     try:
         return EmptyResponseDiagnosis(diagnosis)
     except ValueError:
@@ -596,12 +593,18 @@ _BALANCE_BODY_CODES = frozenset(
     {
         "insufficient_balance",
         "insufficient_credits",
+        "insufficient_quota",
+        "insufficient_user_quota",
         "creditserror",
         "credits_error",
+        "billing_not_active",
+        "quota_exceeded",
     }
 )
 _BALANCE_MARKERS = re.compile(
-    r"(insufficient\s+(balance|credits)|out\s+of\s+credits|余额不足|账户余额|"
+    r"(insufficient\s+(balance|credits)|out\s+of\s+credits|"
+    r"exceeded your current quota|quota exceeded|"
+    r"余额不足|余额已用尽|额度不足|账户余额|"
     r"subscription\s+ended\b.{0,120}\bpayment\s+method)",
     re.IGNORECASE,
 )
@@ -1207,9 +1210,9 @@ def error_context_from(exc: BaseException) -> dict[str, int | str | float | None
     # (join via trace_id). Other LLM_* CTAs still need the user/platform split.
     if credential_source in ("user", "platform") and "vendor_code" not in locator:
         ctx["credential_source"] = credential_source
-    # No Sub2API relay diagnosis here on purpose: it describes the *operator's*
-    # upstream accounts, and this dict is the user-visible SSE / REST error
-    # context. It stays on the log surface (``llm.upstream_error``).
+    # Operator-upstream account diagnosis stays on the log surface
+    # (``llm.upstream_error``); this dict is the user-visible SSE / REST error
+    # context.
     # Same posture: ``platform_credential_id`` (which pool member paid) is
     # logs + ``cost_calls`` only — never copied onto this wire context.
     return ctx or None

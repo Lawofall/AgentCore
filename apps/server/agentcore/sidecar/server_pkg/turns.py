@@ -14,7 +14,7 @@ from agentcore.conversation.zero_output_rollback import (
     maybe_discard_zero_output_outbox,
     result_from_unstarted_close,
 )
-from agentcore.core.errors import ClientTooOldError, InferenceTokenExpiredError
+from agentcore.core.errors import InferenceTokenExpiredError
 from agentcore.core.log_context import log_context
 from agentcore.core.logging import get_logger
 from agentcore.core.types import new_id
@@ -163,18 +163,6 @@ def rpc_attachments(params: dict[str, Any]) -> list[dict[str, Any]]:
     return [dict(item) for item in raw if isinstance(item, dict)]
 
 
-def rpc_table_selection(params: dict[str, Any]) -> list[str]:
-    """startTurn / deliverMessage ``tableSelection`` → unique row ids (cap 40)."""
-    from agentcore.table.context import sanitize_table_selection
-
-    raw = params.get("tableSelection")
-    if raw is None:
-        raw = params.get("table_selection")
-    if not isinstance(raw, list):
-        return []
-    return sanitize_table_selection([str(item) for item in raw])
-
-
 def register_current_turn_run(
     *, conversation_id: str, sink: EventSink, user_id: str
 ) -> None:
@@ -192,50 +180,50 @@ def register_current_turn_run(
 def resolve_rpc_folder_binding(
     params: dict[str, Any],
 ) -> tuple[bool, str | None, str]:
-    """Prefer RPC ``localRootId`` (+ optional ``localSubpath``); absent key ⇒ not injected.
+    """Prefer RPC ``session.localRootId``; absent session ⇒ not injected."""
+    from agentcore.runtime.turn.snapshot import SessionRequiredError, parse_sidecar_session
 
-    Same presence rule as ``folderId``: key present (including explicit null / \"\")
-    means the desktop stamped a bind — do not open local PG for Folder.local_*.
-    Returns ``(injected, local_root_id, local_subpath)``.
-    """
-    if "localRootId" not in params:
+    try:
+        snapshot = parse_sidecar_session(params)
+    except SessionRequiredError:
         return False, None, ""
-    root = normalize_folder_id_param(params.get("localRootId"))
-    subpath = (
-        normalize_local_subpath_param(params.get("localSubpath"))
-        if "localSubpath" in params
-        else ""
+    return (
+        snapshot.folder_binding_injected,
+        snapshot.folder_local_root_id,
+        snapshot.folder_local_subpath or "",
     )
-    return True, root, subpath
 
 
 def apply_rpc_folder_binding_to_suspension(
     suspension: TurnSuspension, params: dict[str, Any]
 ) -> None:
-    """Overlay resume RPC project scope / bind onto the claimed frame when re-sent.
+    """Overlay resume RPC ``session`` onto the claimed frame."""
+    from agentcore.runtime.turn.snapshot import (
+        SessionRequiredError,
+        apply_snapshot_to_suspension,
+        parse_sidecar_session,
+    )
 
-    ``folderId`` key present (including explicit null) → overwrite ``suspension.folder_id``;
-    key absent → keep frame value (old desktop). Same presence rule for ``localRootId``.
-    """
-    if "folderId" in params:
-        suspension.folder_id = normalize_folder_id_param(params.get("folderId"))
-    injected, root, subpath = resolve_rpc_folder_binding(params)
-    if not injected:
+    try:
+        snapshot = parse_sidecar_session(params)
+    except SessionRequiredError:
         return
-    suspension.folder_binding_injected = True
-    suspension.folder_local_root_id = root
-    suspension.folder_local_subpath = subpath
+    apply_snapshot_to_suspension(suspension, snapshot)
 
 
 class FolderIdRequiredError(ValueError):
-    """startTurn omitted the ``folderId`` key. Not a conversation lookup."""
+    """startTurn omitted the ``session`` snapshot. Not a conversation lookup."""
 
 
 def resolve_start_turn_folder_id(params: dict[str, Any]) -> str | None:
-    """Require RPC ``folderId`` (null/blank = bare). Missing key is not a lookup."""
-    if "folderId" not in params:
-        raise FolderIdRequiredError(ClientTooOldError().message)
-    return normalize_folder_id_param(params.get("folderId"))
+    """Require RPC ``session.folderId`` (null/blank = bare). Missing session is not a lookup."""
+    from agentcore.runtime.turn.snapshot import SessionRequiredError, parse_sidecar_session
+
+    try:
+        snapshot = parse_sidecar_session(params)
+    except SessionRequiredError as exc:
+        raise FolderIdRequiredError(str(exc)) from exc
+    return snapshot.folder_id
 
 
 def _finish_str(result: dict[str, Any]) -> str | None:
@@ -441,16 +429,24 @@ class TurnExecutionMixin:
                 self._unregister_turn(turn_id)
             return
         user_message_id, message_id, trace_id = parsed_ids
-        try:
-            folder_id = resolve_start_turn_folder_id(params)
-        except FolderIdRequiredError as exc:
+        snapshot = self.conversation_snapshot_for(conversation_id)
+        if snapshot is None:
+            from agentcore.runtime.turn.snapshot import (
+                SessionRequiredError,
+                parse_sidecar_session,
+            )
+
             try:
-                await self._reply_error(
-                    request_id, protocol.INVALID_PARAMS, str(exc)
-                )
-            finally:
-                self._unregister_turn(turn_id)
-            return
+                snapshot = parse_sidecar_session(params)
+            except SessionRequiredError as exc:
+                try:
+                    await self._reply_error(
+                        request_id, protocol.INVALID_PARAMS, str(exc)
+                    )
+                finally:
+                    self._unregister_turn(turn_id)
+                return
+            self.stamp_conversation_snapshot(conversation_id, snapshot)
         self._resolve_fifo_desktop_start(message_id)
         if str(params.get("queueId") or "").strip():
             self._mark_queue_turn(
@@ -461,7 +457,6 @@ class TurnExecutionMixin:
             )
         agent_mentions = rpc_agent_mentions(params)
         attachments = rpc_attachments(params)
-        table_selection = rpc_table_selection(params)
         queue_id = str(params.get("queueId") or "").strip()
         # Occupy turn_runs before history fetch so deliverMessage matches startTurn.
         sink = EventSink()
@@ -598,18 +593,7 @@ class TurnExecutionMixin:
                 )
                 return
 
-            # Same for Folder local bind (explore workspace_key): desktop stamps
-            # localRootId/localSubpath so assemble never HARD-fails on PG-down.
-            binding_injected, folder_local_root_id, folder_local_subpath = (
-                resolve_rpc_folder_binding(params)
-            )
-            self.stamp_folder_scope(
-                conversation_id,
-                folder_id=folder_id,
-                binding_injected=binding_injected,
-                local_root_id=folder_local_root_id,
-                local_subpath=folder_local_subpath or "",
-            )
+            self.stamp_conversation_snapshot(conversation_id, snapshot)
 
             pump = asyncio.create_task(
                 self._pump(turn_id, sink, conversation_id=conversation_id)
@@ -656,8 +640,8 @@ class TurnExecutionMixin:
                     # MCP/Host discover over the existing ClientTool fulfill path
                     # (docs/02-架构/工作区.md · Host / 本机回填). Never infer
                     # desktop_online from location=local.
-                    # Bind inference JWT for web_search cloud fallback when local
-                    # SearXNG is unreachable (ContextVar; reset after turn).
+                    # Bind inference JWT so web_search POSTs cloud inference
+                    # (ContextVar; reset after turn). The desktop never holds a search key.
                     # Bind folders narrow ticket for roster / desk-binding cloud HTTP.
                     # Bind account narrow ticket for conversation-log search/read.
                     # Bind workspaces narrow ticket for unbound cloud-desk file HTTP.
@@ -676,12 +660,8 @@ class TurnExecutionMixin:
                             sink=sink,
                             user_id=self._user_id,
                             backend=backend,
-                            folder_id=folder_id,
-                            folder_binding_injected=binding_injected,
-                            folder_local_root_id=folder_local_root_id,
-                            folder_local_subpath=folder_local_subpath,
+                            conversation=snapshot,
                             approvals_enabled=self._approvals_enabled,
-                            permission_axes=self.permission_axes_for(conversation_id),
                             llm_credentials=turn_creds,
                             session_saver=session_saver,
                             session_loader=session_loader,
@@ -691,7 +671,6 @@ class TurnExecutionMixin:
                             x_client_platform="desktop",
                             agent_mentions=agent_mentions or None,
                             attachments=attachments or None,
-                            table_selection=table_selection or None,
                         )
                         stamp_turn_wall(result)
                         await _remember_pause_meter(self._paused_store, message_id, result)
@@ -1139,6 +1118,13 @@ class TurnExecutionMixin:
                         account_credentials_scope(self._account_creds),
                         workspaces_credentials_scope(self._workspaces_creds),
                     ):
+                        resume_snapshot = self.conversation_snapshot_for(
+                            conversation_id
+                        )
+                        if resume_snapshot is None:
+                            raise RuntimeError(
+                                "sidecar resume missing session snapshot"
+                            )
                         result = await sidecar_server.resume_chat_pipeline(
                             suspension=suspension,
                             decision=decision,
@@ -1155,7 +1141,7 @@ class TurnExecutionMixin:
                             session_loader=session_loader,
                             suspension_saver=saver,
                             suspension_deleter=deleter,
-                            permission_axes=self.permission_axes_for(conversation_id),
+                            conversation=resume_snapshot,
                             # Same desktop channel as fresh turns — omit ⇒ resume drops MCP/Host.
                             x_client_platform="desktop",
                         )

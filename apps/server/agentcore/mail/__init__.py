@@ -6,6 +6,7 @@ from agentcore.mail.sender import (
     EmailSendError,
     build_email_sender,
     is_smtp_configured,
+    send_text,
 )
 
 __all__ = [
@@ -14,4 +15,5 @@ __all__ = [
     "EmailSender",
     "build_email_sender",
     "is_smtp_configured",
+    "send_text",
 ]

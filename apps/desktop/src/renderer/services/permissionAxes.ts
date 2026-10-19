@@ -1,17 +1,20 @@
+import { hasLocalEngine } from "@/lib/capabilities";
+import { uiGet, uiRemove, uiSet } from "@/lib/uiStorage";
 import { api } from "@/services/api";
 import type { SidecarPermissionAxes } from "@shared/sidecar-contract";
 
 /** Conversation boundary. One control; irreversible actions stay outside it. */
-export type WorkspaceBoundaryId = "read" | "folder" | "computer";
+export type WorkspaceBoundaryId = "read" | "folder" | "computer" | "full";
 
 export type PermissionAxes = SidecarPermissionAxes;
 
-export const DEFAULT_PERMISSION_AXES: PermissionAxes = { boundary: "folder" };
+export const DEFAULT_PERMISSION_AXES: PermissionAxes = { boundary: "computer" };
 
 export const BOUNDARY_ORDER: WorkspaceBoundaryId[] = [
   "read",
   "folder",
   "computer",
+  "full",
 ];
 
 export const BOUNDARY_LABELS: Record<
@@ -23,14 +26,19 @@ export const BOUNDARY_LABELS: Record<
     description: "只能看和搜索。不能改文件、跑命令、用浏览器。",
   },
   folder: {
-    short: "这个文件夹",
+    short: "本文件夹",
     description:
-      "这个文件夹里可以改文件、跑命令、装依赖、用浏览器。装软件、推远程、毁灭形删除、读私钥仍会单独拦住。",
+      "本文件夹里可以改文件、跑命令、装依赖、用浏览器。装软件、推远程、毁灭形删除、读私钥仍会单独拦住。",
   },
   computer: {
     short: "这台电脑",
     description:
-      "在这个文件夹之外，还能做本机操作。装软件、推远程、毁灭形删除、读私钥仍会单独拦住。",
+      "这台电脑上的文件和本机操作。整盘、私钥、毁灭形删除、装软件、推远程仍会单独拦住。",
+  },
+  full: {
+    short: "完全权限",
+    description:
+      "推远程、装软件、附着窗口和 MCP 不再询问。毁灭形删除、force push、私钥、密码框仍会拦住。本机引擎上还能做本机操作。",
   },
 };
 
@@ -96,22 +104,40 @@ export function permissionAxesShortLabel(raw: unknown): string | null {
 }
 
 const COMPUTER_CONFIRM =
-  "这台电脑可以做工作区以外的本机操作。装软件、推远程、毁灭形删除、读私钥仍会单独拦住。确定继续？";
+  "这台电脑上的文件和本机操作都会放行。整盘、私钥、毁灭形删除、装软件、推远程仍会单独拦住。确定继续？";
+
+const FULL_CONFIRM =
+  "完全权限下，推远程、装软件、附着窗口和 MCP 不再询问。格式化磁盘、force push、私钥、密码框仍会拦住。确定继续？";
 
 export function needsComputerConfirm(
   current: PermissionAxes,
   next: PermissionAxes,
 ): boolean {
-  return next.boundary === "computer" && current.boundary !== "computer";
+  return (
+    next.boundary === "computer" &&
+    current.boundary !== "computer" &&
+    current.boundary !== "full"
+  );
+}
+
+export function needsFullConfirm(
+  current: PermissionAxes,
+  next: PermissionAxes,
+): boolean {
+  return next.boundary === "full" && current.boundary !== "full";
 }
 
 export function confirmComputerIfNeeded(
   current: PermissionAxes,
   next: PermissionAxes,
 ): boolean {
+  if (needsFullConfirm(current, next)) return window.confirm(FULL_CONFIRM);
   if (!needsComputerConfirm(current, next)) return true;
   return window.confirm(COMPUTER_CONFIRM);
 }
+
+/** Last boundary the person picked in the composer. Seeds the next new chat. */
+const LAST_USED_BOUNDARY_LEAF = "chat:boundary:last";
 
 let cachedDefaultAxes: PermissionAxes | null = null;
 let composerDraftAxes: PermissionAxes | null = null;
@@ -124,39 +150,65 @@ export function peekComposerDraftAxes(): PermissionAxes | null {
   return composerDraftAxes;
 }
 
-export async function resolveDefaultPermissionAxes(): Promise<PermissionAxes> {
-  if (composerDraftAxes) return composerDraftAxes;
-  if (cachedDefaultAxes) return cachedDefaultAxes;
-  try {
-    const d = await api.get<{ policy: WorkspaceBoundaryId }>(
-      "/v1/users/me/autonomy",
-    );
-    cachedDefaultAxes = normalizeAxes({ boundary: d.policy });
-    return cachedDefaultAxes;
-  } catch {
-    return { ...DEFAULT_PERMISSION_AXES };
+function clampBoundaryForRuntime(
+  boundary: WorkspaceBoundaryId,
+): WorkspaceBoundaryId {
+  if (boundary === "computer" && !hasLocalEngine()) return "folder";
+  return boundary;
+}
+
+function clampAxes(axes: PermissionAxes): PermissionAxes {
+  const boundary = clampBoundaryForRuntime(axes.boundary);
+  return boundary === axes.boundary ? axes : { boundary };
+}
+
+function readLastUsedBoundary(): WorkspaceBoundaryId | null {
+  const raw = uiGet(LAST_USED_BOUNDARY_LEAF);
+  if (typeof raw === "string" && BOUNDARY_IDS.has(raw)) {
+    return raw as WorkspaceBoundaryId;
   }
+  return null;
 }
 
-export function setCachedDefaultBoundary(policy: WorkspaceBoundaryId): void {
-  cachedDefaultAxes = { boundary: policy };
+/**
+ * 人选的那档记在本机 last-used，并静默写账号（省略 body 的创建接口用）。
+ * 从没选过 = 出厂这台电脑；网页没有本机引擎时收成本文件夹。「完全权限」可开。
+ */
+export function factoryPermissionAxes(): PermissionAxes {
+  return clampAxes({ ...DEFAULT_PERMISSION_AXES });
 }
 
-/** Persist user-level default boundary (seeds new conversations only). */
-export async function setUserDefaultRecipe(
-  policy: WorkspaceBoundaryId,
-): Promise<WorkspaceBoundaryId> {
-  const d = await api.put<{ policy: WorkspaceBoundaryId }>(
-    "/v1/users/me/autonomy",
-    { policy },
-  );
-  setCachedDefaultBoundary(d.policy);
-  return d.policy;
+export function rememberBoundarySelection(boundary: WorkspaceBoundaryId): void {
+  const stored = BOUNDARY_IDS.has(boundary)
+    ? boundary
+    : DEFAULT_PERMISSION_AXES.boundary;
+  uiSet(LAST_USED_BOUNDARY_LEAF, stored);
+  cachedDefaultAxes = { boundary: clampBoundaryForRuntime(stored) };
+  void api
+    .put<{ policy: WorkspaceBoundaryId }>("/v1/users/me/autonomy", {
+      policy: stored,
+    })
+    .catch(() => {
+      /* this device already has last-used */
+    });
+}
+
+export async function resolveDefaultPermissionAxes(): Promise<PermissionAxes> {
+  if (composerDraftAxes) return clampAxes(composerDraftAxes);
+  const local = readLastUsedBoundary();
+  if (local) {
+    cachedDefaultAxes = { boundary: clampBoundaryForRuntime(local) };
+    return cachedDefaultAxes;
+  }
+  if (cachedDefaultAxes) return clampAxes(cachedDefaultAxes);
+  cachedDefaultAxes = factoryPermissionAxes();
+  return cachedDefaultAxes;
 }
 
 export function clearDefaultPermissionAxesCache(): void {
   cachedDefaultAxes = null;
   composerDraftAxes = null;
+  uiRemove(LAST_USED_BOUNDARY_LEAF);
 }
 
 /** Persist a mid-session boundary switch. Returns the saved axes. */
@@ -195,4 +247,19 @@ export async function resolveConversationPermissionAxes(
     // network / 404 — last resort below
   }
   return resolveDefaultPermissionAxes();
+}
+
+/** Conversation's current boundary from the list cache. Miss → undefined (do not invent). */
+export async function peekConversationBoundary(
+  conversationId: string,
+): Promise<WorkspaceBoundaryId | undefined> {
+  try {
+    const { getConversations } = await import("@/hooks/useConversations");
+    const conv = getConversations().find((c) => c.id === conversationId);
+    if (conv?.permissionAxes)
+      return normalizeAxes(conv.permissionAxes).boundary;
+  } catch {
+    /* tests / cache unavailable */
+  }
+  return undefined;
 }

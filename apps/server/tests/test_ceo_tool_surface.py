@@ -457,7 +457,7 @@ def test_control_tools_in_gated_set():
 # --- assembly-level 分态（真实 _assemble_ceo_toolset） -----------------------
 
 
-def _ctx(*, vision_reader=None):
+def _ctx():
     from pathlib import Path
 
     from agentcore.tools.protocol import ToolContext
@@ -471,14 +471,12 @@ def _ctx(*, vision_reader=None):
         agent_id="a",
         backend=ServerWorkspace(root=Path("."), sandbox=SubprocessSandbox()),
         user_id="u",
-        vision_reader=vision_reader,
     )
 
 
 def _assemble(
     *,
     checkpoint_enabled: bool = True,
-    vision_reader=None,
     model: str | None = None,
     folder_id: str | None = None,
 ) -> ToolRegistry:
@@ -494,7 +492,7 @@ def _assemble(
         user_message="原始请求",
         history=[],
         worker_tools=ToolRegistry(),
-        base_tool_context=_ctx(vision_reader=vision_reader),
+        base_tool_context=_ctx(),
         profiles=default_turn_profiles(model=model),
         approval_gate=None,
         session_store=None,
@@ -569,16 +567,6 @@ def test_register_always_ceo_tools_declare_loop():
     assert names.isdisjoint(
         {"delegate", "debate", "ask_user", "remember", "code_search"}
     )
-
-
-def test_assembled_omits_retired_read_image():
-    """read_image 已卸：图走 read / 贴图原生多模态。"""
-    names = set(_assemble().names)
-    assert "read_image" not in names
-    names_reader = set(_assemble(vision_reader=object()).names)
-    assert "read_image" not in names_reader
-    names_native = set(_assemble(model="gpt-4o").names)
-    assert "read_image" not in names_native
 
 
 def test_assembled_coordination_surface_split():

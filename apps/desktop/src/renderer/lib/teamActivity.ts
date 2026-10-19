@@ -59,6 +59,7 @@ export type AmbientOutlet = "silence" | "toast" | "os";
 /**
  * 壳 × 场面选出口。手机在线没有 Electron 系统通知，不在场仍走应用内提示
  * （服务端有意 skipped_mobile_online）。网页隐藏没有系统通道 → 静默。
+ * `hasOsNotification` 已含用户总开关（设置 · 通用关掉后与无通道相同）。
  */
 export function pickAmbientOutlet(input: {
   shellPresent: boolean;

@@ -58,6 +58,7 @@ describe("parseMcpListToolsValue", () => {
     expect(fs.tools[0].available_to).toEqual(["ceo", "worker"]);
     expect(fs.tools[0].description).toBe("Read a file");
     expect(fs.tools[0].blurb).toBe("");
+    expect(fs.tools[0].description_prefer).toBe("");
     expect(fs.tools[0].description).not.toContain("MCP");
     expect(gh.status).toBe("failed");
     expect(gh.tools).toEqual([]);

@@ -89,6 +89,8 @@ class ConversationRepository:
         permission_axes: dict | None = None,
         deep_research_auto: bool | None = None,
         assembly_id: str | None = None,
+        model_override: dict | None = None,
+        delegate_mode: bool | None = None,
         client_request_id: str | None = None,
         commit: bool = True,
     ) -> Conversation:
@@ -132,6 +134,10 @@ class ConversationRepository:
             conv.deep_research_auto = bool(deep_research_auto)
         if assembly_id is not None:
             conv.assembly_id = assembly_id
+        if model_override is not None:
+            conv.model_override = model_override
+        if delegate_mode is not None:
+            conv.delegate_mode = bool(delegate_mode)
         if client_request_id is not None:
             conv.client_request_id = client_request_id
         self._session.add(conv)
@@ -167,6 +173,8 @@ class ConversationRepository:
         local_container_root_id: str | None = None,
         permission_axes: dict | None = None,
         assembly_id: str | None = None,
+        model_override: dict | None = None,
+        delegate_mode: bool | None = None,
     ) -> tuple[Conversation, bool]:
         """Create a conversation once per ``client_request_id``; returns ``(conv, created)``.
 
@@ -197,6 +205,8 @@ class ConversationRepository:
                     local_container_root_id=local_container_root_id,
                     permission_axes=permission_axes,
                     assembly_id=assembly_id,
+                    model_override=model_override,
+                    delegate_mode=delegate_mode,
                     client_request_id=client_request_id,
                     commit=False,
                 )
@@ -261,6 +271,23 @@ class ConversationRepository:
             return None
         return row
 
+    async def _writable_assembly(
+        self, conv: Conversation, *, user_id: str
+    ) -> LlmModelProfile | None:
+        """Owned row this conversation can write. Official 完整 is not writable."""
+        row = await self._assembly_for_conversation(conv)
+        if row is not None:
+            return row
+        from agentcore.llm.model_profiles import is_system_profile_id
+
+        aid = conv.assembly_id
+        if isinstance(aid, str) and is_system_profile_id(aid):
+            from agentcore.assembly.recipes import OFFICIAL_READONLY
+            from agentcore.core.errors import ValidationError
+
+            raise ValidationError(OFFICIAL_READONLY)
+        return None
+
     async def set_disabled_tools(
         self,
         conversation_id: str,
@@ -273,7 +300,7 @@ class ConversationRepository:
         conv = await self.get_by_id(conversation_id, user_id=user_id)
         if not conv:
             return None
-        row = await self._assembly_for_conversation(conv)
+        row = await self._writable_assembly(conv, user_id=user_id)
         if row is None:
             return None
         from agentcore.assembly.recipes import clear_recipe
@@ -297,7 +324,7 @@ class ConversationRepository:
         conv = await self.get_by_id(conversation_id, user_id=user_id)
         if not conv:
             return None
-        row = await self._assembly_for_conversation(conv)
+        row = await self._writable_assembly(conv, user_id=user_id)
         if row is None:
             return None
         from agentcore.assembly.recipes import clear_recipe
@@ -321,6 +348,22 @@ class ConversationRepository:
         if not conv:
             return None
         conv.assembly_id = assembly_id
+        await self._session.commit()
+        await self._session.refresh(conv)
+        return conv
+
+    async def set_model_override(
+        self,
+        conversation_id: str,
+        model_override: dict | None,
+        *,
+        user_id: str,
+    ) -> Conversation | None:
+        """Write this conversation's model slots. None = inherit the assembly."""
+        conv = await self.get_by_id(conversation_id, user_id=user_id)
+        if not conv:
+            return None
+        conv.model_override = model_override
         await self._session.commit()
         await self._session.refresh(conv)
         return conv
@@ -356,6 +399,18 @@ class ConversationRepository:
         if not conv:
             return None
         conv.deep_research_auto = bool(enabled)
+        await self._session.commit()
+        await self._session.refresh(conv)
+        return conv
+
+    async def set_delegate_mode(
+        self, conversation_id: str, enabled: bool, *, user_id: str
+    ) -> Conversation | None:
+        """Owner-scoped toggle of 输入区「统筹」。Returns None if missing."""
+        conv = await self.get_by_id(conversation_id, user_id=user_id)
+        if not conv:
+            return None
+        conv.delegate_mode = bool(enabled)
         await self._session.commit()
         await self._session.refresh(conv)
         return conv
@@ -1041,7 +1096,7 @@ class ConversationRepository:
         and surfaces as a failure — no reconciliation, no retry.
 
         The chat keeps everything the delete left alone, which is everything except
-        ``deleted_at``: ``folder_id``, ``pinned``, ``archived`` and its real
+        ``deleted_at``: ``folder_id``, ``archived_by_folder_delete`` and its real
         ``updated_at`` all come back untouched, so it reappears in the group and the
         recency bucket it left from. Two things do **not** come back, and the UI says
         so rather than pretending: public share links (cascade-revoked at delete time,

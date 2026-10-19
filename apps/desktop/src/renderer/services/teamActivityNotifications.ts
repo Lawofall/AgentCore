@@ -33,11 +33,12 @@ import {
 } from "@/stores/interactions";
 import { usePausedTurnStore } from "@/stores/pausedTurns";
 import { useSidePanelStore } from "@/stores/sidePanel";
+import { useUIStore } from "@/stores/ui";
 
 /**
  * 协作感知出口 (前端UX设计.md §一)：只读订阅对话生成态 + 交互态 + 挂起态。
  * 壳在场且场面在眼前 → 静默；壳在场但人不在这条对话（也没打开它的浮窗）→ 应用内提示；
- * 壳不在场 → 桌面系统通知。横幅只在卡从无到有时弹；同一对话一条槽位（新卡再响、替换不叠）。
+ * 壳不在场 → 桌面系统通知（设置 · 通用可关，关了与无系统通道相同：桌面静默）。横幅只在卡从无到有时弹；同一对话一条槽位（新卡再响、替换不叠）。
  * 纯前端感知层——不碰 SSE 契约 / 协议 fold，不新增事件；接线一次于 AppShell（与 realtime /
  * updates 同处），随会话常驻。
  *
@@ -142,7 +143,8 @@ function notifyAmbient(
         useConversationSplitStore.getState().roomFits,
       ),
     ),
-    hasOsNotification: hasNativeNotification(),
+    hasOsNotification:
+      hasNativeNotification() && useUIStore.getState().osNotifications,
     nativeMobile: isNativeRuntime(),
   });
   if (outlet === "silence") return;

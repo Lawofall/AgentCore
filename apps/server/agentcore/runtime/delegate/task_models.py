@@ -129,11 +129,13 @@ async def prepare_task_model_fields(
             if catalog is None and session is None:
                 errors.append(f"{where}.model {DELEGATE_CATALOG_UNAVAILABLE}")
                 continue
+            from agentcore.db.repositories import UserRepository
             from agentcore.llm.catalog import resolve_model_catalog as _resolve_cat
 
             cat = catalog
             if cat is None and session is not None and user_id:
-                cat = await _resolve_cat(session, user_id)
+                refs = await UserRepository(session).enabled_model_refs(user_id)
+                cat = await _resolve_cat(session, user_id, enabled_refs=refs)
             if cat is None:
                 errors.append(f"{where}.model {DELEGATE_CATALOG_UNAVAILABLE}")
                 continue

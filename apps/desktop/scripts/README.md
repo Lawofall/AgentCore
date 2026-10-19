@@ -18,4 +18,4 @@
 | `smoke-demo-tape.mjs` | 演示带 auto-start 六拍点（`demos/README` 点名） |
 | `raise-electron-window.ps1` | `shoot:graph-perf-live` 调起窗口 |
 
-`materialize-sponsor-posters.mjs` / `release-channel.mjs` 由 CI / electron-builder 引用，不在 `package.json` scripts 里，同样常驻。
+`release-channel.mjs` 由 CI / electron-builder 引用，不在 `package.json` scripts 里，同样常驻。

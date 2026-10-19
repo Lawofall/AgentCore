@@ -72,6 +72,8 @@ async def test_daily_tokens_exceeded():
     assert ei.value.dimension == "daily_tokens"
     assert ei.value.status_code == 429
     assert ei.value.used == 1100
+    assert "更高档" not in ei.value.message
+    assert "接入自己的 key" in ei.value.message
 
 
 async def test_monthly_cost_exceeded():
@@ -95,6 +97,7 @@ async def test_daily_cost_exceeded():
     assert ei.value.dimension == "daily_cost"
     assert ei.value.status_code == 429
     assert ei.value.used == 3 * NANO_PER_CNY
+    assert "更高档" in ei.value.message
     assert "接入自己的 key" in ei.value.message
 
 
@@ -107,13 +110,35 @@ async def test_daily_cost_reads_day_window_not_month():
     assert all(since.day != 1 for since in repo.windows)
 
 
-async def test_monthly_message_carries_admin_and_byok_exit():
+async def test_monthly_message_carries_upgrade_and_byok_exit():
     repo = _FakeRepo(month=_agg(cost_total=200 * NANO_PER_CNY))
     limits = QuotaLimits(0, monthly_cost_nano=10 * NANO_PER_CNY)
     with pytest.raises(QuotaExceededError) as ei:
         await enforce_quota(repo, "u1", now=_NOW, limits=limits)
     assert ei.value.dimension == "monthly_cost"
-    assert "管理员" in ei.value.message
+    assert "更高档" in ei.value.message
+    assert "接入自己的 key" in ei.value.message
+    assert "管理员" not in ei.value.message
+
+
+async def test_flagship_monthly_omits_upgrade_exit():
+    repo = _FakeRepo(month=_agg(cost_total=100 * NANO_PER_CNY))
+    limits = QuotaLimits(0, monthly_cost_nano=100 * NANO_PER_CNY)
+    with pytest.raises(QuotaExceededError) as ei:
+        await enforce_quota(repo, "u1", now=_NOW, limits=limits)
+    assert ei.value.dimension == "monthly_cost"
+    assert "更高档" not in ei.value.message
+    assert "接入自己的 key" in ei.value.message
+    assert "额度重置后可继续" in ei.value.message
+
+
+async def test_flagship_daily_omits_upgrade_exit():
+    repo = _FakeRepo(today=_agg(cost_total=10 * NANO_PER_CNY))
+    limits = QuotaLimits(0, 0, daily_cost_nano=10 * NANO_PER_CNY)
+    with pytest.raises(QuotaExceededError) as ei:
+        await enforce_quota(repo, "u1", now=_NOW, limits=limits)
+    assert ei.value.dimension == "daily_cost"
+    assert "更高档" not in ei.value.message
     assert "接入自己的 key" in ei.value.message
 
 
@@ -234,13 +259,13 @@ def test_from_settings_converts_costs_to_nano():
     assert limits.daily_cost_nano == int(settings.quota_daily_cost_cny * NANO_PER_CNY)
 
 
-def test_quota_settings_defaults_are_ten_yuan():
-    """Product default (unbound by local .env) is ¥10/月 · ¥10/日."""
+def test_quota_settings_defaults_are_five_yuan():
+    """Product default (unbound by local .env) is 5 积分/月 · 5 积分/日."""
     from agentcore.config.quota import QuotaSettings
 
     defaults = QuotaSettings()
-    assert defaults.quota_monthly_cost_cny == 10.0
-    assert defaults.quota_daily_cost_cny == 10.0
+    assert defaults.quota_monthly_cost_cny == 5.0
+    assert defaults.quota_daily_cost_cny == 5.0
     assert defaults.quota_daily_tokens == 0
 
 

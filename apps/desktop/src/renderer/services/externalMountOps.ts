@@ -15,8 +15,9 @@ type MountMode = "readonly" | "organize" | "attach_rw";
  *
  * After the server suspends and streams ``external_mount_required``,
  * resolve path / well_known+target_name / root_id (no picker), POST
- * ``external-grants``, and settle. Read-only is silent; organize / attach_rw
- * confirm in main (system dialog).
+ * ``external-grants``, and settle. ``computer`` / ``full`` mint silently;
+ * ``folder`` / ``read`` confirm write upgrades (and non-inbox first readonly)
+ * in main.
  */
 export async function performExternalMount(
   payload: ExternalMountRequiredPayload,

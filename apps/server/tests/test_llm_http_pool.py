@@ -19,6 +19,7 @@ from agentcore.llm.profiles import DEEPSEEK_V4_FLASH
 from agentcore.llm.provider.anthropic import AnthropicMessagesProvider
 from agentcore.llm.provider.openai_compatible import OpenAICompatibleProvider
 from agentcore.llm.provider.protocol import LLMMessage, LLMRequest
+from agentcore.llm.provider.responses import OpenAIResponsesProvider
 
 _A = "http://llm-pool-a.test/v1"
 _B = "http://llm-pool-b.test/v1"
@@ -56,7 +57,9 @@ def test_same_origin_shares_client_different_origin_does_not() -> None:
 def test_openai_and_anthropic_same_origin_share_transport() -> None:
     openai = OpenAICompatibleProvider(name="user", api_key="k", base_url=_A)
     anthropic = AnthropicMessagesProvider(name="user", api_key="k", base_url=_A)
+    responses = OpenAIResponsesProvider(name="user", api_key="k", base_url=_A)
     assert openai._client is anthropic._client
+    assert openai._client is responses._client
 
 
 def test_keepalive_expiry_outlives_a_turn_gap() -> None:

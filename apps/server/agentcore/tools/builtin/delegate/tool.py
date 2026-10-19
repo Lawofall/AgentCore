@@ -33,9 +33,9 @@ from agentcore.runtime.delegate.supervised import (
 )
 from agentcore.runtime.events import EventSink, plan_revised
 from agentcore.tools.builtin.delegate.schema import (
-    DELEGATE_DESCRIPTION,
     DELEGATE_PARAMETERS,
-    NESTED_DELEGATE_DESCRIPTION,
+    nested_delegate_description,
+    root_delegate_description,
 )
 from agentcore.tools.protocol import ToolContext, ToolResult, ToolSchema
 from agentcore.tools.registration import (
@@ -126,6 +126,7 @@ class DelegateTool:
         permission_axes: WorkspaceBoundary | None = None,
         depth: int = 0,
         worker_envelope: str = "",
+        prefer_delegate: bool = False,
     ) -> None:
         self._llm = llm
         self._sink = sink
@@ -145,6 +146,7 @@ class DelegateTool:
         self._session_saver = session_saver
         self._session_loader = session_loader
         self._depth = depth
+        self._prefer_delegate = bool(prefer_delegate)
         self._conversation_id = conversation_id
         self._registry = registry
         self._checkpoint_timeout_seconds = checkpoint_timeout_seconds
@@ -274,10 +276,13 @@ class DelegateTool:
     @property
     def schema(self) -> ToolSchema:
         depth = getattr(self, "_depth", 0)
+        prefer = bool(getattr(self, "_prefer_delegate", False))
         return ToolSchema(
             name="delegate",
             description=(
-                NESTED_DELEGATE_DESCRIPTION if depth >= 1 else DELEGATE_DESCRIPTION
+                nested_delegate_description(prefer=prefer)
+                if depth >= 1
+                else root_delegate_description(prefer=prefer)
             ),
             parameters=DELEGATE_PARAMETERS,
             face=ToolFace.ORCHESTRATION,

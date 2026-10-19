@@ -5,10 +5,20 @@ import {
 } from "@/hooks/useConversations";
 import { useChatPaneId } from "@/lib/chatPane";
 import {
+  clearComposerDraftDelegateMode,
+  getComposerDraftDelegateMode,
+} from "@/lib/composerDelegateMode";
+import {
   type MessageDelivery,
   isLiveCoordinatingTurn,
   resolveDefaultDelivery,
 } from "@/lib/composerDelivery";
+import {
+  type ConversationModelOverride,
+  catalogComposerModel,
+  completeModelOverride,
+  useComposerProfileDraftStore,
+} from "@/lib/composerModelProfile";
 import { confirmSendDespitePendingIfNeeded } from "@/lib/composerPendingHint";
 import { promoteDraftConversationPane } from "@/lib/conversationSplitActions";
 import {
@@ -18,6 +28,8 @@ import {
 } from "@/lib/draftRequestId";
 import { plainText } from "@/lib/inlineBody";
 import { isReadOnlyOffline } from "@/lib/offlineMode";
+import { queryClient } from "@/lib/queryClient";
+import { modelKeys } from "@/lib/queryKeys";
 import type { SupportDiagnosticIds } from "@/lib/supportDiagnostics";
 import { notifyError } from "@/lib/toast";
 import { api } from "@/services/api";
@@ -29,7 +41,7 @@ import {
 import { submitDebateSteer } from "@/services/debate";
 import { ensureDefaultContainerRoot } from "@/services/defaultWorkspace";
 import { loadLatestWindow } from "@/services/messages";
-import { getLastUsedProfileId } from "@/services/models";
+import { type ModelCatalog, getLastUsedProfileId } from "@/services/models";
 import {
   type PermissionAxes,
   resolveDefaultPermissionAxes,
@@ -492,9 +504,17 @@ export function useComposerSend({
               return;
             }
           }
-          // 新建拍快照：POST 带 last-used（或草稿所选，已写入 last_profile_id）；
-          // 省略则服务端写入当时账号默认。勿再 create 后 PATCH。
+          // 新建拍快照：POST 带 last-used（或草稿所选）；
+          // 省略则服务端写入账号回落。勿再 create 后 PATCH。
           const inheritedProfileId = getLastUsedProfileId()?.trim() || null;
+          const inheritedRaw =
+            useComposerProfileDraftStore.getState().modelOverride ??
+            catalogComposerModel(
+              queryClient.getQueryData<ModelCatalog>(modelKeys.catalog),
+            );
+          const inheritedModel = inheritedRaw
+            ? completeModelOverride(inheritedRaw)
+            : null;
           // 幂等键跟草稿走：同一份草稿重复发送复用同一个键，服务端命中同键返回已建好的
           // 那条会话，「以为没发出去又按一次」不会再建出第二条。
           const clientRequestId = resolveDraftRequestId(draftKey);
@@ -506,10 +526,13 @@ export function useComposerSend({
           useComposerDraftStore.getState().armDockFlip();
           try {
             const permissionAxes = await resolveDefaultPermissionAxes();
+            const draftDelegate = getComposerDraftDelegateMode();
             const conv = await api.post<{
               id: string;
               permission_axes?: PermissionAxes;
               assembly_id?: string | null;
+              model_override?: ConversationModelOverride | null;
+              delegate_mode?: boolean;
             }>("/v1/conversations", {
               title: null,
               folder_id: targetFolderId,
@@ -519,9 +542,12 @@ export function useComposerSend({
               ...(inheritedProfileId
                 ? { assembly_id: inheritedProfileId }
                 : {}),
+              ...(inheritedModel ? { model_override: inheritedModel } : {}),
+              delegate_mode: draftDelegate,
             });
             conversationId = conv.id;
             setComposerDraftAxes(null);
+            clearComposerDraftDelegateMode();
             upsertConversationFront({
               id: conv.id,
               title: provisionalConversationTitle(preview),
@@ -532,6 +558,8 @@ export function useComposerSend({
               localContainerRootId,
               permissionAxes: conv.permission_axes ?? permissionAxes,
               assemblyId: conv.assembly_id ?? inheritedProfileId ?? null,
+              modelOverride: conv.model_override ?? inheritedModel ?? null,
+              delegateMode: Boolean(conv.delegate_mode ?? draftDelegate),
             });
             // 把草稿上的乐观气泡接到新 id（同一 write，避免空窗一帧）。
             // 不得用 switchConversation——从首页点开已有对话不能倒进草稿残留。

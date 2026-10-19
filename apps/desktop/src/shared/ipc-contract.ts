@@ -430,6 +430,8 @@ export type GrantSessionWellKnown = "desktop" | "downloads" | "documents";
  * may include `displayLabel` (basename / redacted). Abs must not persist in
  * renderer or REST grant bodies.
  */
+export type FolderGrantBoundary = "read" | "folder" | "computer" | "full";
+
 export interface GrantSessionReadonlyRootParams {
   conversationId: string;
   mode?: "readonly" | "organize" | "attach_rw";
@@ -439,6 +441,8 @@ export interface GrantSessionReadonlyRootParams {
   targetName?: string;
   /** Existing session root — upgrade mode without resolving a path (no picker). */
   rootId?: string;
+  /** Conversation boundary. ``computer`` / ``full`` skip the folder dialog. */
+  boundary?: FolderGrantBoundary;
 }
 
 /** Failure reasons from grant resolve / write confirm (picker never opens). */
@@ -538,15 +542,14 @@ export interface FsApi {
   removeRoot(rootId: string): Promise<void>;
   /**
    * W3/P1: session root (readonly | organize | attach_rw) bound to conversation.
-   * Accepts legacy `(conversationId, mode?)` or a params object with optional
-   * `path` / `wellKnown` / `targetName` / `rootId` (resolve or upgrade —
-   * never opens a folder picker). Write modes confirm in main (system dialog).
-   * Failure reasons: not_found / permission_denied / not_directory / ambiguous /
-   * cancelled (user dismissed the write-grant dialog).
+   * Optional `path` / `wellKnown` / `targetName` / `rootId` (resolve or upgrade —
+   * never opens a folder picker). ``computer`` / ``full`` mint silently;
+   * ``folder`` / ``read`` confirm write upgrades (and non-inbox first readonly)
+   * in main. Failure reasons: not_found / permission_denied / not_directory /
+   * ambiguous / cancelled (user dismissed the grant dialog).
    */
   grantSessionReadonlyRoot(
-    conversationIdOrParams: string | GrantSessionReadonlyRootParams,
-    mode?: "readonly" | "organize" | "attach_rw",
+    params: GrantSessionReadonlyRootParams,
   ): Promise<GrantSessionReadonlyRootResult>;
   listSessionReadonlyRoots(conversationId: string): Promise<FsRoot[]>;
   revokeSessionReadonlyRoot(

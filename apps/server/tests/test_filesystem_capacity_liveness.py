@@ -344,7 +344,6 @@ async def test_file_read_office_extract_timeout_is_observation_not_liveness(tmp_
     assert "markitdown" not in out.lower()
     assert "请用 code_execute" not in out
     assert "code_execute" not in out
-    assert "read_image" not in out
     assert "按文件名归类" in out
     assert "请用户" not in out
 

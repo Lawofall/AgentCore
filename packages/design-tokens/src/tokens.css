@@ -40,6 +40,14 @@
   --success-foreground: oklch(0.985 0.02 152);
   --warning: oklch(0.66 0.15 65);
   --warning-foreground: oklch(0.25 0.05 65);
+  /* Diff classification (layer C, not status). GitHub Primer washes + stronger
+   * sign gutter; body stays --foreground. Do not borrow success/destructive /10. */
+  --diff-add: oklch(0.96 0.045 152);
+  --diff-del: oklch(0.96 0.028 25);
+  --diff-add-gutter: oklch(0.91 0.06 152);
+  --diff-del-gutter: oklch(0.91 0.05 25);
+  --diff-add-fg: oklch(0.48 0.13 152);
+  --diff-del-fg: oklch(0.55 0.18 25);
   --border: oklch(0.92 0.008 255);
   --input: var(--border);
   --ring: var(--primary);
@@ -47,13 +55,16 @@
   --scrollbar-thumb: oklch(0.8 0.012 255 / 0.8);
   --scrollbar-thumb-hover: oklch(0.62 0.02 255 / 0.9);
 
-  /* Sidebar chrome: cool gray (hue 250, low chroma) — distinct from primary blue 255. */
+  /* Sidebar chrome: cool gray (hue 250, low chroma) — distinct from primary blue 255.
+   * Three solid inks (no foreground alpha): nav/folder charcoal, conversation
+   * titles one step lighter, meta muted. Selection is the accent wash. */
   --sidebar: oklch(0.97 0.004 250);
-  --sidebar-foreground: oklch(0.18 0.006 250);
+  --sidebar-foreground: oklch(0.28 0.008 250);
+  --sidebar-list: oklch(0.36 0.01 250);
   --sidebar-primary: var(--primary);
   --sidebar-primary-foreground: var(--primary-foreground);
   --sidebar-accent: oklch(0.93 0.006 250);
-  --sidebar-accent-foreground: oklch(0.5 0.17 255);
+  --sidebar-accent-foreground: var(--sidebar-foreground);
   --sidebar-border: oklch(0.9 0.005 250);
   --sidebar-ring: var(--primary);
   /* Readable secondary ink on the sidebar (hotkey digits, overflow, empty).
@@ -155,6 +166,13 @@
   --success-foreground: oklch(0.16 0.03 155);
   --warning: oklch(0.8 0.14 75);
   --warning-foreground: oklch(0.2 0.04 75);
+  /* Diff washes as alpha overlays so they sit on canvas and card. */
+  --diff-add: oklch(0.72 0.14 155 / 0.18);
+  --diff-del: oklch(0.68 0.16 25 / 0.16);
+  --diff-add-gutter: oklch(0.72 0.14 155 / 0.3);
+  --diff-del-gutter: oklch(0.68 0.16 25 / 0.28);
+  --diff-add-fg: oklch(0.78 0.13 155);
+  --diff-del-fg: oklch(0.76 0.15 25);
   --border: oklch(1 0 0 / 0.12);
   --input: var(--border);
   --ring: var(--primary);
@@ -165,10 +183,11 @@
   /* Sidebar chrome: cooler (hue 250) and darker than canvas. */
   --sidebar: oklch(0.10 0.003 250);
   --sidebar-foreground: oklch(0.93 0.003 250);
+  --sidebar-list: oklch(0.82 0.006 250);
   --sidebar-primary: var(--primary);
   --sidebar-primary-foreground: var(--primary-foreground);
   --sidebar-accent: oklch(0.17 0.004 250);
-  --sidebar-accent-foreground: oklch(0.78 0.13 255);
+  --sidebar-accent-foreground: var(--sidebar-foreground);
   --sidebar-border: oklch(1 0 0 / 0.10);
   --sidebar-ring: var(--primary);
   --sidebar-muted: oklch(0.72 0.01 250);

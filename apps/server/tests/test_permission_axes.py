@@ -1,4 +1,4 @@
-"""Conversation boundary: read | folder | computer."""
+"""Conversation boundary: read | folder | computer | full."""
 
 from __future__ import annotations
 
@@ -41,17 +41,18 @@ class _ServerBackend:
     location = "server"
 
 
-def test_default_boundary_is_folder():
-    assert DEFAULT_PERMISSION_AXES is WorkspaceBoundary.FOLDER
+def test_default_boundary_is_computer():
+    assert DEFAULT_PERMISSION_AXES is WorkspaceBoundary.COMPUTER
     assert DEFAULT_PERMISSION_AXES.allows_write is True
     assert DEFAULT_PERMISSION_AXES.allows_execution is True
-    assert DEFAULT_PERMISSION_AXES.allows_host is False
-    assert DEFAULT_PERMISSION_AXES.to_dict() == {"boundary": "folder"}
+    assert DEFAULT_PERMISSION_AXES.allows_host is True
+    assert DEFAULT_PERMISSION_AXES.to_dict() == {"boundary": "computer"}
 
 
 def test_from_mapping_requires_boundary():
     assert WorkspaceBoundary.from_mapping({"boundary": "read"}) is WorkspaceBoundary.READ
     assert WorkspaceBoundary.from_mapping({"boundary": "computer"}) is WorkspaceBoundary.COMPUTER
+    assert WorkspaceBoundary.from_mapping({"boundary": "full"}) is WorkspaceBoundary.FULL
     with pytest.raises(ValueError):
         WorkspaceBoundary.from_mapping(None)
     with pytest.raises(ValueError):
@@ -64,12 +65,12 @@ def test_from_mapping_requires_boundary():
         WorkspaceBoundary.from_mapping({"boundary": "managed"})
 
 
-def test_parse_permission_axes_falls_back_to_folder():
+def test_parse_permission_axes_falls_back_to_computer():
     assert parse_permission_axes({"boundary": "read"}) is WorkspaceBoundary.READ
-    assert parse_permission_axes(None) is WorkspaceBoundary.FOLDER
+    assert parse_permission_axes(None) is WorkspaceBoundary.COMPUTER
     assert (
         parse_permission_axes({"file_write": "session", "command": "auto"})
-        is WorkspaceBoundary.FOLDER
+        is WorkspaceBoundary.COMPUTER
     )
 
 
@@ -77,6 +78,8 @@ def test_schema_accepts_only_boundary():
     model = PermissionAxesModel.model_validate({"boundary": "computer"})
     assert model.to_axes() is WorkspaceBoundary.COMPUTER
     assert model.to_axes().to_dict() == {"boundary": "computer"}
+    full = PermissionAxesModel.model_validate({"boundary": "full"})
+    assert full.to_axes() is WorkspaceBoundary.FULL
     dropped = PermissionAxesModel.model_validate(
         {"boundary": "folder", "file_write": "ask", "command": "auto"}
     )
@@ -84,7 +87,7 @@ def test_schema_accepts_only_boundary():
     with pytest.raises(ValidationError):
         PermissionAxesModel(boundary="cautious")
     legacy = PermissionAxesUpdate(permission_axes={"file_write": "ask"})
-    assert legacy.permission_axes.boundary is WorkspaceBoundary.FOLDER
+    assert legacy.permission_axes.boundary is WorkspaceBoundary.COMPUTER
 
 
 def test_read_omits_writes_and_execution():
@@ -117,7 +120,7 @@ def test_folder_includes_execution_not_host():
         desktop_online=True,
         permission_axes=WorkspaceBoundary.FOLDER,
     )
-    assert "边界：这个文件夹" in out
+    assert "边界：本文件夹" in out
     assert "run" not in _gaps(out)
     assert "host" not in _gaps(out)
     assert (
@@ -153,6 +156,44 @@ def test_computer_includes_host_and_names_the_boundary():
     assert "host" in _gaps(out)
     assert boundary_block_message(WorkspaceBoundary.FOLDER, "host")
     assert boundary_block_message(WorkspaceBoundary.COMPUTER, "host") is None
+
+
+def test_full_local_includes_host_cloud_does_not():
+    assert WorkspaceBoundary.FULL.skips_confirm is True
+    assert WorkspaceBoundary.FULL.allows_host is True
+    assert WorkspaceBoundary.FULL.host_in_registry("local") is True
+    assert WorkspaceBoundary.FULL.host_in_registry("server") is False
+    names = _names(WorkspaceBoundary.FULL)
+    assert "host" in names
+    assert "run" in names
+    local = build_workspace_context(
+        _LocalBackend(),
+        desktop_online=True,
+        permission_axes=WorkspaceBoundary.FULL,
+    )
+    assert "边界：完全权限" in local
+    assert "host" not in _gaps(local)
+    cloud_names = {
+        s.name
+        for s in build_worker_registry(
+            backend=_ServerBackend(), permission_axes=WorkspaceBoundary.FULL
+        ).list_all()
+    }
+    assert "host" not in cloud_names
+    cloud = build_workspace_context(
+        _ServerBackend(),
+        desktop_online=False,
+        permission_axes=WorkspaceBoundary.FULL,
+    )
+    assert "边界：完全权限" in cloud
+    assert "host" not in _gaps(cloud)
+    assert boundary_block_message(
+        WorkspaceBoundary.FULL, "host", location="server"
+    )
+    assert (
+        boundary_block_message(WorkspaceBoundary.FULL, "host", location="local")
+        is None
+    )
 
 
 def test_cloud_read_does_not_skip_file_ops():

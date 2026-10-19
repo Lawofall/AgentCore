@@ -98,7 +98,7 @@ async def list_conversations(
                 created_at=conv.created_at,
                 updated_at=conv.updated_at,
                 deleted_at=conv.deleted_at,
-                archived=conv.archived,
+                archived=conv.archived_by_folder_delete,
                 messages=msg_counts.get(conv.id, 0),
                 turns=stats["turns"],
                 errors=stats["errors"],

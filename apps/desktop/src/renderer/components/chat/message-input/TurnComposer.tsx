@@ -3,6 +3,7 @@ import { MentionMenu } from "@/components/chat/MentionMenu";
 import { IconButton } from "@/components/ui";
 import { useConversations } from "@/hooks/useConversations";
 import { useFolders } from "@/hooks/useFolders";
+import { assemblyIsChatOnly } from "@/lib/assemblyLock";
 import { useChatPaneId, useChatPaneSliceKey } from "@/lib/chatPane";
 import {
   COMPOSER_CONTINUE_PLACEHOLDER,
@@ -13,6 +14,8 @@ import {
   useClassicToolStepOpen,
   useLiveCoordinatingTurn,
 } from "@/lib/composerDelivery";
+import { useComposerActiveProfile } from "@/lib/composerModelProfile";
+import { isComposerSubmitKey, occupiedQueueHint } from "@/lib/composerSendKey";
 import { connectivityEscalationSuffix } from "@/lib/errors";
 import {
   dropInlineIndex,
@@ -54,7 +57,8 @@ import {
 } from "@/stores/interactions";
 import { usePausedTurnStore } from "@/stores/pausedTurns";
 import { useServerHealthStore } from "@/stores/serverHealth";
-import { AtSign, Loader2, Send, Square, X } from "lucide-react";
+import { useUIStore } from "@/stores/ui";
+import { Loader2, Plus, Send, Square, X } from "lucide-react";
 import type { ChangeEvent, SetStateAction } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AssemblyPicker } from "./AssemblyPicker";
@@ -62,17 +66,16 @@ import {
   ComposerBodyEditor,
   type ComposerBodyHandle,
 } from "./ComposerBodyEditor";
+import { ComposerChangesChip } from "./ComposerChangesChip";
 import { ComposerContextCompactedHint } from "./ComposerContextCompactedHint";
+import { ComposerDelegateMode } from "./ComposerDelegateMode";
 import { ComposerFailureBanner } from "./ComposerFailureBanner";
 import { ComposerGitStatusChip } from "./ComposerGitStatusChip";
-import {
-  ComposerPlusMenu,
-  useComposerPlusClose,
-  useComposerPlusHost,
-} from "./ComposerPlusMenu";
+import { ComposerMoreAddRow, ComposerPlusMenu } from "./ComposerPlusMenu";
 import { ComposerReceivedContextButton } from "./ComposerReceivedContextButton";
 import { ComposerVisionHint } from "./ComposerVisionHint";
 import { ComposerWorkspaceChip } from "./ComposerWorkspaceChip";
+import { ModelPicker } from "./ModelPicker";
 import { PermissionAxesBadge } from "./PermissionPresetBadge";
 import { RecordingBar } from "./RecordingBar";
 import { ComposerConnectionNotice } from "./ServerStatusIndicator";
@@ -109,7 +112,7 @@ const MIN_COMPOSER_HEIGHT_CARD = 56;
 const MIN_COMPOSER_HEIGHT_BAR = 36;
 const MAX_COMPOSER_HEIGHT = 200;
 
-/** bar 底排盒：宽屏是 ＋ / 输入 / 语音 / 发送 一行。窄屏输入另起一行，这一盒只留 ＋ / 语音 / 发送。窗外环用同一 `py-1` 对齐，不跟卡片边框底边对齐。 */
+/** bar 单行盒：更多|＋ · 输入 · 改动? · 模型 · 语音 · 发送。窗外环用同一 `py-1` 对齐。 */
 const COMPOSER_BAR_ROW = "flex items-end gap-1 py-1";
 const COMPOSER_BAR_CLUSTER = "flex shrink-0 items-center pb-0.5";
 /** card 底栏：窗外环与工具条同一 `pb-3`，不跟卡片边框底边对齐。 */
@@ -138,11 +141,12 @@ const DEFAULT_COMPOSER_PLACEHOLDER = "输入消息，@ 引用内容…";
  * stays in chat. Hosts only pick chrome (placeholder).
  *
  * `variant="bar"` is the compact chrome used only by the chat bottom dock:
- * 宽屏一行 `[＋]` · textarea · 语音 · 发送；窄屏两行（通栏输入 / ＋ · 语音 · 发送）。
- * 工作区/Git/模型/权限/@ 收进＋菜单。
- * 窗口环贴在整块输入框外侧右边，不进卡片、不占输入列宽；与有发送的那一行同一行盒（不是贴边框底边，窄屏也不跟名字行）。
- * default `card` keeps textarea-above-toolbar（居中草稿）。宽屏左簇一行摊开；
- * 窄屏两行：工作区 · Git? · 装配，下一行权限 · @ · 语音 · 发送。
+ * 输入与按钮同一行：更多|＋ · 编辑区 · 改动? · 模型 · 语音 · 发送。
+ * 空草稿：工作区 / Git / 能力 / 委派 / 权限挂在卡片上方常显（`data-composer-world`），＋打开引用目录。
+ * 有会话：世界行与＋收进「更多」（第一行添加引用目录）。`@` 在输入里打字引用。
+ * 有可回滚改动时「改动」chip 留在更多旁边。
+ * 窗口环贴在整块输入框外侧右边，不进卡片、不占输入列宽；与有发送的那一行同一行盒。
+ * default `card` 同一套铬，编辑区约两行（居中草稿）。
  * 离线态靠 {@link ComposerConnectionNotice} 与发送硬禁，不再用安静连接绿点。
  *
  * Draft state (text + attachments) lives in {@link useComposerDraftStore} keyed by
@@ -163,7 +167,7 @@ export function TurnComposer({
   placeholder?: string;
   /**
    * `card` = editor above toolbar (default; centered new-chat composer).
-   * `bar` = compact dock: ＋菜单收纳左簇，常显仅输入与发送。
+   * `bar` = compact dock: editor and send on one row.
    */
   variant?: TurnComposerVariant;
   /** Visually fuse with ApprovalPrompt stacked above (工具审批 A · Composer 一体). */
@@ -171,6 +175,7 @@ export function TurnComposer({
 }) {
   const isBar = variant === "bar";
   const { isNarrow } = useNarrowLayoutState();
+  const sendOnEnter = useUIStore((s) => s.sendOnEnter);
   const minComposerHeight = isBar
     ? MIN_COMPOSER_HEIGHT_BAR
     : MIN_COMPOSER_HEIGHT_CARD;
@@ -183,6 +188,7 @@ export function TurnComposer({
   // 冻图会立刻关 isGenerating、execution 也不再算活队；停完之前输入框仍走停止，不露出发送。
   const deskOccupied = isGenerating || teamLive || isStopping;
   const conversationId = useChatPaneId();
+  const activeAssembly = useComposerActiveProfile();
   const paneKey = useChatPaneSliceKey();
   const byId = useInteractionStore((s) => s.byId);
   const pausedPending = usePausedTurnStore((s) => s.pending);
@@ -654,7 +660,8 @@ export function TurnComposer({
 
     if (!liveDebate && mention.menuMode && mention.handleMenuNavKey(e)) return;
 
-    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+    const submit = isComposerSubmitKey(e, sendOnEnter);
+    if (submit === "mod") {
       e.preventDefault();
       // 辩论进行中一律 continue。
       // 生成中：队还在或工具步还在执行才 steer；散文与 Enter 相同，排队。
@@ -672,7 +679,7 @@ export function TurnComposer({
       return;
     }
 
-    if (e.key === "Enter" && !e.shiftKey) {
+    if (submit === "bare") {
       e.preventDefault();
       // 离线 / 只读协作桌硬禁用（与发送按钮一致；handleSend 仍有兜底）。
       if (sendBlocked) return;
@@ -683,55 +690,47 @@ export function TurnComposer({
 
   const menuOpen = mention.menuMode !== null;
 
-  // 左簇顺序：工作区 · Git? · 装配 · 权限 · @
-  // bar：整簇收进 ComposerPlusMenu（权限/@ 带文案）；card：底栏摊开（权限 iconOnly）。
-  // 窄屏 card 把带字的工作区/装配放上行，图标放下行。同一组元素只渲染一次。
-  // 否决 Composer 并排「本地引擎/云端过桥」切换器；引擎不可用走诊断横幅，不自动过桥。
+  // 空草稿：卡片上方工作区 · Git? · 权限 · 能力 · 统筹；卡片内＋打开引用目录。
+  // 有会话：世界行与＋收进「更多」。否决 Composer 并排「本地引擎/云端过桥」切换器。
+  const chatOnly = assemblyIsChatOnly(activeAssembly);
+  const compactWorld = Boolean(conversationId);
   const workspaceChip = (
     <ComposerWorkspaceChip conversationId={conversationId} />
   );
   const gitChip = <ComposerGitStatusChip conversationId={conversationId} />;
-  const assemblyChip = <AssemblyPicker disabled={deskOccupied} />;
-  const permissionChip = (
-    <PermissionAxesBadge disabled={deskOccupied} iconOnly={!isBar} />
+  const changesChip = <ComposerChangesChip conversationId={conversationId} />;
+  const modelChip = <ModelPicker disabled={deskOccupied} />;
+  const delegateChip = (
+    <ComposerDelegateMode disabled={deskOccupied} chatOnly={chatOnly} />
   );
-  const sessionChrome = (
-    <>
+  const assemblyChip = <AssemblyPicker disabled={deskOccupied} />;
+  const permissionChip = <PermissionAxesBadge disabled={deskOccupied} />;
+  const attachButton = liveDebate ? null : (
+    <ComposerPlusButton onBrowse={mention.openBrowse} />
+  );
+  const moreMenu = compactWorld ? (
+    <ComposerPlusMenu>
+      {liveDebate ? null : <ComposerMoreAddRow onBrowse={mention.openBrowse} />}
       {workspaceChip}
       {gitChip}
-      {assemblyChip}
       {permissionChip}
-    </>
-  );
-
-  // 生成中照常可开 @：插话 / 排队本就带附件走，禁用只会让人以为坏了。
-  // 辩论进行中不画：主框是对这场说话，不是定向掌舵。
-  const mentionButton = (
-    <ComposerMentionButton
-      onToggle={mention.toggleAtMention}
-      iconOnly={!isBar}
-    />
-  );
-
-  const leftCluster = (
-    <>
-      {sessionChrome}
-      {liveDebate ? null : mentionButton}
-    </>
-  );
+      {assemblyChip}
+      {delegateChip}
+    </ComposerPlusMenu>
+  ) : null;
 
   // 生成中：停止常显。有草稿时复用空闲「发送」钮（Enter = 排队，挂在输入框上方）。
   // 整轮停在这枚停止钮。Ctrl/Cmd+Enter 只在队还在或工具步还在执行时送进当前回合。
   // 辩论进行中：发送=continue；隐藏排队；收场靠裁判收敛，不在此露出结论。
   // 离线 / 只读协作桌硬禁用发送（按钮 disabled + title；键盘走 handleKeyDown）。
-  // 辩论进行中主框是「对这场说话」：发送只看正文。@ 入口已藏，mention 芯片不得单独点亮发送。
+  // 辩论进行中主框是「对这场说话」：发送只看正文。添加行 / @ 入口已藏，mention 芯片不得单独点亮发送。
   const hasDraft = liveDebate
     ? Boolean(plainText(value).trim())
     : composerHasSendableDraft(value, attachments, agentMentions);
   const sendReady = !sendBlocked && (hasDraft || isSending);
   const midFlightHint =
     teamLive || toolStepOpen
-      ? "排队至本回合结束后发送（Enter）；Ctrl/Cmd+Enter 送进当前回合"
+      ? occupiedQueueHint(sendOnEnter)
       : "排队至本回合结束后发送";
   const stopLabel = isStopping ? "停止中…" : "停止生成";
   const stopButton = (
@@ -844,6 +843,18 @@ export function TurnComposer({
             onDismiss={failureNotice.onDismiss}
           />
         )}
+        {compactWorld ? null : (
+          <div
+            data-composer-world=""
+            className="flex min-w-0 flex-wrap items-center gap-1 px-1 pb-1.5"
+          >
+            <div className="composer-fill-chip min-w-0">{workspaceChip}</div>
+            <div className="composer-fill-git">{gitChip}</div>
+            {permissionChip}
+            {assemblyChip}
+            {delegateChip}
+          </div>
+        )}
         <div
           className={`relative min-w-0 w-full border bg-card shadow-sm transition-colors ${
             attachedBelowApproval
@@ -945,81 +956,25 @@ export function TurnComposer({
             <RecordingBar duration={voice.duration} onCancel={voice.cancel} />
           )}
 
-          {isBar && isNarrow ? (
-            <>
-              <div className="min-w-0 px-2 pt-1">{editorBlock}</div>
-              <div
-                className={`${COMPOSER_BAR_ROW} px-2`}
-                data-composer-actions=""
-              >
-                <div className={COMPOSER_BAR_CLUSTER}>
-                  <ComposerPlusMenu>
-                    {sessionChrome}
-                    {liveDebate ? null : mentionButton}
-                  </ComposerPlusMenu>
-                </div>
-                <div className={`${COMPOSER_BAR_CLUSTER} ml-auto gap-1`}>
-                  {voiceControl}
-                  {sendControls}
-                </div>
-              </div>
-            </>
-          ) : isBar ? (
+          {isBar ? (
             <div
               className={`${COMPOSER_BAR_ROW} px-2`}
               data-composer-actions=""
             >
               <div className={COMPOSER_BAR_CLUSTER}>
-                <ComposerPlusMenu>
-                  {sessionChrome}
-                  {liveDebate ? null : mentionButton}
-                </ComposerPlusMenu>
+                {compactWorld ? moreMenu : attachButton}
+                {changesChip}
               </div>
               {editorBlock}
-              <div className={`${COMPOSER_BAR_CLUSTER} gap-1`}>
+              <div
+                className={`${COMPOSER_BAR_CLUSTER} ml-auto gap-1`}
+                data-composer-send-cluster=""
+              >
+                {modelChip}
                 {voiceControl}
                 {sendControls}
               </div>
             </div>
-          ) : isNarrow ? (
-            <>
-              {editorBlock}
-              <div className="flex flex-col gap-2 px-4 pb-3">
-                <div
-                  className="flex min-w-0 items-center gap-1"
-                  data-composer-name-row=""
-                >
-                  <div
-                    className="flex min-w-0 flex-1 basis-0 items-center gap-1"
-                    data-composer-name-half=""
-                  >
-                    <div className="composer-fill-chip min-w-0 flex-1 overflow-hidden">
-                      {workspaceChip}
-                    </div>
-                    <div className="composer-fill-git">{gitChip}</div>
-                  </div>
-                  <div
-                    className="min-w-0 flex-1 basis-0 overflow-hidden"
-                    data-composer-name-half=""
-                  >
-                    <div className="composer-fill-chip">{assemblyChip}</div>
-                  </div>
-                </div>
-                <div
-                  className="flex items-center justify-between gap-1"
-                  data-composer-actions=""
-                >
-                  <div className="flex items-center gap-1">
-                    {permissionChip}
-                    {liveDebate ? null : mentionButton}
-                  </div>
-                  <div className="flex items-center gap-1">
-                    {voiceControl}
-                    {sendControls}
-                  </div>
-                </div>
-              </div>
-            </>
           ) : (
             <>
               {editorBlock}
@@ -1027,10 +982,15 @@ export function TurnComposer({
                 className="flex items-center justify-between px-4 pb-3"
                 data-composer-actions=""
               >
-                <div className="flex min-w-0 flex-1 items-center gap-1">
-                  {leftCluster}
-                </div>
                 <div className="flex items-center gap-1">
+                  {compactWorld ? moreMenu : attachButton}
+                  {changesChip}
+                </div>
+                <div
+                  className="flex items-center gap-1"
+                  data-composer-send-cluster=""
+                >
+                  {modelChip}
                   {voiceControl}
                   {sendControls}
                 </div>
@@ -1051,37 +1011,17 @@ export function TurnComposer({
   );
 }
 
-/** @ 按钮：bar「＋」菜单内带文案；card 底栏仅图标。点菜单内项时先关＋再插入/开关 mention。 */
-function ComposerMentionButton({
-  onToggle,
-  iconOnly = true,
-}: {
-  onToggle: () => void;
-  iconOnly?: boolean;
-}) {
-  const plusHost = useComposerPlusHost();
-  const closePlus = useComposerPlusClose();
-  const onClick = () => {
-    closePlus?.();
-    onToggle();
-  };
-  if (plusHost && plusHost.panel !== "list") return null;
-  if (iconOnly) {
-    return (
-      <IconButton size="md" onClick={onClick} aria-label="@ 引用">
-        <AtSign size={16} />
-      </IconButton>
-    );
-  }
+/** 空草稿＋：打开引用目录（附件 / 文件 / 文件夹 / 对话 / 提示词 / 团队）。不往正文插 @。 */
+function ComposerPlusButton({ onBrowse }: { onBrowse: () => void }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label="@ 引用"
-      className="inline-flex h-8 w-full items-center gap-1.5 rounded-lg px-2 text-xs text-muted-foreground hover:bg-accent/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+    <IconButton
+      size="md"
+      onClick={onBrowse}
+      aria-label="添加"
+      title="添加文件、文件夹或引用"
+      data-testid="composer-plus"
     >
-      <AtSign size={14} className="shrink-0" aria-hidden />
-      <span>引用</span>
-    </button>
+      <Plus size={16} />
+    </IconButton>
   );
 }

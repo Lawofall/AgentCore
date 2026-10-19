@@ -14,6 +14,7 @@ from agentcore.runtime.events import EventSink
 from agentcore.runtime.journal import last_turn_end_finish
 from agentcore.runtime.journal.writer import TurnJournalWriter
 from agentcore.runtime.suspension import TurnSuspension, suspension_from_json
+from agentcore.runtime.turn.snapshot import ConversationSnapshot
 from agentcore.tools.builtin.delegate import DelegateTool
 from agentcore.tools.sandbox.subprocess import SubprocessSandbox
 from agentcore.workspace.server import ServerWorkspace
@@ -183,6 +184,7 @@ async def run_orchestration_turn(
         sink=sink,
         user_id="user-orch",
         backend=backend,
+        conversation=ConversationSnapshot.default(),
         approvals_enabled=approvals_enabled,
         profile_set=make_turn_profiles(model="chat-model"),
         suspension_saver=suspension_saver,
@@ -227,6 +229,7 @@ async def run_orchestration_resume(
         selected=selected or [],
         sink=sink,
         backend=backend,
+        conversation=ConversationSnapshot.default(),
         profile_set=make_turn_profiles(model="chat-model"),
         suspension_saver=suspension_saver,
         suspension_deleter=suspension_deleter,

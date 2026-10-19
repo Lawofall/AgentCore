@@ -12,10 +12,10 @@ describe("resolveToolWireStatus", () => {
     ).toBe("redirect");
   });
 
-  it("normalizes legacy error + redirect code", () => {
+  it("does not remap error + redirect code", () => {
     expect(
       resolveToolWireStatus("error", { code: "source_grep_redirect" }),
-    ).toBe("redirect");
+    ).toBe("error");
   });
 
   it("leaves real faults as error", () => {

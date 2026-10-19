@@ -1,4 +1,4 @@
-"""Visible empty-desk predicate for workspace facts (「顶层空」).
+"""Visible empty-desk predicate for workspace facts (「尚无用户文件」).
 
 Listing ignores ``AgentCore/`` (including visible ``文档/``), ``attachments/``,
 declared latent dirs, and ``external/``. Disk-only: child Folder rows that exist
@@ -21,7 +21,10 @@ if TYPE_CHECKING:
 _EXTERNAL_TOP = EXTERNAL_PREFIX.strip("/")
 _LIST_CAP = 256
 
-__all__ = ["desk_is_visibly_empty"]
+# Fact-layer marker and write-path WHEN must share this phrase.
+EMPTY_DESK_FACT = "尚无用户文件"
+
+__all__ = ["EMPTY_DESK_FACT", "desk_is_visibly_empty"]
 
 
 def _top_name(entry_path: str) -> str:

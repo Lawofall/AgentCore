@@ -8,6 +8,7 @@ selection uses ``llm/model_profiles.py`` (模型组合) — not per-slot pointer
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from datetime import datetime
 
@@ -25,36 +26,55 @@ from agentcore.core.errors import (
     ValidationError,
 )
 from agentcore.core.logging import get_logger
+from agentcore.db.base import async_session_factory
 from agentcore.db.models import UserLlmProvider
 from agentcore.db.repositories import (
     LlmModelProfileRepository,
     UserLlmProviderRepository,
     UserRepository,
 )
-from agentcore.llm.byok_provider_presets import seed_model_for_base_url
+from agentcore.llm.byok_provider_presets import (
+    canonicalize_byok_api_root,
+    parse_vendor_id,
+    preset_for_vendor,
+    seed_model_for_vendor,
+)
 from agentcore.llm.factory import build_provider
 from agentcore.llm.model_profiles import ProfileSlot
 from agentcore.llm.model_reachability import (
     CONNECTIVITY_POLICY,
+    ModelListOutcome,
     check_model_reachable,
     fetch_model_list,
 )
 from agentcore.llm.profiles import DEEPSEEK_V4_FLASH
-from agentcore.llm.resolve import resolve_provider_credentials
+from agentcore.llm.resolve import _decrypt_provider, resolve_provider_credentials
 from agentcore.security.keys import KeyEncryptor
+from agentcore.security.mask import mask_secret
 
 logger = get_logger(__name__)
 
 # Shown when connectivity test succeeds with no other message — green ≠ chat-ready.
 CONNECTIVITY_OK_HINT = (
-    "连接正常。已验证服务商连通（GET /models 或装配上的模型）。"
-    "日常聊天请到装配配置主模型；"
-    "自定义 Base URL 通常需含 /v1（例如 https://api.example.com/v1）。"
+    "连接正常。已验证服务商连通（GET /models 或能力上的模型）。"
+    "日常聊天请在输入框选模型。"
 )
 CONNECTIVITY_NO_CATALOG = (
     "上游未列出模型（无 GET /models 或列表为空）。"
-    "请到装配里手填模型 ID 后再测；测连不代填模型。"
+    "可在输入框手填模型 ID；测连不代填模型。"
 )
+CONNECTIVITY_NOT_API_ROOT = (
+    "这个地址返回的不是模型目录（像是网页）。"
+    "请确认填的是 API 地址；控制台只给域名时会补 /v1。"
+)
+
+
+def _connectivity_no_models_copy(model_list: ModelListOutcome) -> str:
+    """Empty / missing catalog vs HTML-or-invalid JSON at ``GET /models``."""
+    message = model_list.message or ""
+    if "格式无效" in message or "缺少 data" in message:
+        return CONNECTIVITY_NOT_API_ROOT
+    return CONNECTIVITY_NO_CATALOG
 
 
 @dataclass(frozen=True)
@@ -64,6 +84,7 @@ class LlmProviderView:
     id: str
     label: str
     base_url: str
+    vendor_id: str
     status: str
     masked_key: str | None = None
     supports_tools: bool | None = None
@@ -83,6 +104,63 @@ class LlmProvidersView:
     platform_model: str | None = None
 
 
+_OFFICIAL_DEEPSEEK_HOST = "https://api.deepseek.com"
+_UUID_RE = re.compile(
+    r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+)
+
+
+@dataclass(frozen=True)
+class OfficialDeepSeekProvider:
+    """Official-host BYOK row that can call DeepSeek search."""
+
+    provider_id: str
+    api_key: str
+    label: str
+
+
+def _is_official_deepseek_host(url: str) -> bool:
+    text = (url or "").strip().rstrip("/").lower()
+    if text.endswith("/v1"):
+        text = text[: -len("/v1")].rstrip("/")
+    return text == _OFFICIAL_DEEPSEEK_HOST
+
+
+async def official_deepseek_provider_label(user_id: str) -> str | None:
+    """Settings label when the account has an official DeepSeek service."""
+    row = await _first_official_deepseek_row(user_id)
+    if row is None:
+        return None
+    return (getattr(row, "label", None) or "").strip() or "DeepSeek"
+
+
+async def load_official_deepseek_provider(user_id: str) -> OfficialDeepSeekProvider | None:
+    """Decrypt the first official DeepSeek BYOK key. None if there isn't one."""
+    row = await _first_official_deepseek_row(user_id)
+    if row is None:
+        return None
+    creds = _decrypt_provider(row, user_id)
+    api_key = (creds.api_key if creds is not None else "").strip()
+    if not api_key:
+        return None
+    return OfficialDeepSeekProvider(
+        provider_id=row.id,
+        api_key=api_key,
+        label=(row.label or "").strip() or "DeepSeek",
+    )
+
+
+async def _first_official_deepseek_row(user_id: str):
+    if not _UUID_RE.fullmatch(user_id or ""):
+        return None
+    async with async_session_factory() as session:
+        rows = await UserLlmProviderRepository(session).list_for_user(user_id)
+    for row in rows:
+        if _is_official_deepseek_host(getattr(row, "base_url", "") or ""):
+            return row
+    return None
+
+
 def _mask_key_ciphertext(enc: KeyEncryptor | None, api_key_enc: bytes) -> str | None:
     if enc is None or not api_key_enc:
         return None
@@ -90,13 +168,7 @@ def _mask_key_ciphertext(enc: KeyEncryptor | None, api_key_enc: bytes) -> str | 
         plaintext = enc.decrypt(api_key_enc).decode()
     except Exception:  # noqa: BLE001
         return None
-    return _mask_key(plaintext)
-
-
-def _mask_key(api_key: str) -> str:
-    if len(api_key) <= 4:
-        return "••••"
-    return f"••••{api_key[-4:]}"
+    return mask_secret(plaintext)
 
 
 class LlmProviderService:
@@ -127,7 +199,8 @@ class LlmProviderService:
         return LlmProviderView(
             id=row.id,
             label=row.label or "",
-            base_url=row.base_url,
+            base_url=canonicalize_byok_api_root(row.base_url or ""),
+            vendor_id=(row.vendor_id or "").strip() or "custom",
             status=row.status,
             masked_key=_mask_key_ciphertext(enc, row.api_key_enc),
             supports_tools=row.supports_tools,
@@ -158,6 +231,7 @@ class LlmProviderService:
         *,
         label: str,
         api_key: str,
+        vendor_id: str,
         base_url: str | None = None,
     ) -> LlmProviderView:
         """Add a provider.
@@ -175,10 +249,17 @@ class LlmProviderService:
             raise KeyStorageUnavailableError(
                 "服务端未配置加密主密钥，暂时无法保存 API Key，请联系管理员"
             )
-        resolved_base_url = (base_url or settings.platform_base_url).strip()
+        parsed_vendor = parse_vendor_id(vendor_id)
+        if parsed_vendor is None:
+            raise ValidationError("未知的厂商预设")
+        preset = preset_for_vendor(parsed_vendor)
+        resolved_base_url = (base_url or "").strip() or (
+            preset.base_url if preset is not None else settings.platform_base_url
+        )
         if not resolved_base_url:
             raise ValidationError("Base URL 不能为空")
-        seed = seed_model_for_base_url(resolved_base_url)
+        resolved_base_url = canonicalize_byok_api_root(resolved_base_url)
+        seed = seed_model_for_vendor(parsed_vendor)
 
         was_empty = (await self._repo.count_for_user(user_id)) == 0
         row = await self._repo.create(
@@ -186,6 +267,7 @@ class LlmProviderService:
             label=label,
             api_key_enc=enc.encrypt(api_key.encode()),
             base_url=resolved_base_url,
+            vendor_id=parsed_vendor,
             default_model=seed,
         )
         if was_empty and seed:
@@ -214,6 +296,7 @@ class LlmProviderService:
         label: str | None = None,
         api_key: str | None = None,
         base_url: str | None = None,
+        vendor_id: str | None = None,
         fields_set: set[str],
     ) -> LlmProviderView:
         existing = await self._repo.get(provider_id, user_id=user_id)
@@ -233,18 +316,25 @@ class LlmProviderService:
 
             safe_key = require_http_header_safe_api_key(api_key.strip())
             kwargs["api_key_enc"] = enc.encrypt(safe_key.encode())
+        if "vendor_id" in fields_set:
+            parsed_vendor = parse_vendor_id(vendor_id)
+            if parsed_vendor is None:
+                raise ValidationError("未知的厂商预设")
+            kwargs["vendor_id"] = parsed_vendor
+            kwargs["default_model"] = seed_model_for_vendor(parsed_vendor)
         if "base_url" in fields_set:
             resolved = (base_url or settings.platform_base_url).strip()
             if not resolved:
                 raise ValidationError("Base URL 不能为空")
-            kwargs["base_url"] = resolved
-            kwargs["default_model"] = seed_model_for_base_url(resolved)
+            kwargs["base_url"] = canonicalize_byok_api_root(resolved)
+            next_vendor = kwargs.get("vendor_id") or existing.vendor_id
+            kwargs.setdefault("default_model", seed_model_for_vendor(str(next_vendor)))
 
         row = await self._repo.update(provider_id, user_id=user_id, **kwargs)  # type: ignore[arg-type]
         assert row is not None
         # Only a credential-shaped edit changes what upstream would answer; renaming
         # the 服务商 does not, so it must not retire a cooldown that still holds.
-        if kwargs.keys() & {"api_key_enc", "base_url"}:
+        if kwargs.keys() & {"api_key_enc", "base_url", "vendor_id"}:
             invalidate_allowance(user_id, reason="byok_provider_changed")
         return self._view(row, enc=self._encryptor())
 
@@ -256,7 +346,7 @@ class LlmProviderService:
 
         fallback = await self._repo.first_for_user(user_id)
         if fallback is not None:
-            seed = seed_model_for_base_url(fallback.base_url)
+            seed = seed_model_for_vendor(fallback.vendor_id)
             await self._profiles.retarget_main_provider(
                 user_id,
                 from_provider_id=provider_id,
@@ -357,12 +447,6 @@ class LlmProviderService:
             for origin, pid, model in (
                 (row.main_origin, row.main_provider_id, row.main_model),
                 (row.worker_origin, row.worker_provider_id, row.worker_model),
-                (
-                    row.background_origin,
-                    row.background_provider_id,
-                    row.background_model,
-                ),
-                (row.vision_origin, row.vision_provider_id, row.vision_model),
             ):
                 if origin != "byok" or pid != provider_id:
                     continue
@@ -398,7 +482,7 @@ class LlmProviderService:
             extra.strip() for extra in (profile_models or ()) if extra and extra.strip()
         ]
         if not listed and not extras:
-            return "error", CONNECTIVITY_NO_CATALOG, None
+            return "error", _connectivity_no_models_copy(model_list), None
 
         for extra_s in extras:
             extra_reach, extra_msg = await check_model_reachable(
@@ -411,7 +495,7 @@ class LlmProviderService:
                 detail = extra_msg or "连接失败"
                 return (
                     "error",
-                    f"装配引用的模型「{extra_s}」不可用：{detail}",
+                    f"能力引用的模型「{extra_s}」不可用：{detail}",
                     None,
                 )
 

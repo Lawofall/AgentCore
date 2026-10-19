@@ -97,7 +97,7 @@ function Sidebar({ recent }: { recent: RecentConversation[] }) {
             className={`relative flex h-9 w-full items-center gap-3 rounded-lg px-3 text-base ${
               item.active
                 ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                : "text-sidebar-foreground/80"
+                : "text-sidebar-foreground"
             }`}
           >
             <item.icon size={18} className="shrink-0" />
@@ -121,10 +121,8 @@ function Sidebar({ recent }: { recent: RecentConversation[] }) {
           {recent.map((c) => (
             <div
               key={c.title}
-              className={`flex h-9 w-full items-center gap-2 rounded-lg px-3 text-sm ${
-                c.active
-                  ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                  : "text-sidebar-foreground/70"
+              className={`flex h-9 w-full items-center gap-2 rounded-lg px-3 text-sm text-sidebar-list ${
+                c.active ? "bg-sidebar-accent" : ""
               }`}
             >
               {c.running && (
@@ -145,7 +143,7 @@ function Sidebar({ recent }: { recent: RecentConversation[] }) {
           <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-sidebar-accent text-sm font-medium text-sidebar-accent-foreground">
             我
           </div>
-          <span className="flex-1 truncate text-sm text-sidebar-foreground/80">
+          <span className="flex-1 truncate text-sm text-sidebar-foreground">
             我的工作台
           </span>
           <span className="flex size-7 items-center justify-center rounded-lg text-sidebar-foreground/50">

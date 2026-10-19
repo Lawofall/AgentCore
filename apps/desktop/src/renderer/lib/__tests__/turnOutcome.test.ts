@@ -576,7 +576,7 @@ describe("arbitrateTurnOutcome · rest-of-states flag contract", () => {
     });
     expect(o.kind).toBe("error");
     expect(o.recovery.kind).toBe("configure");
-    expect(o.recovery.label).toBe("接入自己的 Key");
+    expect(o.recovery.label).toBe("去订阅");
     expect(o.recovery.kind).not.toBe("wait_then_retry");
     expect(o.showFooter).toBe(false);
     expect(o.showComposerHint).toBe(true);

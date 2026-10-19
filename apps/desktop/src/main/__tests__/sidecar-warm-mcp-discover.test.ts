@@ -168,6 +168,13 @@ describe("SidecarManager warmMcpDiscover", () => {
         messageId: "m-asst",
         userMessage: "hi",
         userId: ACCOUNT_USER,
+        session: {
+          permissionAxes: { boundary: "folder" as const },
+          delegateMode: false,
+          folderId: null,
+          localRootId: null,
+          localSubpath: null,
+        },
       },
       "/tmp/ws-await",
     );

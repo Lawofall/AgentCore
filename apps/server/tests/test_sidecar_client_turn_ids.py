@@ -17,12 +17,13 @@ from agentcore.sidecar import protocol
 from agentcore.sidecar.server import SidecarServer
 from agentcore.sidecar.server_pkg.delivery import DeliveryMixin
 from agentcore.sidecar.server_pkg.turns import parse_client_turn_ids
+from tests.sidecar_session import sidecar_session
 
 CLIENT_TURN_IDS = {
     "userMessageId": "11111111-1111-4111-8111-111111111111",
     "messageId": "22222222-2222-4222-8222-222222222222",
     "traceId": "a" * 32,
-    "folderId": None,
+    "session": sidecar_session(),
 }
 
 _FAKE_INFERENCE = {

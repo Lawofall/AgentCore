@@ -34,9 +34,18 @@ class User(Base):
         CheckConstraint("role in ('user', 'admin')", name="ck_users_role"),
         CheckConstraint("status in ('active', 'disabled')", name="ck_users_status"),
         CheckConstraint(
-            "autonomy_policy in ('read', 'folder', 'computer')",
+            "autonomy_policy in ('read', 'folder', 'computer', 'full')",
             name="ck_users_autonomy_policy",
         ),
+        CheckConstraint(
+            "seat_plan is null or seat_plan in ('starter', 'plus', 'flagship')",
+            name="ck_users_seat_plan",
+        ),
+        CheckConstraint(
+            "seat_pending_plan is null or seat_pending_plan in ('starter', 'plus', 'flagship')",
+            name="ck_users_seat_pending_plan",
+        ),
+        Index("ix_users_seat_until", "seat_until"),
     )
 
     user_id: Mapped[str] = mapped_column(
@@ -81,13 +90,25 @@ class User(Base):
     # Orthogonal to the ¥ / token caps. Own search providers do not use them.
     quota_search_daily: Mapped[int | None] = mapped_column(Integer, nullable=True)
     quota_search_monthly: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    # Default boundary for new conversations (安全权限与治理).
-    # read | folder (default) | computer — seeds conversation.permission_axes.
+    # Paid seat (基础版 / 高级版 / 旗舰版). NULL plan = 免费版. ``seat_until`` is paid-through;
+    # a 3-day grace follows, then overrides clear. ``seat_pending_plan`` is a
+    # downgrade that takes effect at ``seat_until``.
+    seat_plan: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    seat_until: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    seat_pending_plan: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    seat_reminded_until: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # Last-picked boundary (安全权限与治理). Written when the person picks a
+    # boundary in the composer; seeds conversation.permission_axes. Never-picked
+    # is computer. Not a settings default.
     autonomy_policy: Mapped[str] = mapped_column(
-        String(32), default="folder", server_default=text("'folder'")
+        String(32), default="computer", server_default=text("'computer'")
     )
     # Account web_search selection. NULL = platform SearXNG (metered). A uuid
-    # points at user_search_providers (own CleverSee or own SearXNG; not metered).
+    # points at user_search_providers (own DeepSeek; not metered).
     search_provider_id: Mapped[str | None] = mapped_column(
         PG_UUID(as_uuid=False), nullable=True
     )
@@ -96,13 +117,52 @@ class User(Base):
     default_assembly_id: Mapped[str | None] = mapped_column(
         PG_UUID(as_uuid=False), nullable=True
     )
-    # Official recipes removed from the toolbox tray (chat / web / full).
-    # The recipe stays in code. A row the user already materialized is separate.
+    # Leftover tray-hide keys. Listing always shows official 完整.
     hidden_capability_recipes: Mapped[list] = mapped_column(
         JSONB,
         nullable=False,
         default=list,
         server_default=text("'[]'::jsonb"),
+    )
+    # Catalog refs (@platform/… / @byok/…) kept off composer pickers.
+    # Full catalog still lists them; inference is unchanged.
+    # Platform rows default on; this list is the opt-out.
+    hidden_model_refs: Mapped[list] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=list,
+        server_default=text("'[]'::jsonb"),
+    )
+    # BYOK catalog refs a person opened onto composer pickers.
+    # Empty = none of the connected-provider rows enter the picker.
+    # Settings · 模型 is the inventory; this list is the shortlist.
+    enabled_model_refs: Mapped[list] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=list,
+        server_default=text("'[]'::jsonb"),
+    )
+    # BYOK catalog ref → display name. Platform rows are not writable.
+    # Overlay onto GET /models display_name; inference still uses the wire id.
+    model_display_names: Mapped[dict] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=dict,
+        server_default=text("'{}'::jsonb"),
+    )
+    # BYOK catalog refs this account declared as native-multimodal.
+    # SKU table is still the default; a ref here is the LiteLLM-style override.
+    # Process-local image rejects still win. Platform refs are never stored.
+    vision_accept_refs: Mapped[list] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=list,
+        server_default=text("'[]'::jsonb"),
+    )
+    # Last composer pick (main / worker / reasoning_effort / context_budget)
+    # plus knobs_by_model. Seeds new chats. Null = follow the starred assembly.
+    composer_model_override: Mapped[dict | None] = mapped_column(
+        JSONB, nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=text("now()")

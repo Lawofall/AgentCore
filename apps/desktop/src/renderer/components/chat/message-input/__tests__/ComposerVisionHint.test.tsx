@@ -15,6 +15,7 @@ import { useConversations } from "@/hooks/useConversations";
 import { useLlmModelProfiles } from "@/hooks/useLlmModelProfiles";
 import { useModels } from "@/hooks/useModels";
 import {
+  COMPOSER_VISION_DECLARE,
   COMPOSER_VISION_HINT,
   useComposerProfileDraftStore,
 } from "@/lib/composerModelProfile";
@@ -39,8 +40,6 @@ const textProfile = {
     model: "deepseek-v4-flash",
   },
   worker: null,
-  background: null,
-  vision: null,
 };
 
 const visionProfile = {
@@ -50,15 +49,6 @@ const visionProfile = {
   kind: "user" as const,
   is_default: false,
   main: { origin: "byok" as const, provider_id: "p2", model: "gpt-4o" },
-};
-
-const slottedProfile = {
-  ...textProfile,
-  id: "user-slot",
-  name: "识图槽",
-  kind: "user" as const,
-  is_default: false,
-  vision: { origin: "byok" as const, provider_id: "p2", model: "gpt-4o" },
 };
 
 function profiles(
@@ -133,8 +123,11 @@ describe("ComposerVisionHint", () => {
   it("有图 + 文本主且无槽 → 展示轻提示", () => {
     useComposerDraftStore.getState().setAttachments("__draft__", [png]);
     render(<ComposerVisionHint />);
-    expect(screen.getByTestId("composer-vision-hint").textContent).toBe(
+    expect(screen.getByTestId("composer-vision-hint").textContent).toContain(
       COMPOSER_VISION_HINT,
+    );
+    expect(screen.getByTestId("composer-vision-declare").textContent).toBe(
+      COMPOSER_VISION_DECLARE,
     );
   });
 
@@ -154,20 +147,6 @@ describe("ComposerVisionHint", () => {
     useComposerProfileDraftStore.getState().setAssemblyId("user-vision");
     render(<ComposerVisionHint />);
     expect(screen.queryByTestId("composer-vision-hint")).toBeNull();
-  });
-
-  it("识图槽已填但主模型不收图 → 仍展示", () => {
-    useComposerDraftStore.getState().setAttachments("__draft__", [png]);
-    useProfilesMock.mockReturnValue({
-      data: profiles([slottedProfile, textProfile]),
-      isLoading: false,
-      isError: false,
-      refetch: vi.fn(),
-    } as unknown as ReturnType<typeof useLlmModelProfiles>);
-    useComposerProfileDraftStore.getState().setAssemblyId("user-slot");
-    render(<ComposerVisionHint />);
-    expect(screen.getByTestId("composer-vision-hint")).toBeTruthy();
-    expect(screen.getByText(COMPOSER_VISION_HINT)).toBeTruthy();
   });
 
   it("会话钉住的组合优先于账号默认", () => {

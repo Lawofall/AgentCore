@@ -1,8 +1,8 @@
-"""Pricing layers: one curated CNY card; credential only splits quota vs display."""
+"""Pricing layers: one curated CNY card; Flash platform sells at official × 0.25."""
 
 from __future__ import annotations
 
-from agentcore.llm.model_selection import _model_for_purpose
+from agentcore.llm.model_selection import _chrome_model
 from agentcore.llm.pricing import PLATFORM_RELAY_GLM_52, calculate_cost
 from agentcore.llm.profiles import DEEPSEEK_V4_FLASH
 from agentcore.llm.provider.protocol import TokenUsage
@@ -31,8 +31,10 @@ def test_user_known_model_uses_curated_nominal():
     platform = calculate_cost(DEEPSEEK_V4_FLASH, usage, credential_source="platform")
     assert cost.pricing_source == "curated"
     assert cost.currency == "CNY"
-    assert cost.total == platform.total
-    assert cost.total > 0
+    assert platform.pricing_source == "curated"
+    # BYOK meters the official card; platform Flash sells at official × 0.25.
+    assert cost.total == 4 * platform.total
+    assert platform.total > 0
 
 
 def test_user_nominal_does_not_enter_billed_nano():
@@ -52,26 +54,11 @@ def test_user_nominal_does_not_enter_billed_nano():
     assert platform.cost["pricing_source"] == "curated"
 
 
-def test_background_model_prefers_user_then_platform(monkeypatch):
+def test_chrome_model_pins_background_then_platform(monkeypatch):
     from agentcore.config import settings
 
     monkeypatch.setattr(settings, "platform_background_model", "platform-bg")
-    assert (
-        _model_for_purpose(
-            "title", chat_model="chat-model", user_background_model="user-bg"
-        )
-        == "user-bg"
-    )
-    assert (
-        _model_for_purpose("title", chat_model="chat-model", user_background_model=None)
-        == "platform-bg"
-    )
+    monkeypatch.setattr(settings, "platform_model", "chat-model")
+    assert _chrome_model() == "platform-bg"
     monkeypatch.setattr(settings, "platform_background_model", "")
-    assert (
-        _model_for_purpose("title", chat_model="chat-model", user_background_model=None)
-        == "chat-model"
-    )
-    assert (
-        _model_for_purpose("chat", chat_model="chat-model", user_background_model="user-bg")
-        == "chat-model"
-    )
+    assert _chrome_model() == "chat-model"

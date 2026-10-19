@@ -497,6 +497,7 @@ async def test_run_and_persist_presence_abort_persists_failed_placeholder(monkey
 
     from agentcore.conversation import turn_runner
     from agentcore.core.error_codes import ErrorCode
+    from agentcore.runtime.turn.snapshot import ConversationSnapshot
 
     persisted: list[dict] = []
 
@@ -523,7 +524,7 @@ async def test_run_and_persist_presence_abort_persists_failed_placeholder(monkey
             conversation_id=CONV,
             user_message="讨论写更多的skill",
             user_id=USER,
-            folder_id=None,
+            conversation=ConversationSnapshot.default(),
             sink=sink,
             history=[],
             attachments=None,

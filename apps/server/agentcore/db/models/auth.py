@@ -73,6 +73,11 @@ class UserLlmProvider(Base):
     base_url: Mapped[str] = mapped_column(
         String(500), server_default=text("'https://api.deepseek.com'")
     )
+    # Saved vendor identity for protocol dispatch (openai / opencode_go / custom …).
+    # Independent of base_url — an OpenAI 服务商 may point at a relay.
+    vendor_id: Mapped[str] = mapped_column(
+        String(40), server_default=text("'custom'")
+    )
     # Internal preset seed (first 模型组合 / delete retarget). Not user-facing.
     default_model: Mapped[str] = mapped_column(
         String(200), server_default=text("'deepseek-v4-flash'")

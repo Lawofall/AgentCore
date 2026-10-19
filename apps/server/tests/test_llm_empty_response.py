@@ -30,9 +30,8 @@ def test_diagnose_upstream_non_api_html():
 
 
 def test_upstream_non_api_label_is_generic():
-    """Must not name Sub2API — diagnosis applies to any BYOK gateway HTML shell."""
+    """HTML/login shells are any-gateway; copy names the page, not a vendor."""
     label = empty_response_event_message(EmptyResponseDiagnosis.UPSTREAM_NON_API)
-    assert "Sub2API" not in label
     assert "网页" in label or "登录" in label
     assert label.startswith("模型空响应")
 
@@ -91,12 +90,6 @@ def test_diagnose_streaming_empty_tail_is_silent_not_format_mismatch():
         diagnose_empty_response(raw_body=sse_tail, finish_reason="tool_calls")
         is EmptyResponseDiagnosis.SILENT_EMPTY
     )
-
-
-def test_legacy_oauth_expired_wire_key_maps_to_upstream_non_api():
-    msg = empty_response_event_message("oauth_expired")
-    assert "Sub2API" not in msg
-    assert "网页" in msg or "登录" in msg
 
 
 def test_empty_response_error_context_html_and_base_url():

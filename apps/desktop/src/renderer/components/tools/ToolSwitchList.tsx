@@ -4,9 +4,9 @@ import {
 } from "@/components/tools/SwitchboardBulkRow";
 import { ASSEMBLY_CARD_GRID_CLASS, CatalogTile } from "@/components/ui";
 import { Switch } from "@/components/ui/Switch";
-import { SimpleTooltip } from "@/components/ui/tooltip";
 import { patchConversationCache } from "@/hooks/useConversations";
-import { notifyError, notifySuccess } from "@/lib/toast";
+import { refreshAssembliesAfterWrite } from "@/lib/assemblyWrite";
+import { notifyError } from "@/lib/toast";
 import { ASSEMBLY_TURN_HINT } from "@/pages/toolbox/assemblyTabs";
 import { APP_PATHS } from "@/pages/toolbox/manual/paths";
 import {
@@ -19,6 +19,7 @@ import {
   saveConversationToolSwitches,
   subscribeComposerDraftDisabledTools,
 } from "@/services/toolSwitches";
+import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
@@ -38,16 +39,15 @@ function bindingCaption(
   title?: string | null,
 ): string {
   if (scope === "draft") {
-    return "还没有这场。改的是星标装配，之后新建的对话都用它。";
+    return "还没有这场。改的是下次新建会用的这份能力。";
   }
   const who = title?.trim() ? `「${title.trim()}」` : "这场";
-  return `改的是${who}这份装配。正在生成的这一轮不换；从下一次进入回合生效。`;
+  return `改的是${who}这份能力。正在生成的这一轮不换；从下一次进入回合生效。`;
 }
 
 /**
  * One switch per whole tool. The assembly page is one flat card per switch.
  * The composer menu stays one row per switch.
- * 「设为新会话默认」 is the only write to the account.
  */
 export function ToolSwitchList({
   scope,
@@ -55,11 +55,11 @@ export function ToolSwitchList({
   conversationTitle,
   readOnlyBoundary = false,
   showBinding = true,
-  showSessionDefault = true,
   showTurnHint = false,
   showBulk = false,
   heading,
   layout = "rows",
+  locked = false,
 }: {
   scope: "conversation" | "draft";
   conversationId?: string;
@@ -68,8 +68,6 @@ export function ToolSwitchList({
   readOnlyBoundary?: boolean;
   /** 身份说明在「总」。输入区菜单仍写整句。 */
   showBinding?: boolean;
-  /** 工具箱用「总」的星标。输入区菜单仍保留这一行。 */
-  showSessionDefault?: boolean;
   /** 有这场时，开关下写这一轮不换。 */
   showTurnHint?: boolean;
   /** 组装页与节标题同一行。输入区菜单不放。 */
@@ -78,9 +76,12 @@ export function ToolSwitchList({
   heading?: string;
   /** 组装页一排矮卡，不按目录拆开。输入区菜单仍是行。 */
   layout?: "rows" | "shelf";
+  /** Official 完整: switches are the catalog, not an editor. */
+  locked?: boolean;
 }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const queryClient = useQueryClient();
   const draft = useSyncExternalStore(
     subscribeComposerDraftDisabledTools,
     getComposerDraftDisabledTools,
@@ -126,13 +127,14 @@ export function ToolSwitchList({
         : board;
 
   const commit = async (disabled: string[], pendingKey: string) => {
-    if (!displayed || pendingId) return;
+    if (!displayed || pendingId || locked) return;
     if (scope === "draft") {
       setPendingId(pendingKey);
       setBoard(overlay(displayed, disabled));
       try {
         const saved = await saveAccountToolSwitches(disabled);
         setBoard(saved);
+        await refreshAssembliesAfterWrite(queryClient);
       } catch (err) {
         setBoard(displayed);
         notifyError(err, "开关没保存上");
@@ -155,6 +157,7 @@ export function ToolSwitchList({
           disabledTools: saved.disabled,
         });
       }
+      await refreshAssembliesAfterWrite(queryClient, conversationId);
     } catch (err) {
       setBoard(previous);
       notifyError(err, "开关没保存上");
@@ -166,20 +169,6 @@ export function ToolSwitchList({
   const toggle = (id: string, on: boolean) => {
     if (!displayed) return;
     void commit(disabledAfterToggle(displayed.disabled, id, on), id);
-  };
-
-  const setAsSessionDefault = async () => {
-    if (!displayed || pendingId) return;
-    setPendingId("default");
-    try {
-      await saveAccountToolSwitches(displayed.disabled);
-      const n = displayed.disabled.length;
-      notifySuccess(n === 0 ? "新会话将默认全开" : `新会话将默认关掉 ${n} 样`);
-    } catch (err) {
-      notifyError(err, "设置默认失败");
-    } finally {
-      setPendingId(null);
-    }
   };
 
   if (error) {
@@ -206,7 +195,7 @@ export function ToolSwitchList({
   return (
     <div data-testid="tool-switch-list">
       <SwitchboardSectionHeader heading={heading}>
-        {showBulk ? (
+        {showBulk && !locked ? (
           <SwitchboardBulkRow
             offCount={offCount}
             total={displayed.switches.length}
@@ -243,7 +232,7 @@ export function ToolSwitchList({
                 accessory={
                   <Switch
                     checked={!row.off}
-                    disabled={pendingId !== null}
+                    disabled={pendingId !== null || locked}
                     label={row.label}
                     onCheckedChange={(on) => void toggle(row.id, on)}
                   />
@@ -292,7 +281,7 @@ export function ToolSwitchList({
               </button>
               <Switch
                 checked={!row.off}
-                disabled={pendingId !== null}
+                disabled={pendingId !== null || locked}
                 label={row.label}
                 onCheckedChange={(on) => void toggle(row.id, on)}
               />
@@ -309,26 +298,6 @@ export function ToolSwitchList({
         <p className="mt-2 text-xs text-muted-foreground">
           {ASSEMBLY_TURN_HINT}
         </p>
-      ) : null}
-      {showSessionDefault ? (
-        <div className="mt-2 border-t border-border/60 px-1 pt-2">
-          <SimpleTooltip label="写入账户默认；只影响之后新建的对话">
-            <span className="block">
-              <button
-                type="button"
-                disabled={pendingId !== null}
-                onClick={() => void setAsSessionDefault()}
-                className={`w-full rounded-lg px-2.5 py-1.5 text-left text-xs font-medium ${
-                  pendingId !== null
-                    ? "cursor-not-allowed text-muted-foreground/50"
-                    : "text-foreground hover:bg-accent/50"
-                }`}
-              >
-                设为新会话默认
-              </button>
-            </span>
-          </SimpleTooltip>
-        </div>
       ) : null}
     </div>
   );

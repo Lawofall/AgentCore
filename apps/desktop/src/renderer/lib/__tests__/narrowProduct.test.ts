@@ -13,6 +13,8 @@ describe("isNarrowBlockedPath", () => {
     expect(isNarrowBlockedPath("/docs/abc")).toBe(false);
     expect(isNarrowBlockedPath("/tables/abc")).toBe(false);
     expect(isNarrowBlockedPath("/more/shortcuts")).toBe(true);
+    expect(isNarrowBlockedPath("/more/git")).toBe(true);
+    expect(isNarrowBlockedPath("/more/general")).toBe(false);
   });
 
   it("keeps chat / files / messages / conversation admin / allowed settings", () => {
@@ -25,6 +27,7 @@ describe("isNarrowBlockedPath", () => {
     expect(isNarrowBlockedPath("/more/account")).toBe(false);
     expect(isNarrowBlockedPath("/more/about")).toBe(false);
     expect(isNarrowBlockedPath("/more/sponsor")).toBe(false);
+    expect(isNarrowBlockedPath("/more/subscription")).toBe(false);
     // 旧书签 /more/feedback 走 router 重定向到关于，不能进 NarrowBlocked。
     expect(isNarrowBlockedPath("/more/feedback")).toBe(false);
   });
@@ -66,6 +69,21 @@ describe("isNarrowHiddenPaletteId", () => {
         forceLightTheme: true,
       }),
     ).toBe(false);
+  });
+
+  it("keeps 设置 · 通用 on narrow and hides zoom commands", () => {
+    expect(
+      isNarrowHiddenPaletteId("nav-settings-general", {
+        restrictNarrow: true,
+        forceLightTheme: false,
+      }),
+    ).toBe(false);
+    expect(
+      isNarrowHiddenPaletteId("zoom-in", {
+        restrictNarrow: true,
+        forceLightTheme: false,
+      }),
+    ).toBe(true);
   });
 
   it("does not hide 新建对话 on narrow", () => {

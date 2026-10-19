@@ -4,6 +4,7 @@ import {
 } from "@/components/tools/SwitchboardBulkRow";
 import { ASSEMBLY_CARD_GRID_CLASS, CatalogTile } from "@/components/ui";
 import { Switch } from "@/components/ui/Switch";
+import { refreshAssembliesAfterWrite } from "@/lib/assemblyWrite";
 import { notifyError } from "@/lib/toast";
 import { ASSEMBLY_TURN_HINT } from "@/pages/toolbox/assemblyTabs";
 import {
@@ -17,6 +18,7 @@ import {
   saveConversationEnvelopeSwitches,
   subscribeComposerDraftOmittedProjections,
 } from "@/services/envelopeSwitches";
+import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState, useSyncExternalStore } from "react";
 
 function overlay(
@@ -36,8 +38,8 @@ function bindingCaption(
 ): string {
   const scopeLine =
     scope === "draft"
-      ? "还没有这场。改的是星标装配，之后新建的对话都用它。"
-      : `改的是${title?.trim() ? `「${title.trim()}」` : "这场"}这份装配。正在生成的这一轮不换；从下一次进入回合生效。`;
+      ? "还没有这场。改的是下次新建会用的这份能力。"
+      : `改的是${title?.trim() ? `「${title.trim()}」` : "这场"}这份能力。正在生成的这一轮不换；从下一次进入回合生效。`;
   return `${scopeLine}关掉只是不写这行，不改执行。不能改字。`;
 }
 
@@ -54,6 +56,7 @@ export function EnvelopeSwitchList({
   showBulk = false,
   heading,
   layout = "rows",
+  locked = false,
 }: {
   scope: "conversation" | "draft";
   conversationId?: string;
@@ -68,7 +71,10 @@ export function EnvelopeSwitchList({
   heading?: string;
   /** 组装页是矮卡。输入区仍是行。 */
   layout?: "rows" | "cards";
+  /** Official 完整: switches are the catalog, not an editor. */
+  locked?: boolean;
 }) {
+  const queryClient = useQueryClient();
   const draft = useSyncExternalStore(
     subscribeComposerDraftOmittedProjections,
     getComposerDraftOmittedProjections,
@@ -120,13 +126,14 @@ export function EnvelopeSwitchList({
         : board;
 
   const commit = async (omitted: string[], pendingKey: string) => {
-    if (!displayed || pendingId) return;
+    if (!displayed || pendingId || locked) return;
     if (scope === "draft") {
       setPendingId(pendingKey);
       setBoard(overlay(displayed, omitted));
       try {
         const saved = await saveAccountEnvelopeSwitches(omitted);
         setBoard(saved);
+        await refreshAssembliesAfterWrite(queryClient);
       } catch (err) {
         setBoard(displayed);
         notifyError(err, "开关没保存上");
@@ -144,6 +151,7 @@ export function EnvelopeSwitchList({
         omitted,
       );
       setBoard(saved);
+      await refreshAssembliesAfterWrite(queryClient, conversationId);
     } catch (err) {
       setBoard(previous);
       notifyError(err, "开关没保存上");
@@ -181,7 +189,7 @@ export function EnvelopeSwitchList({
   return (
     <div data-testid="envelope-switch-list">
       <SwitchboardSectionHeader heading={heading}>
-        {showBulk ? (
+        {showBulk && !locked ? (
           <SwitchboardBulkRow
             offCount={offCount}
             total={displayed.switches.length}
@@ -208,7 +216,7 @@ export function EnvelopeSwitchList({
               accessory={
                 <Switch
                   checked={!row.off}
-                  disabled={pendingId !== null}
+                  disabled={pendingId !== null || locked}
                   label={row.label}
                   onCheckedChange={(on) => void toggle(row.id, on)}
                 />
@@ -230,7 +238,7 @@ export function EnvelopeSwitchList({
             </div>
             <Switch
               checked={!row.off}
-              disabled={pendingId !== null}
+              disabled={pendingId !== null || locked}
               label={row.label}
               onCheckedChange={(on) => void toggle(row.id, on)}
             />

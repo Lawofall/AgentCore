@@ -92,6 +92,7 @@ function toolItem(over: {
     summary: "读工作区文件",
     blurb: over.blurb ?? "打开文本、代码或图片，看里面写了什么",
     description: "读工作区文件",
+    description_prefer: "",
     parameters: {},
     approval: over.approval ?? "never",
     available_to: over.availableTo ?? ["ceo", "worker"],

@@ -6,6 +6,7 @@ import {
 import { formatCompact } from "@/lib/format";
 import type { ProcessStep, ToolPhase } from "@/types/events";
 import {
+  AppWindow,
   ArrowUp,
   BookOpen,
   Brain,
@@ -76,7 +77,6 @@ export const TOOL_META: Record<string, { Icon: LucideIcon; label: string }> = {
   md_to_docx: { Icon: FileText, label: "Export Word" },
   md_to_pdf: { Icon: FileText, label: "Export PDF" },
   md_export: { Icon: FileText, label: "Export document" },
-  read_image: { Icon: ScanText, label: "Read image" },
   code_diagnostics: { Icon: Code2, label: "Check types" },
   delegate: { Icon: Users, label: "Delegate" },
   replan: { Icon: ListRestart, label: "Replan" },
@@ -155,6 +155,10 @@ const HOST_ACTION_META: Record<string, { Icon: LucideIcon; label: string }> = {
   status: { Icon: Monitor, label: "Host status" },
   os_log: { Icon: ScrollText, label: "OS log summary" },
   shell: { Icon: Terminal, label: "Host shell" },
+  attach: { Icon: AppWindow, label: "Attach window" },
+  snapshot: { Icon: ScanText, label: "Snapshot" },
+  click: { Icon: MousePointerClick, label: "Click" },
+  type: { Icon: Keyboard, label: "Type" },
   open_settings: { Icon: Settings2, label: "Open settings" },
   set_audio: { Icon: Volume2, label: "Set default audio" },
   restart_service: { Icon: ListRestart, label: "Restart service" },

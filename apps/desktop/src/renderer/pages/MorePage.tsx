@@ -2,15 +2,19 @@ import { NarrowBackHeader } from "@/components/layout/NarrowBackHeader";
 import { NarrowMenuButton } from "@/components/layout/NarrowMenuButton";
 import { SectionLabel, SurfaceNavLink } from "@/components/ui";
 import { useNarrowLayoutState } from "@/lib/narrowLayout";
+import { NARROW_HIDDEN_SETTINGS_PATHS } from "@/lib/narrowProduct";
+import { cn } from "@/lib/utils";
 import { getLegalDoc } from "@/pages/legal/content";
 import {
-  Cpu,
+  Box,
+  CreditCard,
   Gauge,
   GitBranch,
-  Heart,
+  Globe,
   Info,
   KeyRound,
   Keyboard,
+  Layers,
   type LucideIcon,
   Shield,
   SlidersHorizontal,
@@ -29,13 +33,13 @@ interface NavGroup {
   items: NavItem[];
 }
 
-// Settings are grouped by intent: 账户（含 Git 凭据 / 用量）、模型、偏好（含关于与赞助）。
-// 宽屏装配在工具箱，侧栏不放「装配」，模型组只剩「服务商」。窄屏没有工具箱，设置里保留「装配」。
+// Settings are grouped by intent: 账户（含 Git 凭据 / 用量 / 订阅）、能力、模型（名单 / 服务商 / 联网搜索）、偏好（含关于）。
+// 宽屏能力在工具箱，侧栏不放「能力」，模型组是「模型」「服务商」和「联网搜索」。窄屏没有工具箱，设置里保留「能力」。
 // 旧 /more/feedback 书签见 router 重定向。
-// 「外观」→「通用」（多收了原本藏在关于页的诊断类开关）；旧路径见 router 重定向。
+// 「外观」→「通用」（主题 / 字号 / 缩放 / 发送 / 系统通知 + 原本藏在关于页的诊断类开关）；旧路径见 router 重定向。
 // Opening /more 宽屏落点见 MoreIndexRedirect；窄屏 /more 是设置列表，不重定向。
 // 设定（画像 / 偏好 / 规则）在「文件」页，不设设置子页。
-// 新会话默认权限配方：对话内权限徽章「设为新会话默认」（无设置子页）。
+// 新会话边界：权限徽章里人选的那档（无设置子页；不标「默认」）。
 // 产品公告 inbox 已迁 IM 官方号（消息页）；顶栏 Banner 仍走 notices/active。
 const NAV_GROUPS: NavGroup[] = [
   {
@@ -44,13 +48,19 @@ const NAV_GROUPS: NavGroup[] = [
       { icon: UserCog, label: "账户设置", path: "/more/account" },
       { icon: GitBranch, label: "Git 凭据", path: "/more/git" },
       { icon: Gauge, label: "用量", path: "/more/usage" },
+      { icon: CreditCard, label: "订阅", path: "/more/subscription" },
     ],
+  },
+  {
+    label: "能力",
+    items: [{ icon: Layers, label: "能力", path: "/more/model" }],
   },
   {
     label: "模型",
     items: [
-      { icon: Cpu, label: "装配", path: "/more/model" },
+      { icon: Box, label: "模型", path: "/more/models" },
       { icon: KeyRound, label: "服务商", path: "/more/providers" },
+      { icon: Globe, label: "联网搜索", path: "/more/search" },
     ],
   },
   {
@@ -60,17 +70,11 @@ const NAV_GROUPS: NavGroup[] = [
       { icon: Shield, label: "消息隐私", path: "/more/messages" },
       { icon: Keyboard, label: "快捷键", path: "/more/shortcuts" },
       { icon: Info, label: "关于", path: "/more/about" },
-      { icon: Heart, label: "赞助", path: "/more/sponsor" },
     ],
   },
 ];
 
-/** 窄屏不上：Git 本机凭据、暗色/诊断、快捷键。权威 → 前端技术 §五。 */
-const NARROW_HIDE_PATHS = new Set([
-  "/more/git",
-  "/more/general",
-  "/more/shortcuts",
-]);
+/** 窄屏不上：Git 本机凭据、快捷键。通用露出字号与发送方式。联网搜索单独一页，窄屏仍在。权威 → 前端技术 §五。 */
 
 function visibleGroups(narrow: boolean): NavGroup[] {
   return NAV_GROUPS.map((group) => ({
@@ -78,7 +82,7 @@ function visibleGroups(narrow: boolean): NavGroup[] {
     items: group.items.filter(
       (item) =>
         (narrow || item.path !== "/more/model") &&
-        (!narrow || !NARROW_HIDE_PATHS.has(item.path)),
+        (!narrow || !NARROW_HIDDEN_SETTINGS_PATHS.has(item.path)),
     ),
   })).filter((group) => group.items.length > 0);
 }
@@ -172,7 +176,12 @@ export function MorePage() {
       {/* Content area — a left-anchored reading column (split layout, so it sets
           its own width rather than the centered content gradient). */}
       <div className="h-full w-full overflow-y-auto">
-        <div className="w-full max-w-3xl px-6 py-6">
+        <div
+          className={cn(
+            "w-full px-6 py-6",
+            pathname === "/more/subscription" ? "max-w-4xl" : "max-w-3xl",
+          )}
+        >
           <Outlet />
         </div>
       </div>

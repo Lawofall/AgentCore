@@ -83,6 +83,22 @@ function capturingTransport() {
   return { transport, sent };
 }
 
+function session(
+  overrides: {
+    folderId?: string | null;
+    localRootId?: string | null;
+    localSubpath?: string | null;
+  } = {},
+) {
+  return {
+    permissionAxes: { boundary: "folder" as const },
+    delegateMode: false,
+    folderId: overrides.folderId ?? null,
+    localRootId: overrides.localRootId ?? null,
+    localSubpath: overrides.localSubpath ?? null,
+  };
+}
+
 describe("SidecarManager userId passthrough", () => {
   afterAll(() => rmSync(h.dir, { recursive: true, force: true }));
 
@@ -102,6 +118,7 @@ describe("SidecarManager userId passthrough", () => {
         userMessageId: "u1",
         messageId: "m-asst",
         userMessage: "hello",
+        session: session(),
       },
       "/tmp/ws",
     );
@@ -127,6 +144,7 @@ describe("SidecarManager userId passthrough", () => {
         userMessageId: "u2",
         messageId: "m-asst",
         userMessage: "hello",
+        session: session(),
       },
       "/tmp/ws",
     );
@@ -137,7 +155,7 @@ describe("SidecarManager userId passthrough", () => {
     expect(start?.params?.userId).toBeUndefined();
   });
 
-  it("startTurn RPC always includes folderId (project id or null bare chat)", async () => {
+  it("startTurn RPC always includes session.folderId (project id or null bare chat)", async () => {
     const withFolder = capturingTransport();
     const managerA = new SidecarManager(() => withFolder.transport);
     await managerA.startTurn(
@@ -150,12 +168,14 @@ describe("SidecarManager userId passthrough", () => {
         userMessageId: "u3",
         messageId: "m-asst",
         userMessage: "hello",
-        folderId: "fold-abc",
+        session: session({ folderId: "fold-abc" }),
       },
       "/tmp/ws",
     );
     const startA = withFolder.sent.find((m) => m.method === "startTurn");
-    expect(startA?.params?.folderId).toBe("fold-abc");
+    expect(startA?.params?.session).toEqual(
+      expect.objectContaining({ folderId: "fold-abc" }),
+    );
 
     const bare = capturingTransport();
     const managerB = new SidecarManager(() => bare.transport);
@@ -169,16 +189,18 @@ describe("SidecarManager userId passthrough", () => {
         userMessageId: "u4",
         messageId: "m-asst",
         userMessage: "hello",
-        folderId: null,
+        session: session({ folderId: null }),
       },
       "/tmp/ws",
     );
     const startB = bare.sent.find((m) => m.method === "startTurn");
-    expect(startB?.params).toHaveProperty("folderId");
-    expect(startB?.params?.folderId).toBeNull();
+    expect(startB?.params).toHaveProperty("session");
+    expect(startB?.params?.session).toEqual(
+      expect.objectContaining({ folderId: null }),
+    );
   });
 
-  it("startTurn RPC always includes localRootId/localSubpath (binding or null)", async () => {
+  it("startTurn RPC always includes session localRootId/localSubpath (binding or null)", async () => {
     const withBinding = capturingTransport();
     const managerA = new SidecarManager(() => withBinding.transport);
     await managerA.startTurn(
@@ -192,15 +214,21 @@ describe("SidecarManager userId passthrough", () => {
         userMessageId: "u5",
         messageId: "m-asst",
         userMessage: "hello",
-        folderId: "fold-local",
-        localRootId: "r5",
-        localSubpath: "apps/web",
+        session: session({
+          folderId: "fold-local",
+          localRootId: "r5",
+          localSubpath: "apps/web",
+        }),
       },
       "/tmp/ws",
     );
     const startA = withBinding.sent.find((m) => m.method === "startTurn");
-    expect(startA?.params?.localRootId).toBe("r5");
-    expect(startA?.params?.localSubpath).toBe("apps/web");
+    expect(startA?.params?.session).toEqual(
+      expect.objectContaining({
+        localRootId: "r5",
+        localSubpath: "apps/web",
+      }),
+    );
     // Routing keys stay off the stdio params.
     expect(startA?.params).not.toHaveProperty("rootId");
     expect(startA?.params).not.toHaveProperty("subpath");
@@ -217,15 +245,18 @@ describe("SidecarManager userId passthrough", () => {
         userMessageId: "u6",
         messageId: "m-asst",
         userMessage: "hello",
-        folderId: null,
+        session: session({ folderId: null }),
       },
       "/tmp/ws",
     );
     const startB = bare.sent.find((m) => m.method === "startTurn");
-    expect(startB?.params).toHaveProperty("localRootId");
-    expect(startB?.params?.localRootId).toBeNull();
-    expect(startB?.params).toHaveProperty("localSubpath");
-    expect(startB?.params?.localSubpath).toBeNull();
+    expect(startB?.params).toHaveProperty("session");
+    expect(startB?.params?.session).toEqual(
+      expect.objectContaining({
+        localRootId: null,
+        localSubpath: null,
+      }),
+    );
   });
 
   it("startTurn RPC includes foldersAuth when provided", async () => {
@@ -242,6 +273,7 @@ describe("SidecarManager userId passthrough", () => {
         userMessageId: "u-folders",
         messageId: "m-asst",
         userMessage: "hello",
+        session: session(),
         foldersAuth: {
           baseUrl: "https://api.test.example",
           apiKey: "folders-jwt",
@@ -271,6 +303,7 @@ describe("SidecarManager userId passthrough", () => {
         userMessageId: "u-no-folders",
         messageId: "m-asst",
         userMessage: "hello",
+        session: session(),
       },
       "/tmp/ws",
     );
@@ -293,6 +326,7 @@ describe("SidecarManager userId passthrough", () => {
         userMessageId: "u-account",
         messageId: "m-asst",
         userMessage: "hello",
+        session: session(),
         accountAuth: {
           baseUrl: "https://api.test.example/v1/account",
           apiKey: "account-jwt",
@@ -322,6 +356,7 @@ describe("SidecarManager userId passthrough", () => {
         userMessageId: "u-no-history",
         messageId: "m-asst",
         userMessage: "hello",
+        session: session(),
       },
       "/tmp/ws",
     );
@@ -343,6 +378,7 @@ describe("SidecarManager userId passthrough", () => {
         userMessageId: "u-empty-history",
         messageId: "m-asst",
         userMessage: "hello",
+        session: session(),
         history: [],
       },
       "/tmp/ws",
@@ -362,6 +398,7 @@ describe("SidecarManager userId passthrough", () => {
         userMessageId: "u-rows-history",
         messageId: "m-asst",
         userMessage: "hello",
+        session: session(),
         history: [{ role: "user", content: "先前问" }],
       },
       "/tmp/ws",
@@ -386,6 +423,7 @@ describe("SidecarManager userId passthrough", () => {
         userMessageId: "u-no-account",
         messageId: "m-asst",
         userMessage: "hello",
+        session: session(),
       },
       "/tmp/ws",
     );
@@ -408,6 +446,7 @@ describe("SidecarManager userId passthrough", () => {
         userMessageId: "u-workspaces",
         messageId: "m-asst",
         userMessage: "hello",
+        session: session(),
         workspacesAuth: {
           baseUrl: "https://api.test.example/v1/workspaces",
           apiKey: "workspaces-jwt",
@@ -437,6 +476,7 @@ describe("SidecarManager userId passthrough", () => {
         userMessageId: "u-no-workspaces",
         messageId: "m-asst",
         userMessage: "hello",
+        session: session(),
       },
       "/tmp/ws",
     );
@@ -445,7 +485,7 @@ describe("SidecarManager userId passthrough", () => {
     expect(start?.params).not.toHaveProperty("workspacesAuth");
   });
 
-  it("resume RPC always includes folderId (project id or null bare chat)", async () => {
+  it("resume RPC always includes session.folderId (project id or null bare chat)", async () => {
     const withFolder = capturingTransport();
     const managerA = new SidecarManager(() => withFolder.transport);
     await managerA.resume(
@@ -457,13 +497,15 @@ describe("SidecarManager userId passthrough", () => {
         traceId: "3".repeat(32),
         decision: "continue",
         note: "",
-        folderId: "fold-resume",
+        session: session({ folderId: "fold-resume" }),
       },
       "/tmp/ws",
       undefined,
     );
     const resumeA = withFolder.sent.find((m) => m.method === "resume");
-    expect(resumeA?.params?.folderId).toBe("fold-resume");
+    expect(resumeA?.params?.session).toEqual(
+      expect.objectContaining({ folderId: "fold-resume" }),
+    );
 
     const bare = capturingTransport();
     const managerB = new SidecarManager(() => bare.transport);
@@ -476,13 +518,15 @@ describe("SidecarManager userId passthrough", () => {
         traceId: "4".repeat(32),
         decision: "continue",
         note: "",
-        folderId: null,
+        session: session({ folderId: null }),
       },
       "/tmp/ws",
       undefined,
     );
     const resumeB = bare.sent.find((m) => m.method === "resume");
-    expect(resumeB?.params).toHaveProperty("folderId");
-    expect(resumeB?.params?.folderId).toBeNull();
+    expect(resumeB?.params).toHaveProperty("session");
+    expect(resumeB?.params?.session).toEqual(
+      expect.objectContaining({ folderId: null }),
+    );
   });
 });

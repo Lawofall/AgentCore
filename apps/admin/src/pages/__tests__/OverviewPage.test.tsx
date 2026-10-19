@@ -103,6 +103,7 @@ function overview(p?: Partial<AdminOverview>): AdminOverview {
     recent_errors: [],
     today: healthWindow(),
     users_active: 9,
+    users_online: 4,
     users_total: 12,
     ...p,
   };
@@ -133,6 +134,8 @@ describe("OverviewPage", () => {
     renderOverview();
 
     expect(await screen.findByText("今日活跃用户")).toBeTruthy();
+    expect(screen.getByText("当前在线")).toBeTruthy();
+    expect(screen.getByText("实时连接中的账号")).toBeTruthy();
     expect(screen.getByText("¥12.50")).toBeTruthy();
     // 今日 token = 该回合窗口的输入 + 输出，两者也分别列出。
     expect(screen.getByText("今日 Token")).toBeTruthy();

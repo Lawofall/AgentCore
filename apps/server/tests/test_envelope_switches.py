@@ -61,18 +61,18 @@ def test_omitting_the_date_drops_it_for_captain_and_worker():
     try:
         assert include_runtime_date() is False
         captain = render_ceo_turn_envelope(
-            workspace_context="<工作区>\n边界：这个文件夹\n</工作区>",
+            workspace_context="<工作区>\n边界：本文件夹\n</工作区>",
             conversation_edits="本对话：\n- a.txt（写过）",
         )
         worker = render_worker_turn_envelope(
-            workspace_context="<工作区>\n边界：这个文件夹\n</工作区>",
+            workspace_context="<工作区>\n边界：本文件夹\n</工作区>",
         )
     finally:
         reset_envelope_omissions(token)
     assert "<运行时>" not in captain
     assert "<运行时>" not in worker
-    assert "边界：这个文件夹" in captain
-    assert "边界：这个文件夹" in worker
+    assert "边界：本文件夹" in captain
+    assert "边界：本文件夹" in worker
     assert "a.txt（写过）" in captain
     assert "本对话：" not in worker
 

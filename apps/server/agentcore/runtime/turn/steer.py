@@ -51,7 +51,6 @@ class PendingTurnSteer:
     user_id: str = ""
     attachments: list[dict[str, Any]] = field(default_factory=list)
     agent_mentions: list[dict[str, Any]] = field(default_factory=list)
-    table_selection: list[str] = field(default_factory=list)
     requires_tools: bool = False
     x_client_platform: str | None = None
     # Survives promotion to the conversation queue so a leftover steer keeps
@@ -179,7 +178,6 @@ def try_enqueue(
     user_id: str = "",
     attachments: list[dict[str, Any]] | None = None,
     agent_mentions: list[dict[str, Any]] | None = None,
-    table_selection: list[str] | None = None,
     requires_tools: bool = False,
     x_client_platform: str | None = None,
     origin_device_id: str | None = None,
@@ -201,7 +199,6 @@ def try_enqueue(
         user_id=user_id,
         attachments=list(attachments or []),
         agent_mentions=list(agent_mentions or []),
-        table_selection=list(table_selection or []),
         requires_tools=requires_tools,
         x_client_platform=x_client_platform,
         origin_device_id=origin_device_id,
@@ -425,7 +422,6 @@ def promote_leftovers_to_queue(leftovers: list[PendingTurnSteer]) -> int:
                     user_id=item.user_id,
                     attachments=item.attachments,
                     agent_mentions=item.agent_mentions,
-                    table_selection=item.table_selection,
                     requires_tools=item.requires_tools,
                     x_client_platform=item.x_client_platform,
                     origin_device_id=item.origin_device_id,

@@ -1,10 +1,8 @@
-"""Official capability assemblies.
+"""Official capabilities: locked 完整 and 极简 recipes.
 
-Three locked recipes. While a row still carries the recipe key, tools and
-envelope lines are resolved from the current catalogs, so a switch added later
-stays off on 极简 and 轻量 and comes on for 完整. Editing tools, the envelope,
-the factory catalog, or plugs clears the key; after that the stored lists are
-the record and a new switch defaults on.
+Conversations may pin a virtual recipe id; that is not a copy. User assemblies
+are snapshots of 完整. A switch added later stays off on 极简 and comes on for
+完整. Official recipes cannot be written.
 """
 
 from __future__ import annotations
@@ -13,13 +11,14 @@ import uuid
 from dataclasses import dataclass
 
 CHAT = "chat"
-WEB = "web"
 FULL = "full"
 
-CAPABILITY_ORDER: tuple[str, ...] = (CHAT, WEB, FULL)
+CAPABILITY_ORDER: tuple[str, ...] = (FULL, CHAT)
 
 _NS = uuid.NAMESPACE_URL
 _PREFIX = "agentcore:capability-preset:"
+
+OFFICIAL_READONLY = "这份不能改。要自己关工具，点新建。"
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,25 +34,7 @@ class CapabilityRecipe:
 
 
 def _recipes() -> tuple[CapabilityRecipe, ...]:
-    from agentcore.runtime.context.envelope_switches import RUNTIME_DATE
-
     return (
-        CapabilityRecipe(
-            CHAT,
-            "极简",
-            frozenset(),
-            frozenset(),
-            omit_factory_catalog=True,
-            omit_desk_rules=True,
-        ),
-        CapabilityRecipe(
-            WEB,
-            "轻量",
-            frozenset({"web"}),
-            frozenset({RUNTIME_DATE}),
-            omit_factory_catalog=True,
-            omit_desk_rules=False,
-        ),
         CapabilityRecipe(
             FULL,
             "完整",
@@ -61,6 +42,14 @@ def _recipes() -> tuple[CapabilityRecipe, ...]:
             None,
             omit_factory_catalog=False,
             omit_desk_rules=False,
+        ),
+        CapabilityRecipe(
+            CHAT,
+            "极简",
+            frozenset(),
+            frozenset(),
+            omit_factory_catalog=True,
+            omit_desk_rules=True,
         ),
     )
 
@@ -94,9 +83,18 @@ class AssemblySurface:
 
     disabled_tools: tuple[str, ...]
     omitted_projections: tuple[str, ...]
-    omit_factory_catalog: bool
+    omitted_factory_skills: tuple[str, ...]
     omit_desk_rules: bool
     recipe: str | None
+
+    @property
+    def omit_factory_catalog(self) -> bool:
+        """True when every current official HOW name is on the omit list."""
+        from agentcore.runtime.skills.factory_switches import all_factory_skill_names
+
+        names = all_factory_skill_names()
+        omitted = set(self.omitted_factory_skills)
+        return bool(names) and all(name in omitted for name in names)
 
 
 def surface_from_recipe(recipe: CapabilityRecipe) -> AssemblySurface:
@@ -104,6 +102,7 @@ def surface_from_recipe(recipe: CapabilityRecipe) -> AssemblySurface:
         all_projection_ids,
         normalize_omitted_projections,
     )
+    from agentcore.runtime.skills.factory_switches import omitted_factory_skills_from_flag
     from agentcore.tools.switchboard import all_switch_ids, normalize_disabled_tools
 
     if recipe.allowed_tools is None:
@@ -125,7 +124,7 @@ def surface_from_recipe(recipe: CapabilityRecipe) -> AssemblySurface:
     return AssemblySurface(
         disabled_tools=disabled,
         omitted_projections=omitted,
-        omit_factory_catalog=recipe.omit_factory_catalog,
+        omitted_factory_skills=omitted_factory_skills_from_flag(recipe.omit_factory_catalog),
         omit_desk_rules=recipe.omit_desk_rules,
         recipe=recipe.key,
     )
@@ -137,15 +136,21 @@ def surface_from_row(row: object) -> AssemblySurface:
     if recipe is not None:
         return surface_from_recipe(recipe)
     from agentcore.runtime.context.envelope_switches import normalize_omitted_projections
+    from agentcore.runtime.skills.factory_switches import (
+        normalize_omitted_factory_skills,
+    )
     from agentcore.tools.switchboard import normalize_disabled_tools
 
     raw_omitted = getattr(row, "omitted_projections", ()) or ()
     if not isinstance(raw_omitted, list):
         raw_omitted = list(raw_omitted) if isinstance(raw_omitted, tuple) else []
+    raw_factory = getattr(row, "omitted_factory_skills", ()) or ()
+    if not isinstance(raw_factory, list):
+        raw_factory = list(raw_factory) if isinstance(raw_factory, tuple) else []
     return AssemblySurface(
         disabled_tools=normalize_disabled_tools(getattr(row, "disabled_tools", ())),
         omitted_projections=normalize_omitted_projections(raw_omitted),
-        omit_factory_catalog=bool(getattr(row, "omit_factory_catalog", False)),
+        omitted_factory_skills=normalize_omitted_factory_skills(raw_factory),
         omit_desk_rules=bool(getattr(row, "omit_desk_rules", False)),
         recipe=None,
     )
@@ -159,17 +164,6 @@ def surface_for(assembly_id: str | None, row: object | None) -> AssemblySurface 
     if recipe is None:
         return None
     return surface_from_recipe(recipe)
-
-
-def write_recipe(row: object, recipe: CapabilityRecipe) -> None:
-    """Stamp the recipe and a matching snapshot onto an owned assembly."""
-    surface = surface_from_recipe(recipe)
-    row.recipe = recipe.key  # type: ignore[attr-defined]
-    row.disabled_tools = list(surface.disabled_tools)  # type: ignore[attr-defined]
-    row.omitted_projections = list(surface.omitted_projections)  # type: ignore[attr-defined]
-    row.omit_factory_catalog = surface.omit_factory_catalog  # type: ignore[attr-defined]
-    row.omit_desk_rules = surface.omit_desk_rules  # type: ignore[attr-defined]
-    row.enabled_mcp_server_ids = []  # type: ignore[attr-defined]
 
 
 def clear_recipe(row: object) -> None:

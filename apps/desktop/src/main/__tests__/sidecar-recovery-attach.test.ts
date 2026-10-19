@@ -30,6 +30,14 @@ import {
 } from "../sidecar/manager";
 import type { Transport } from "../sidecar/transport";
 
+const BARE_SESSION = {
+  permissionAxes: { boundary: "folder" as const },
+  delegateMode: false,
+  folderId: null as string | null,
+  localRootId: null as string | null,
+  localSubpath: null as string | null,
+};
+
 /** Fake stdio transport: complete initialize, hang startTurn/resume, inject notifications. */
 function hangingTransport(
   opts: { queuedTurns?: Array<Record<string, unknown>> } = {},
@@ -163,6 +171,7 @@ describe("SidecarManager recovery / attach (D7)", () => {
         userMessageId: "u1",
         messageId: "m-asst",
         userMessage: "hello",
+        session: BARE_SESSION,
       },
       "/tmp/ws",
     );
@@ -209,6 +218,7 @@ describe("SidecarManager recovery / attach (D7)", () => {
         userMessageId: "u2",
         messageId: "m-asst",
         userMessage: "q",
+        session: BARE_SESSION,
       },
       "/tmp/ws",
     );
@@ -286,6 +296,7 @@ describe("SidecarManager recovery / attach (D7)", () => {
         userMessageId: "u3",
         messageId: "m-asst",
         userMessage: "q",
+        session: BARE_SESSION,
       },
       "/tmp/ws",
     );
@@ -332,6 +343,7 @@ describe("SidecarManager recovery / attach (D7)", () => {
         userMessageId: "u4",
         messageId: "m-asst",
         userMessage: "q",
+        session: BARE_SESSION,
       },
       "/tmp/ws",
     );
@@ -379,6 +391,7 @@ describe("SidecarManager recovery / attach (D7)", () => {
         userMessageId: "u5",
         decision: "continue",
         note: "",
+        session: BARE_SESSION,
       },
       "/tmp/ws",
       undefined,
@@ -471,6 +484,7 @@ describe("SidecarManager recovery / attach (D7)", () => {
         userMessageId: "u-d2",
         messageId: "m-asst",
         userMessage: "hello",
+        session: BARE_SESSION,
       },
       "/tmp/ws",
     );
@@ -511,6 +525,7 @@ describe("SidecarManager recovery / attach (D7)", () => {
         userMessageId: "u-d2-synth",
         messageId: "m-asst",
         userMessage: "q",
+        session: BARE_SESSION,
       },
       "/tmp/ws",
     );
@@ -552,6 +567,7 @@ describe("SidecarManager recovery / attach (D7)", () => {
         userMessageId: "u-d2-real",
         messageId: "m-asst",
         userMessage: "q",
+        session: BARE_SESSION,
       },
       "/tmp/ws",
     );
@@ -609,6 +625,7 @@ describe("isDestroyedWebContentsError (D2)", () => {
         userMessageId: "u-q",
         messageId: "m-asst",
         userMessage: "hello",
+        session: BARE_SESSION,
       },
       "/tmp/ws",
     );

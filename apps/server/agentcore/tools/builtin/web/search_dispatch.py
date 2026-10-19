@@ -4,14 +4,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from agentcore.tools.builtin.web.cleversee import CleverSeeBackend
+from agentcore.core.net import EgressError
+from agentcore.search.choice import DEEPSEEK, SearchTarget
+from agentcore.tools.builtin.web.deepseek import DeepSeekBackend
 from agentcore.tools.builtin.web.search_backend import (
     SearchBackend,
     SearchResult,
-    SearXNGBackend,
     get_search_backend,
 )
-from agentcore.tools.builtin.web.search_choice import CLEVERSEE, SearchTarget
 from agentcore.tools.builtin.web.search_quota import admit_platform_search, note_platform_search
 
 
@@ -40,10 +40,9 @@ async def dispatch_search(
         await note_platform_search(user_id)
         return SearchDispatch(results, backend)
 
-    if target.protocol == CLEVERSEE:
-        owned: SearchBackend = CleverSeeBackend(target.api_key, target.base_url or None)
-    else:
-        owned = SearXNGBackend(target.base_url or None, api_key=target.api_key or None)
+    if target.protocol != DEEPSEEK or not target.api_key:
+        raise EgressError("DeepSeek 搜索未配置 API Key")
+    owned: SearchBackend = DeepSeekBackend(target.api_key, target.base_url or None)
     try:
         results = await owned.search(
             query, max_results=max_results, on_phase=on_phase, language=language

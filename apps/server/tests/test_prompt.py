@@ -35,12 +35,18 @@ from agentcore.runtime.skills import (
 from agentcore.runtime.skills.registry import AUDIENCE_WORKER
 from agentcore.tools.builtin.delegate.schema import (
     DELEGATE_DESCRIPTION,
+    DELEGATE_DESCRIPTION_PREFER,
     DELEGATE_PARAMETERS,
     DELEGATE_STAFF_HOW,
     DELEGATE_WHEN,
+    DELEGATE_WHEN_PREFER,
     NESTED_DELEGATE_DESCRIPTION,
+    NESTED_DELEGATE_DESCRIPTION_PREFER,
     NESTED_STAFF_HOW,
     TASK_FILL_HOW,
+    catalog_prefer_description,
+    nested_delegate_description,
+    root_delegate_description,
 )
 from agentcore.tools.builtin.run import run_description
 
@@ -166,7 +172,11 @@ def test_how_consult_pointer_has_handbook_body():
     from agentcore.tools.registration import declared_tool_schema, declared_tools
 
     skills = {s.name for s in build_system_skill_registry().list_all()}
-    blobs: list[tuple[str, str]] = [("delegate.nested", NESTED_DELEGATE_DESCRIPTION)]
+    blobs: list[tuple[str, str]] = [
+        ("delegate.nested", NESTED_DELEGATE_DESCRIPTION),
+        ("delegate.nested.prefer", NESTED_DELEGATE_DESCRIPTION_PREFER),
+        ("delegate.prefer", DELEGATE_DESCRIPTION_PREFER),
+    ]
     for cls in declared_tools():
         schema = declared_tool_schema(cls)
         blob = schema.description + json.dumps(schema.parameters, ensure_ascii=False)
@@ -216,6 +226,7 @@ def test_delegate_schema_keys_one_layer():
     ):
         assert key not in hint
         assert key not in DELEGATE_DESCRIPTION
+        assert key not in DELEGATE_DESCRIPTION_PREFER
 
 
 def test_how_identifiers_not_in_resident_core():
@@ -264,6 +275,27 @@ def test_delegate_when_is_shared_window_bound():
     assert NESTED_STAFF_HOW not in DELEGATE_DESCRIPTION
     assert "HOW→consult" not in DELEGATE_DESCRIPTION
     assert "HOW→consult" not in NESTED_DELEGATE_DESCRIPTION
+    assert DELEGATE_WHEN_PREFER in DELEGATE_DESCRIPTION_PREFER
+    assert DELEGATE_WHEN_PREFER in NESTED_DELEGATE_DESCRIPTION_PREFER
+    assert DELEGATE_WHEN not in DELEGATE_DESCRIPTION_PREFER
+    assert DELEGATE_WHEN not in NESTED_DELEGATE_DESCRIPTION_PREFER
+    assert DELEGATE_WHEN_PREFER not in DELEGATE_DESCRIPTION
+    assert DELEGATE_WHEN_PREFER not in NESTED_DELEGATE_DESCRIPTION
+    assert DELEGATE_STAFF_HOW in DELEGATE_DESCRIPTION_PREFER
+    assert DELEGATE_STAFF_HOW in NESTED_DELEGATE_DESCRIPTION_PREFER
+    assert NESTED_STAFF_HOW in NESTED_DELEGATE_DESCRIPTION_PREFER
+    assert NESTED_STAFF_HOW not in DELEGATE_DESCRIPTION_PREFER
+    assert "HOW→consult" not in DELEGATE_DESCRIPTION_PREFER
+    assert "HOW→consult" not in NESTED_DELEGATE_DESCRIPTION_PREFER
+    assert root_delegate_description(prefer=False) == DELEGATE_DESCRIPTION
+    assert root_delegate_description(prefer=True) == DELEGATE_DESCRIPTION_PREFER
+    assert nested_delegate_description(prefer=False) == NESTED_DELEGATE_DESCRIPTION
+    assert nested_delegate_description(prefer=True) == NESTED_DELEGATE_DESCRIPTION_PREFER
+    assert "优先把任务" in DELEGATE_DESCRIPTION_PREFER
+    assert "优先把任务" not in NESTED_DELEGATE_DESCRIPTION_PREFER
+    assert "卡上已是一件则留下" in NESTED_DELEGATE_DESCRIPTION_PREFER
+    assert catalog_prefer_description("delegate") == DELEGATE_DESCRIPTION_PREFER
+    assert catalog_prefer_description("replan") == ""
 
 
 def test_work_authority_does_not_host_tool_when_to_use():

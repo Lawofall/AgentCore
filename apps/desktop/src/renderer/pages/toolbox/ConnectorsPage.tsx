@@ -1,8 +1,25 @@
-import { Badge, Button, Input } from "@/components/ui";
+import { Badge, Button, Input, SegmentedControl } from "@/components/ui";
 import { Switch } from "@/components/ui/Switch";
-import type { McpServerConfig, McpServerListItem } from "@shared/mcp-contract";
-import { RefreshCw, Trash2 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import type { ImportedMcpServer } from "@/lib/mcpImport";
+import { mcpServerKeys } from "@/lib/queryKeys";
+import { ApiError } from "@/services/api";
+import {
+  createMcpServer,
+  deleteMcpServer,
+  listMcpServers,
+  remoteMcpToListItem,
+  startMcpOAuth,
+  testMcpServer,
+  updateMcpServer,
+} from "@/services/mcpServers";
+import type {
+  McpServerConfig,
+  McpServerListItem,
+  McpTransport,
+} from "@shared/mcp-contract";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { LogIn, RefreshCw, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 export const NEW_CONNECTOR_ID = "connector:new";
 
@@ -10,21 +27,59 @@ export function connectorCatalogId(id: string): string {
   return `connector:${id}`;
 }
 
-function emptyDraft(): McpServerConfig {
+function mcpErrorMessage(err: unknown, fallback: string): string {
+  if (err instanceof ApiError && err.serverMessage) return err.serverMessage;
+  if (err instanceof Error && err.message) return err.message;
+  return fallback;
+}
+
+function emptyDraft(seed?: ImportedMcpServer | null): McpServerConfig {
+  const canStdio =
+    typeof window !== "undefined" && Boolean(window.mcpApi?.upsertServer);
+  if (seed?.transport === "http") {
+    return {
+      id: "",
+      name: seed.name,
+      enabled: true,
+      command: "",
+      args: [],
+      transport: "http",
+      url: seed.url,
+      authKind: seed.bearer ? "bearer" : "none",
+    };
+  }
+  if (seed?.transport === "stdio") {
+    return {
+      id: "",
+      name: seed.name,
+      enabled: true,
+      command: seed.command,
+      args: [...seed.args],
+      env: seed.env ? { ...seed.env } : undefined,
+      transport: "stdio",
+    };
+  }
   return {
     id: "",
     name: "",
     enabled: true,
     command: "",
     args: [],
-    env: undefined,
+    transport: canStdio ? "stdio" : "http",
+    url: "",
+    authKind: "none",
   };
+}
+
+function stampLocal(server: McpServerListItem): McpServerListItem {
+  return { ...server, transport: server.transport ?? "stdio" };
 }
 
 export function connectorStatusLabel(server: McpServerListItem): string {
   if (!server.enabled) return "未启用";
   if (server.runtimeStatus === "ready") return "已握手";
   if (server.runtimeStatus === "failed") return "失败";
+  if (server.runtimeStatus === "needs_auth") return "需登录";
   return "";
 }
 
@@ -52,40 +107,88 @@ export function ConnectorStatusBadge({
       </Badge>
     );
   }
+  if (server.runtimeStatus === "needs_auth") {
+    return (
+      <Badge tone="primary" pill>
+        需登录
+      </Badge>
+    );
+  }
   return null;
 }
 
 export function useMcpConnectors() {
   const api = typeof window !== "undefined" ? window.mcpApi : undefined;
-  const [servers, setServers] = useState<McpServerListItem[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [loaded, setLoaded] = useState(!api?.listServers);
+  const queryClient = useQueryClient();
+  const [localServers, setLocalServers] = useState<McpServerListItem[]>([]);
+  const [localError, setLocalError] = useState<string | null>(null);
+  const [localLoaded, setLocalLoaded] = useState(!api?.listServers);
 
-  const reload = useCallback(async () => {
-    if (!api?.listServers) return;
-    const res = await api.listServers();
-    if (!res.ok) {
-      setError(res.error.detail);
-      setLoaded(true);
+  const remoteQuery = useQuery({
+    queryKey: mcpServerKeys.list,
+    queryFn: listMcpServers,
+  });
+
+  const reloadLocal = useCallback(async () => {
+    if (!api?.listServers) {
+      setLocalLoaded(true);
       return;
     }
-    setError(null);
-    setServers(res.servers);
-    setLoaded(true);
+    const res = await api.listServers();
+    if (!res.ok) {
+      setLocalError(res.error.detail);
+      setLocalLoaded(true);
+      return;
+    }
+    setLocalError(null);
+    setLocalServers(res.servers.map(stampLocal));
+    setLocalLoaded(true);
   }, [api]);
 
   useEffect(() => {
-    void reload();
-  }, [reload]);
+    void reloadLocal();
+  }, [reloadLocal]);
 
-  return { api, servers, error, loaded, reload, setError };
+  const reload = useCallback(async () => {
+    await Promise.all([
+      reloadLocal(),
+      queryClient.invalidateQueries({ queryKey: mcpServerKeys.list }),
+    ]);
+  }, [reloadLocal, queryClient]);
+
+  const remoteServers = useMemo(
+    () => (remoteQuery.data?.data ?? []).map(remoteMcpToListItem),
+    [remoteQuery.data],
+  );
+
+  const servers = useMemo(
+    () => [...remoteServers, ...localServers],
+    [remoteServers, localServers],
+  );
+
+  const remoteError =
+    remoteQuery.isError &&
+    remoteServers.length === 0 &&
+    localServers.length === 0
+      ? mcpErrorMessage(remoteQuery.error, "加载失败")
+      : null;
+
+  return {
+    api,
+    servers,
+    error: localError ?? remoteError,
+    loaded: localLoaded && !remoteQuery.isPending,
+    reload,
+    setError: setLocalError,
+  };
 }
 
 /**
- * 本机 MCP 接线表单。仅 Electron（window.mcpApi）。
+ * MCP 接线表单。本机命令走 Electron mcpApi；远程地址走账号 REST。
  */
 export function ConnectorInspector({
   server,
+  seed,
   api,
   busyId,
   onBusy,
@@ -96,7 +199,8 @@ export function ConnectorInspector({
   onAssemblyToggle,
 }: {
   server: McpServerListItem | null;
-  api: NonNullable<Window["mcpApi"]>;
+  seed?: ImportedMcpServer | null;
+  api?: Window["mcpApi"];
   busyId: string | null;
   onBusy: (id: string | null) => void;
   onCloseNew?: () => void;
@@ -107,17 +211,25 @@ export function ConnectorInspector({
   onAssemblyToggle?: (enabled: boolean) => Promise<void>;
 }) {
   const editing = Boolean(server?.id);
+  const canStdio = Boolean(api?.upsertServer);
   const [draft, setDraft] = useState<McpServerConfig>(() =>
     server
       ? {
-          ...server,
+          ...stampLocal(server),
           args: [...server.args],
           env: server.env ? { ...server.env } : undefined,
         }
-      : emptyDraft(),
+      : emptyDraft(seed),
   );
   const [argsText, setArgsText] = useState(() =>
-    server ? server.args.join(" ") : "",
+    server
+      ? server.args.join(" ")
+      : seed?.transport === "stdio"
+        ? seed.args.join(" ")
+        : "",
+  );
+  const [bearerText, setBearerText] = useState(() =>
+    seed?.transport === "http" ? (seed.bearer ?? "") : "",
   );
   const [testNote, setTestNote] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -125,26 +237,63 @@ export function ConnectorInspector({
   useEffect(() => {
     if (server) {
       setDraft({
-        ...server,
+        ...stampLocal(server),
         args: [...server.args],
         env: server.env ? { ...server.env } : undefined,
       });
       setArgsText(server.args.join(" "));
+      setBearerText("");
     } else {
-      setDraft(emptyDraft());
-      setArgsText("");
+      setDraft(emptyDraft(seed));
+      setArgsText(seed?.transport === "stdio" ? seed.args.join(" ") : "");
+      setBearerText(seed?.transport === "http" ? (seed.bearer ?? "") : "");
     }
     setTestNote(null);
     setError(null);
-  }, [server]);
+  }, [server, seed]);
+
+  const transport: McpTransport = draft.transport === "http" ? "http" : "stdio";
+  const isHttp = transport === "http";
 
   const saveDraft = async () => {
-    if (!api.upsertServer) return;
+    if (isHttp) {
+      const url = (draft.url || "").trim();
+      if (!url) {
+        setError("请填写地址");
+        return;
+      }
+      try {
+        if (!editing) {
+          await createMcpServer({
+            name: draft.name.trim(),
+            url,
+            bearer: bearerText.trim() || null,
+          });
+        } else {
+          await updateMcpServer(draft.id, {
+            name: draft.name.trim(),
+            url,
+            ...(bearerText.trim() ? { bearer: bearerText.trim() } : {}),
+          });
+        }
+      } catch (err) {
+        setError(mcpErrorMessage(err, "保存失败"));
+        return;
+      }
+      await onSaved();
+      if (!editing) onCloseNew?.();
+      return;
+    }
+    if (!api?.upsertServer) {
+      setError("本机命令只在桌面可用");
+      return;
+    }
     const args = argsText.trim().split(/\s+/).filter(Boolean);
     const payload: McpServerConfig = {
       ...draft,
       id: draft.id || crypto.randomUUID(),
       args,
+      transport: "stdio",
     };
     const res = await api.upsertServer(payload);
     if (!res.ok) {
@@ -167,7 +316,7 @@ export function ConnectorInspector({
       }
       return;
     }
-    if (!api.setServerEnabled) return;
+    if (isHttp || !api?.setServerEnabled) return;
     onBusy(draft.id);
     try {
       await api.setServerEnabled(draft.id, !draft.enabled);
@@ -179,22 +328,47 @@ export function ConnectorInspector({
   };
 
   const remove = async () => {
-    if (!draft.id || !api.removeServer) return;
+    if (!draft.id) return;
     onBusy(draft.id);
     try {
-      await api.removeServer(draft.id);
+      if (isHttp) {
+        await deleteMcpServer(draft.id);
+      } else if (api?.removeServer) {
+        await api.removeServer(draft.id);
+      } else {
+        return;
+      }
       await onSaved();
       onCloseNew?.();
+    } catch (err) {
+      setError(mcpErrorMessage(err, "删除失败"));
     } finally {
       onBusy(null);
     }
   };
 
   const test = async () => {
-    if (!draft.id || !api.testServer) return;
+    if (!draft.id) return;
     onBusy(draft.id);
     setTestNote(null);
     try {
+      if (isHttp) {
+        const res = await testMcpServer(draft.id);
+        if (res.status === "ready") {
+          setTestNote(
+            `握手成功，发现 ${res.tools.length} 个工具：${
+              res.tools.join(", ") || "（无）"
+            }`,
+          );
+        } else if (res.status === "needs_auth") {
+          setTestNote("需要登录");
+        } else {
+          setTestNote(`握手失败：${res.last_error || "unknown"}`);
+        }
+        await onSaved();
+        return;
+      }
+      if (!api?.testServer) return;
       const res = await api.testServer(draft.id);
       if (!res.ok) {
         setTestNote(res.error.detail);
@@ -210,9 +384,33 @@ export function ConnectorInspector({
         setTestNote(`握手失败：${res.error || "unknown"}`);
       }
       await onSaved();
+    } catch (err) {
+      setTestNote(mcpErrorMessage(err, "握手失败"));
     } finally {
       onBusy(null);
     }
+  };
+
+  const login = async () => {
+    if (!draft.id || !isHttp) return;
+    onBusy(draft.id);
+    setError(null);
+    try {
+      const { authorization_url } = await startMcpOAuth(
+        draft.id,
+        window.location.origin,
+      );
+      window.location.assign(authorization_url);
+    } catch (err) {
+      setError(mcpErrorMessage(err, "无法开始登录"));
+      onBusy(null);
+    }
+  };
+
+  const setTransport = (value: McpTransport) => {
+    if (editing) return;
+    setDraft({ ...draft, transport: value });
+    setError(null);
   };
 
   return (
@@ -245,6 +443,21 @@ export function ConnectorInspector({
               <span className="text-xs text-muted-foreground">启用</span>
             </div>
           ) : null}
+          {canStdio && !editing ? (
+            <div className="flex flex-col gap-1">
+              <span className="text-xs text-muted-foreground">接线</span>
+              <SegmentedControl
+                aria-label="接线"
+                value={transport}
+                onChange={setTransport}
+                items={[
+                  { value: "stdio", label: "本机命令" },
+                  { value: "http", label: "远程地址" },
+                ]}
+                fit
+              />
+            </div>
+          ) : null}
           <label
             className="flex flex-col gap-1 text-xs text-muted-foreground"
             htmlFor="mcp-draft-name"
@@ -257,30 +470,67 @@ export function ConnectorInspector({
               placeholder="例如：Filesystem"
             />
           </label>
-          <label
-            className="flex flex-col gap-1 text-xs text-muted-foreground"
-            htmlFor="mcp-draft-command"
-          >
-            命令
-            <Input
-              id="mcp-draft-command"
-              value={draft.command}
-              onChange={(e) => setDraft({ ...draft, command: e.target.value })}
-              placeholder="例如：npx"
-            />
-          </label>
-          <label
-            className="flex flex-col gap-1 text-xs text-muted-foreground"
-            htmlFor="mcp-draft-args"
-          >
-            参数（空格分隔）
-            <Input
-              id="mcp-draft-args"
-              value={argsText}
-              onChange={(e) => setArgsText(e.target.value)}
-              placeholder="例如：-y @modelcontextprotocol/server-everything"
-            />
-          </label>
+          {isHttp ? (
+            <>
+              <label
+                className="flex flex-col gap-1 text-xs text-muted-foreground"
+                htmlFor="mcp-draft-url"
+              >
+                地址
+                <Input
+                  id="mcp-draft-url"
+                  value={draft.url ?? ""}
+                  onChange={(e) => setDraft({ ...draft, url: e.target.value })}
+                  placeholder="例如：https://mcp.example.com/mcp"
+                />
+              </label>
+              <label
+                className="flex flex-col gap-1 text-xs text-muted-foreground"
+                htmlFor="mcp-draft-bearer"
+              >
+                令牌（可选）
+                <Input
+                  id="mcp-draft-bearer"
+                  type="password"
+                  autoComplete="off"
+                  value={bearerText}
+                  onChange={(e) => setBearerText(e.target.value)}
+                  placeholder={
+                    draft.hasToken ? "已保存，留空不改" : "没有 OAuth 时用"
+                  }
+                />
+              </label>
+            </>
+          ) : (
+            <>
+              <label
+                className="flex flex-col gap-1 text-xs text-muted-foreground"
+                htmlFor="mcp-draft-command"
+              >
+                命令
+                <Input
+                  id="mcp-draft-command"
+                  value={draft.command}
+                  onChange={(e) =>
+                    setDraft({ ...draft, command: e.target.value })
+                  }
+                  placeholder="例如：npx"
+                />
+              </label>
+              <label
+                className="flex flex-col gap-1 text-xs text-muted-foreground"
+                htmlFor="mcp-draft-args"
+              >
+                参数（空格分隔）
+                <Input
+                  id="mcp-draft-args"
+                  value={argsText}
+                  onChange={(e) => setArgsText(e.target.value)}
+                  placeholder="例如：-y @modelcontextprotocol/server-everything"
+                />
+              </label>
+            </>
+          )}
           {testNote ? (
             <p className="text-xs text-muted-foreground">{testNote}</p>
           ) : null}
@@ -295,6 +545,17 @@ export function ConnectorInspector({
               >
                 测试握手
               </Button>
+              {isHttp ? (
+                <Button
+                  variant="neutral"
+                  size="sm"
+                  disabled={busyId === draft.id}
+                  icon={<LogIn size={14} />}
+                  onClick={() => void login()}
+                >
+                  登录
+                </Button>
+              ) : null}
               <Button
                 variant="danger"
                 size="sm"

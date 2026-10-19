@@ -36,6 +36,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
+from agentcore.billing.seats import SKUS
 from agentcore.config import settings
 from agentcore.core.errors import QuotaExceededError, utc_moment_iso
 from agentcore.db.repositories import CostEventRepository
@@ -45,11 +46,16 @@ if TYPE_CHECKING:
     from agentcore.db.models import User
 
 
-# Secondary weakened exit appended to platform-quota refusals (成本配额与计费 §〇·六
-# F6): platform额度耗尽 = 等重置 / 联系管理员为主, 「接入自己的 key」为次级出口 (byok
-# 回合不查配额, 是真正的绕过路径). Each client maps QUOTA_EXCEEDED to its own
-# Key-config CTA; this sentence does not name a page.
-_BYOK_EXIT = "或接入自己的 key 继续"
+# Platform-quota refusals (成本配额与计费 §〇·六 F6): wait for reset; open a
+# higher seat when the cap is still below 旗舰; BYOK is the weakened bypass
+# (those turns skip quota). The refusal sentence infers from the published
+# 旗舰 caps (the gate reads override numbers). 用量将尽 CTA 看 seat.plan。
+# Token refusals never offer a higher seat. The client maps QUOTA_EXCEEDED to
+# 「去订阅」; this sentence does not name a page.
+_FLAGSHIP_MONTHLY_CNY = SKUS["flagship"].monthly_quota_yuan
+_FLAGSHIP_DAILY_CNY = SKUS["flagship"].daily_quota_yuan
+_UPGRADE_EXIT = "可开通更高档"
+_BYOK_EXIT = "接入自己的 key 继续"
 
 # What every refusal says instead of naming a clock time. The windows are UTC-bounded
 # and「明日 0 点（UTC）重置」made the reader do the conversion — for a China user that
@@ -57,6 +63,17 @@ _BYOK_EXIT = "或接入自己的 key 继续"
 # eight hours. The exact instant rides in ``reset_at`` for the client to localise;
 # this stays true on its own for anything that cannot read it.
 _RESET_HINT = "额度重置后可继续"
+
+
+def _exhausted_exit(*, cap_cny: float | None, daily: bool) -> str:
+    """Reset + optional higher-seat + BYOK. Omit 更高档 at/above 旗舰 caps."""
+    offer_upgrade = False
+    if cap_cny is not None:
+        flagship = _FLAGSHIP_DAILY_CNY if daily else _FLAGSHIP_MONTHLY_CNY
+        offer_upgrade = cap_cny + 1e-9 < flagship
+    if offer_upgrade:
+        return f"{_RESET_HINT}；{_UPGRADE_EXIT}，或{_BYOK_EXIT}。"
+    return f"{_RESET_HINT}；{_BYOK_EXIT}。"
 
 
 def _next_day_reset(day_start: datetime) -> str:
@@ -163,7 +180,7 @@ async def enforce_quota(
         if used >= limits.daily_tokens:
             raise QuotaExceededError(
                 f"已达每日 token 上限（{used:,} / {limits.daily_tokens:,}），"
-                f"{_RESET_HINT}；{_BYOK_EXIT}。",
+                f"{_exhausted_exit(cap_cny=None, daily=True)}",
                 dimension="daily_tokens",
                 used=used,
                 limit=limits.daily_tokens,
@@ -177,8 +194,8 @@ async def enforce_quota(
             spent_cny = nano_to_yuan(used)
             cap_cny = nano_to_yuan(limits.daily_cost_nano)
             raise QuotaExceededError(
-                f"已达今日额度上限（约 ¥{spent_cny:.2f} / ¥{cap_cny:.2f}），"
-                f"{_RESET_HINT}；{_BYOK_EXIT}。",
+                f"已达今日积分上限（约 {spent_cny:.2f} / {cap_cny:.2f} 积分），"
+                f"{_exhausted_exit(cap_cny=cap_cny, daily=True)}",
                 dimension="daily_cost",
                 used=used,
                 limit=limits.daily_cost_nano,
@@ -192,10 +209,10 @@ async def enforce_quota(
         if used >= limits.monthly_cost_nano:
             spent_cny = nano_to_yuan(used)
             cap_cny = nano_to_yuan(limits.monthly_cost_nano)
-            # F6 主文案: 用完 + 等重置 + 联系管理员提额; _BYOK_EXIT = 次级弱化出口.
+            # F6: 用完 + 等重置; 低于旗舰才说开通更高档; BYOK 次级出口.
             raise QuotaExceededError(
-                f"本月额度已用完（约 ¥{spent_cny:.2f} / ¥{cap_cny:.2f}），"
-                f"{_RESET_HINT}；测试需要可联系管理员提额，{_BYOK_EXIT}。",
+                f"本月积分已用完（约 {spent_cny:.2f} / {cap_cny:.2f} 积分），"
+                f"{_exhausted_exit(cap_cny=cap_cny, daily=False)}",
                 dimension="monthly_cost",
                 used=used,
                 limit=limits.monthly_cost_nano,

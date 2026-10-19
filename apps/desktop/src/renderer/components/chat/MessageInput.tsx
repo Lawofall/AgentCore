@@ -11,8 +11,9 @@ import {
  * (bottom padding, default placeholder). One composer, single draft per conversation;
  * canvas is look-only — say stays here.
  *
- * `variant` is chosen by ChatView: `bar` for the session bottom dock（＋收纳配置）,
- * `card` for the centered new-chat composer.
+ * `variant` is chosen by ChatView: `bar` for the session bottom dock,
+ * `card` for the centered new-chat composer. Both hang 工作区 / 能力 / 委派 / 权限
+ * above the card; ＋ only adds attachments.
  *
  * Workspace / Git / compose actions live inside TurnComposer. When fused under
  * ApprovalPrompt, ChatView stacks ApprovalPrompt above this input so the

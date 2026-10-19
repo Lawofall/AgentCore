@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * PermissionAxesBadge — 三档边界；这台电脑仅本机引擎可见。
+ * PermissionAxesBadge — 四档边界；这台电脑仅本机引擎可见；完全权限全端可见。
  */
 
 import {
@@ -17,7 +17,6 @@ vi.mock("@/hooks/useConversations", () => ({
   patchConversationCache: vi.fn(),
 }));
 vi.mock("@/lib/toast", () => ({
-  notifySuccess: vi.fn(),
   notifyError: vi.fn(),
 }));
 vi.mock("@/lib/capabilities", async (importOriginal) => {
@@ -35,7 +34,7 @@ vi.mock("@/services/permissionAxes", async (importOriginal) => {
     resolveDefaultPermissionAxes: vi.fn(async () => ({
       boundary: "folder" as const,
     })),
-    setUserDefaultRecipe: vi.fn(async (p: string) => p),
+    rememberBoundarySelection: vi.fn(),
     setConversationPermissionAxes: vi.fn(),
     setComposerDraftAxes: vi.fn(),
     confirmComputerIfNeeded: vi.fn(() => true),
@@ -44,12 +43,15 @@ vi.mock("@/services/permissionAxes", async (importOriginal) => {
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { hasLocalEngine } from "@/lib/capabilities";
-import { notifyError, notifySuccess } from "@/lib/toast";
-import { setUserDefaultRecipe } from "@/services/permissionAxes";
+import { notifyError } from "@/lib/toast";
+import {
+  rememberBoundarySelection,
+  resolveDefaultPermissionAxes,
+} from "@/services/permissionAxes";
 import { useConversationStore } from "@/stores/conversation";
 import { PermissionAxesBadge } from "../PermissionPresetBadge";
 
-const setUserDefaultMock = vi.mocked(setUserDefaultRecipe);
+const rememberMock = vi.mocked(rememberBoundarySelection);
 
 function renderBadge() {
   return render(
@@ -61,52 +63,54 @@ function renderBadge() {
 
 beforeEach(() => {
   useConversationStore.setState({ currentConversationId: null });
-  setUserDefaultMock.mockClear();
-  vi.mocked(notifySuccess).mockClear();
+  rememberMock.mockClear();
   vi.mocked(notifyError).mockClear();
   vi.mocked(hasLocalEngine).mockReturnValue(false);
+  vi.mocked(resolveDefaultPermissionAxes).mockResolvedValue({
+    boundary: "folder",
+  });
 });
 
 afterEach(cleanup);
 
 describe("PermissionAxesBadge", () => {
-  it("sets user default from the current boundary", async () => {
+  it("remembers the picked boundary and has no set-as-default action", async () => {
     renderBadge();
     await waitFor(() => {
-      expect(screen.getByLabelText("权限：这个文件夹")).toBeTruthy();
+      expect(screen.getByLabelText("权限：本文件夹")).toBeTruthy();
     });
-    fireEvent.click(screen.getByLabelText("权限：这个文件夹"));
-    const btn = screen.getByRole("button", { name: "设为新会话默认" });
-    expect((btn as HTMLButtonElement).disabled).toBe(false);
-    fireEvent.click(btn);
-    await waitFor(() => {
-      expect(setUserDefaultMock).toHaveBeenCalledWith("folder");
-      expect(notifySuccess).toHaveBeenCalledWith(
-        expect.stringContaining("这个文件夹"),
-      );
-    });
+    fireEvent.click(screen.getByLabelText("权限：本文件夹"));
+    expect(screen.queryByRole("button", { name: "设为新会话默认" })).toBeNull();
+    fireEvent.click(screen.getByText("只看"));
+    expect(rememberMock).toHaveBeenCalledWith("read");
   });
 
-  it("web hides 这台电脑 and shows 只看 / 这个文件夹", async () => {
+  it("web hides 这台电脑 and shows 只看 / 本文件夹 / 完全权限", async () => {
     renderBadge();
     await waitFor(() => {
-      expect(screen.getByLabelText("权限：这个文件夹")).toBeTruthy();
+      expect(screen.getByLabelText("权限：本文件夹")).toBeTruthy();
     });
-    fireEvent.click(screen.getByLabelText("权限：这个文件夹"));
+    fireEvent.click(screen.getByLabelText("权限：本文件夹"));
     expect(screen.getByText("只看")).toBeTruthy();
-    expect(screen.getAllByText(/这个文件夹/).length).toBeGreaterThan(0);
+    expect(screen.getByText("本文件夹 · 荐")).toBeTruthy();
+    expect(screen.getByText("完全权限")).toBeTruthy();
     expect(screen.queryByText("这台电脑")).toBeNull();
     expect(screen.queryByText("改某一条")).toBeNull();
     expect(screen.queryByText("谨慎")).toBeNull();
   });
 
-  it("desktop offers 这台电脑", async () => {
+  it("desktop offers 这台电脑 and 完全权限", async () => {
     vi.mocked(hasLocalEngine).mockReturnValue(true);
+    vi.mocked(resolveDefaultPermissionAxes).mockResolvedValue({
+      boundary: "computer",
+    });
     renderBadge();
     await waitFor(() => {
-      expect(screen.getByLabelText("权限：这个文件夹")).toBeTruthy();
+      expect(screen.getByLabelText("权限：这台电脑")).toBeTruthy();
     });
-    fireEvent.click(screen.getByLabelText("权限：这个文件夹"));
-    expect(screen.getByText("这台电脑")).toBeTruthy();
+    fireEvent.click(screen.getByLabelText("权限：这台电脑"));
+    expect(screen.getByText("这台电脑 · 荐")).toBeTruthy();
+    expect(screen.getByText("完全权限")).toBeTruthy();
+    expect(screen.getByText("本文件夹")).toBeTruthy();
   });
 });

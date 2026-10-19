@@ -3,16 +3,18 @@
 Every place that needs a cost calls :func:`calculate_cost` — there is no other
 price table and no per-site arithmetic.
 
-**There is no live FX.** User-facing money is curated **CNY**. Flash SKUs use
-DeepSeek's official 中文列表价 (peak/off-peak by call time). Other models stay
-国内官价直写. ``credential_source`` only routes the same number: platform/vendor
-→ ``cost_total_nano`` (quota); user → ``cost_estimated_nano`` (display copy,
-never quota). OpenCode Go's actual subscription spend is not this meter.
+**There is no live FX.** The ledger is curated **selling CNY** (1 积分 = ¥1 卖价).
+Flash SKUs start from DeepSeek's official 中文列表价 (peak/off-peak by call
+time) then apply the platform sell multiplier (0.25). GLM-5.3 / GLM-5.3-Flash /
+Kimi K3 platform sell is official × 2. Claude / GPT platform cards freeze
+Anthropic / OpenAI USD list at 7.2 CNY/USD (no live FX) then × 0.3 / 0.18.
+Other models stay 国内官价 × their own multiplier (default 1). ``credential_source`` only routes the
+number: platform/vendor → ``cost_total_nano`` (quota / 积分); user →
+``cost_estimated_nano`` (official card, never quota). Upstream cash paid is
+not this meter.
 
 - **curated** ``_PRICING`` — 国内官价, **CNY** (glm / 豆包 / kimi vision).
-- **Flash** — official DeepSeek CNY, peak/off-peak (official / Go V4.1 / retired
-  V4 Flash alias / Zen-free share the meter). Admin still sums Go public USD for
-  window cards.
+- **Flash** — official DeepSeek CNY, peak/off-peak (common aliases share the meter).
 
 Money is never a float. Costs are computed in :class:`~decimal.Decimal` and
 returned as integer **nano-units of** ``Cost.currency`` (``1 unit = 1e9 nano``).
@@ -84,15 +86,24 @@ QWEN_VL_MAX = "qwen-vl-max"
 # imports; no curated card this step (USD list withdrawn).
 PLATFORM_GPT_4O = "gpt-4o"
 
-# Platform relay catalog models (billing_mode=platform 内测中转目录, 成本配额与计费 §〇·六 F4).
-PLATFORM_RELAY_GLM_52 = "glm-5.2"  # 平台默认；bigmodel.cn 人民币列表价直写
+# Platform catalog SKUs (billing_mode=platform allowlist, 成本配额与计费 §〇·六 F4).
+PLATFORM_RELAY_GLM_52 = "glm-5.2"  # 无卡回落；bigmodel.cn 人民币列表价直写
+PLATFORM_RELAY_GLM_53 = "glm-5.3"
+PLATFORM_RELAY_GLM_53_FLASH = "glm-5.3-flash"
+PLATFORM_RELAY_KIMI_K3 = "kimi-k3"
+CLAUDE_OPUS_46 = "claude-opus-4-6"
+CLAUDE_OPUS_55 = "claude-opus-5-5"
+CLAUDE_FABLE_51 = "claude-fable-5.1"
+GPT_6_ASTRA = "gpt-6-astra"
+GPT_6_1_SOL = "gpt-6.1-sol"
 PLATFORM_RELAY_GROK_45 = "grok-4.5"  # id 常量保留；本步无 curated CNY 卡
-# Vision-only on the operator relay (VISION_MODEL); curated so role=vision does not
+# Historical role=vision ledger id; curated so leftover 识图 rows do not
 # fall back to glm-5.2. Keep OFF PLATFORM_MODELS — not a user-selectable chat model.
 PLATFORM_RELAY_KIMI_K25 = "kimi-k2.5"
 
 # CNY per 1M tokens (F4). glm / 豆包 / kimi vision = 国内官价直写.
 # gpt-4o / grok-4.5 / qwen-vl-max / retired Pro — 仍无 curated（不上架）.
+# Claude Opus / Fable / GPT-6 Astra / Sol — USD list × frozen 7.2.
 # Flash：DeepSeek 中文官价，峰谷随调用时间；不进本表。
 _FLASH_METER_IDS = frozenset(
     {
@@ -104,8 +115,9 @@ _FLASH_METER_IDS = frozenset(
     }
 )
 # Official DeepSeek V4.1 Flash (api-docs.deepseek.com/zh-cn/quick_start/pricing).
-# Peak = Mon–Fri UTC 01:00–04:00 ∪ 06:00–10:00; weekends off-peak. Chinese
-# public holidays are not encoded (those weekdays may overcharge as peak).
+# Peak hours: DeepSeek official list — Mon–Fri UTC 01:00–04:00 ∪ 06:00–10:00
+# (Beijing 9–12 / 14–18); weekends off-peak. Chinese public holidays are not
+# encoded. Half-open so 04:00 and 10:00 UTC are off-peak.
 _FLASH_OFF_PEAK_CNY: dict[str, Decimal] = {
     "cache_hit": Decimal("0.02"),
     "cache_miss": Decimal("1"),
@@ -116,6 +128,35 @@ _FLASH_PEAK_CNY: dict[str, Decimal] = {
     "cache_miss": Decimal("2"),
     "output": Decimal("8"),
 }
+# Platform/vendor Flash sell rate vs the official card above. BYOK stays 1.
+_FLASH_SELL_MULTIPLIER = Decimal("0.25")
+# GLM-5.3 / GLM-5.3-Flash / Kimi K3: sell ×2 vs that model's official CNY card.
+# BYOK stays 1.
+_OFFICIAL_X2_SELL_MULTIPLIER = Decimal("2")
+_OFFICIAL_X2_SELL_IDS = frozenset(
+    {
+        PLATFORM_RELAY_GLM_53,
+        PLATFORM_RELAY_GLM_53_FLASH,
+        PLATFORM_RELAY_KIMI_K3,
+    }
+)
+# Frozen ops FX for Anthropic / OpenAI USD list → curated CNY. Not a live rate.
+_USD_CNY_FREEZE = Decimal("7.2")
+_CLAUDE_SELL_MULTIPLIER = Decimal("0.3")
+_GPT_SELL_MULTIPLIER = Decimal("0.18")
+_CLAUDE_SELL_IDS = frozenset({CLAUDE_OPUS_46, CLAUDE_OPUS_55, CLAUDE_FABLE_51})
+_GPT_SELL_IDS = frozenset({GPT_6_ASTRA, GPT_6_1_SOL})
+
+
+def _usd_official_cny(*, miss: str, output: str, hit: str) -> dict[str, Decimal]:
+    fx = _USD_CNY_FREEZE
+    return {
+        "cache_hit": Decimal(hit) * fx,
+        "cache_miss": Decimal(miss) * fx,
+        "output": Decimal(output) * fx,
+    }
+
+
 _PRICING: dict[str, dict[str, Decimal]] = {
     # 豆包 doubao-seed-2.1-turbo via 火山方舟. Volcengine 豆包1.6 统一定价,
     # tiered by INPUT length; this is the 0–32K tier (input ¥0.8/1M, output ¥8/1M).
@@ -127,7 +168,7 @@ _PRICING: dict[str, dict[str, Decimal]] = {
         "cache_miss": Decimal("0.8"),
         "output": Decimal("8"),
     },
-    # Platform relay default "glm-5.2" — F4 curated = 智谱开放平台（bigmodel.cn）
+    # Unpriced fallback "glm-5.2" — F4 curated = 智谱开放平台（bigmodel.cn）
     # 人民币列表价直写。Source: bigmodel.cn/pricing
     # GLM-5.2：输入 ¥8/1M、缓存命中 ¥2/1M、输出 ¥28/1M。
     PLATFORM_RELAY_GLM_52: {
@@ -135,7 +176,31 @@ _PRICING: dict[str, dict[str, Decimal]] = {
         "cache_miss": Decimal("8"),
         "output": Decimal("28"),
     },
-    # Platform vision (VISION_MODEL=kimi-k2.5 on tokenrhythm-class relay).
+    # GLM-5.3 / 5.3-Flash — bigmodel.cn 人民币列表价（标准价，不含限时折扣）.
+    PLATFORM_RELAY_GLM_53: {
+        "cache_hit": Decimal("2"),
+        "cache_miss": Decimal("8"),
+        "output": Decimal("28"),
+    },
+    PLATFORM_RELAY_GLM_53_FLASH: {
+        "cache_hit": Decimal("0.23"),
+        "cache_miss": Decimal("0.8"),
+        "output": Decimal("2.8"),
+    },
+    # Kimi K3 — platform.kimi.com 人民币列表价.
+    PLATFORM_RELAY_KIMI_K3: {
+        "cache_hit": Decimal("2"),
+        "cache_miss": Decimal("20"),
+        "output": Decimal("100"),
+    },
+    # Anthropic USD list × frozen FX. Cache hit = cache read (not 5m write).
+    CLAUDE_OPUS_46: _usd_official_cny(miss="5", output="25", hit="0.5"),
+    CLAUDE_OPUS_55: _usd_official_cny(miss="4", output="20", hit="0.2"),
+    CLAUDE_FABLE_51: _usd_official_cny(miss="10", output="50", hit="0.25"),
+    # OpenAI standard short-context USD list × frozen FX.
+    GPT_6_ASTRA: _usd_official_cny(miss="10", output="50", hit="1"),
+    GPT_6_1_SOL: _usd_official_cny(miss="2", output="10", hit="0.1"),
+    # Historical role=vision ledger (kimi-k2.5 on the then-operator relay).
     # Effective CNY/1M from relay /models: in ¥4 / out ¥21 / cache_read ¥0.8.
     PLATFORM_RELAY_KIMI_K25: {
         "cache_hit": Decimal("0.8"),
@@ -210,10 +275,86 @@ def _flash_meter_id(model: str) -> str | None:
     return key if key in _FLASH_METER_IDS else None
 
 
-def _flash_official_cny_card(at: datetime) -> dict[str, Decimal]:
-    from agentcore.billing.opencode_go_public_prices import is_opencode_go_peak
+def _is_flash_peak(ts: datetime) -> bool:
+    """Whether ``ts`` falls in DeepSeek official Flash peak hours (UTC)."""
+    from agentcore.llm.deepseek_official_peak import is_deepseek_official_peak
 
-    return dict(_FLASH_PEAK_CNY) if is_opencode_go_peak(at) else dict(_FLASH_OFF_PEAK_CNY)
+    return is_deepseek_official_peak(ts)
+
+
+def _flash_official_cny_card(at: datetime) -> dict[str, Decimal]:
+    return dict(_FLASH_PEAK_CNY) if _is_flash_peak(at) else dict(_FLASH_OFF_PEAK_CNY)
+
+
+def decimal_wire(value: Decimal) -> str:
+    """Strip trailing zeros so catalog cards stay readable (``0.5``, not ``0.50``)."""
+    text = format(value, "f")
+    if "." in text:
+        text = text.rstrip("0").rstrip(".")
+    return text or "0"
+
+
+def _scale_card(card: dict[str, Decimal], multiplier: Decimal) -> dict[str, Decimal]:
+    if multiplier == 1:
+        return dict(card)
+    return {key: value * multiplier for key, value in card.items()}
+
+
+def sell_multiplier_for(
+    model: str,
+    *,
+    credential_source: CredentialSource,
+) -> Decimal:
+    """Sell rate vs that model's official CNY card.
+
+    User (BYOK) is always 1 — they pay the vendor. Platform/vendor Flash is 0.25;
+    GLM-5.3 / GLM-5.3-Flash / Kimi K3 are 2; Claude 0.3; GPT-6 0.18;
+    every other curated id defaults to 1.
+    """
+    if credential_source == "user":
+        return Decimal("1")
+    if _flash_meter_id(model):
+        return _FLASH_SELL_MULTIPLIER
+    key = (model or "").strip()
+    if key in _OFFICIAL_X2_SELL_IDS:
+        return _OFFICIAL_X2_SELL_MULTIPLIER
+    if key in _CLAUDE_SELL_IDS:
+        return _CLAUDE_SELL_MULTIPLIER
+    if key in _GPT_SELL_IDS:
+        return _GPT_SELL_MULTIPLIER
+    return Decimal("1")
+
+
+def quota_multiplier_for(
+    model: str,
+    *,
+    credential_source: CredentialSource,
+) -> Decimal | None:
+    """Credit-spend rate vs Flash off-peak: 1M input + 1M output sell.
+
+    Billing still uses :func:`sell_multiplier_for`. Null on BYOK / unpriced.
+    1 = same 积分 burn as platform Flash. Integer (half-up) so the card stays
+    ``41x`` not ``41.47x``.
+    """
+    if credential_source != "platform":
+        return None
+    if not has_curated_pricing(model):
+        return None
+    if _flash_meter_id(model):
+        return Decimal("1")
+    sell = pricing_for_model(model, credential_source="platform")
+    if sell is None:
+        return None
+    miss = sell.get("cache_miss")
+    output = sell.get("output")
+    if miss is None or output is None:
+        return None
+    base_miss = _FLASH_OFF_PEAK_CNY["cache_miss"] * _FLASH_SELL_MULTIPLIER
+    base_out = _FLASH_OFF_PEAK_CNY["output"] * _FLASH_SELL_MULTIPLIER
+    base = base_miss + base_out
+    if base <= 0:
+        return None
+    return ((miss + output) / base).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
 
 
 def curated_pricing_for(
@@ -338,17 +479,23 @@ def resolve_price_card(
 ) -> ResolvedCard:
     """Resolve the price card + its currency for one call.
 
-    Card lookup is the same for every payer. Flash uses official DeepSeek CNY
-    (peak/off-peak from ``at``). Other ids use curated CNY (exact, then
-    date-stem). ``credential_source`` only decides the miss path — user stays
-    ``unpriced`` (never default-tier); platform/vendor fall back to glm-5.2.
+    Flash starts from official DeepSeek CNY (peak/off-peak from ``at``) then
+    applies :func:`sell_multiplier_for` (platform Flash 0.25; Claude 0.3;
+    GPT-6 0.18; GLM-5.3 / K3 × 2; BYOK 1). Other ids use curated CNY
+    (exact, then date-stem) × their multiplier.
+    ``credential_source`` also decides the miss path — user stays ``unpriced``
+    (never default-tier); platform/vendor fall back to glm-5.2.
 
     An ``unpriced`` result still names CNY so callers never have to invent a
     currency for a zero.
     """
     if _flash_meter_id(model):
         when = at if at is not None else _now_utc()
-        return ResolvedCard(_flash_official_cny_card(when), "curated", CURRENCY_CNY)
+        official = _flash_official_cny_card(when)
+        multiplier = sell_multiplier_for(model, credential_source=credential_source)
+        return ResolvedCard(
+            _scale_card(official, multiplier), "curated", CURRENCY_CNY
+        )
     curated, match_kind, matched_key = curated_pricing_for(model)
     if curated is not None:
         if match_kind == "date_stem":
@@ -359,7 +506,10 @@ def resolve_price_card(
                 matched_key=matched_key,
                 match_kind=match_kind,
             )
-        return ResolvedCard(curated, "curated", CURRENCY_CNY)
+        multiplier = sell_multiplier_for(model, credential_source=credential_source)
+        return ResolvedCard(
+            _scale_card(curated, multiplier), "curated", CURRENCY_CNY
+        )
     if credential_source == "user":
         return ResolvedCard(None, "unpriced", CURRENCY_CNY)
     return ResolvedCard(_PRICING[_DEFAULT_MODEL], "curated", CURRENCY_CNY, used_fallback=True)
@@ -451,8 +601,9 @@ def calculate_cost(
     ``Cost.currency`` — always CNY. Flash is official DeepSeek CNY (peak from
     ``at``, default now). Other curated cards are 国内官价.
 
-    The card does not depend on who pays. Call-level ``credential_source`` only
-    routes the same nano into billed vs estimated ledger columns.
+    Platform/vendor Flash is official × 0.25 (selling CNY / 积分). BYOK Flash
+    keeps the official card and never hits quota. Call-level ``credential_source``
+    routes billed vs estimated ledger columns.
 
     Two guards keep the bill honest when upstream usage is imperfect:
 

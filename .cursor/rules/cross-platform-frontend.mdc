@@ -1,7 +1,10 @@
 ---
-description: 前端跨端架构——产品页单树 + 壳自适应；能力黑名单减法；fold 只留桌面一套；必过 conformance
+description: 前端跨端架构——产品页单树 + 壳自适应；能力黑名单减法；fold 只留桌面一套；必过 conformance。改普通组件内部不带。
 globs:
-  - "apps/desktop/src/renderer/**"
+  - "apps/desktop/src/renderer/lib/capabilities.ts"
+  - "apps/desktop/src/renderer/main.tsx"
+  - "apps/desktop/src/renderer/components/layout/**"
+  - "apps/desktop/src/renderer/pages/**"
   - "apps/mobile/**"
 alwaysApply: false
 ---

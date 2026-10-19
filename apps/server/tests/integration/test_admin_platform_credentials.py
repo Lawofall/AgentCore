@@ -59,7 +59,7 @@ async def test_pool_crud_disable_and_env_fallback(
     assert row["base_url"] == _GO
     assert row["subscription_day"] == 18
     assert row["enabled"] is True
-    assert row["masked_key"] == "••••aaaa"
+    assert row["masked_key"] == "sk-poo...aaaa"
     assert "api_key" not in row
     assert row["tool_surface_limits"] == {
         "max_tools": None,

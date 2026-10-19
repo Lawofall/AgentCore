@@ -1044,7 +1044,6 @@ class CloudStore:
                 await self.clear_stream_segments(turn_id=message_id)
 
         # END_TURN 不再因 motion_card 登记阶段推进卡（开辩须用户同意，不主动启动）。
-        # CEO→user followups 仍下线。
 
         await schedule_compaction_if_due(conversation_id, result.get("input_tokens", 0))
 
@@ -1384,7 +1383,6 @@ class CloudStore:
                                 "user_message_id": user_msg_id,
                                 "assistant_message_id": None,
                                 "title": None,
-                                "followups": None,
                                 "noop": True,
                             }
                         logger.info(
@@ -1674,7 +1672,6 @@ class CloudStore:
                 "user_message_id": user_msg_id,
                 "assistant_message_id": assistant_message_id,
                 "title": None,
-                "followups": None,
                 "noop": noop,
             }
 
@@ -1776,7 +1773,6 @@ class CloudStore:
             "user_message_id": user_msg_id,
             "assistant_message_id": assistant_message_id,
             "title": title,
-            "followups": None,
             "noop": noop,
         }
 

@@ -29,6 +29,11 @@ export interface CatalogTileProps {
    * title keeps the full card width. Switches stay on the default corner.
    */
   accessoryPlacement?: "corner" | "description";
+  /**
+   * Compact cards: non-interactive identity on the explanation row (官方)
+   * when the corner already holds a switch.
+   */
+  mark?: ReactNode;
   /** Bottom chips: classification metadata, not status. */
   tags?: ReactNode;
   muted?: boolean;
@@ -69,6 +74,7 @@ export function CatalogTile({
   description,
   accessory,
   accessoryPlacement = "corner",
+  mark,
   tags,
   muted,
   dim = false,
@@ -144,10 +150,19 @@ export function CatalogTile({
         >
           {title}
         </h3>
-        {description ? (
-          <p className="mt-2 truncate text-xs text-muted-foreground">
-            {description}
-          </p>
+        {description || mark ? (
+          <span className="mt-2 flex items-start gap-2">
+            {description ? (
+              <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+                {description}
+              </span>
+            ) : (
+              <span className="min-w-0 flex-1" />
+            )}
+            {mark ? (
+              <span className="flex shrink-0 items-center gap-1.5">{mark}</span>
+            ) : null}
+          </span>
         ) : null}
         {children ? <div className="mt-2 min-w-0">{children}</div> : null}
       </>

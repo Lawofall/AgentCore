@@ -1701,7 +1701,7 @@ class _StubBackend:
         return self._results
 
 
-# --- Sidecar cloud inference web_search fallback (local SearXNG unreachable) ---
+# --- Sidecar cloud inference web_search ---
 
 
 def test_inference_web_search_url_strips_openai_v1_suffix():
@@ -1717,28 +1717,13 @@ def test_inference_web_search_url_strips_openai_v1_suffix():
     )
 
 
-def test_is_local_search_unreachable_selectivity():
-    from agentcore.tools.builtin.web.cloud_fallback import is_local_search_unreachable
-
-    assert is_local_search_unreachable(httpx.ConnectError("refused"))
-    assert is_local_search_unreachable(httpx.ConnectTimeout("slow"))
-    assert is_local_search_unreachable(EgressError("搜索服务 localhost 已临时熔断约 30s"))
-    # HTTP 403 / read timeout / empty success path must NOT trigger cloud fallback.
-    req = httpx.Request("GET", "http://localhost/search")
-    resp = httpx.Response(403, request=req)
-    assert not is_local_search_unreachable(httpx.HTTPStatusError("forbidden", request=req, response=resp))
-    assert not is_local_search_unreachable(httpx.ReadTimeout("slow read"))
-    assert not is_local_search_unreachable(ValueError("bogus"))
-
-
 async def test_web_search_platform_sidecar_goes_straight_to_cloud(monkeypatch):
-    """Platform choice on the desktop POSTs inference directly. No local SearXNG, no fallback note."""
+    """Platform choice on the desktop POSTs inference directly. No local SearXNG."""
+    from agentcore.search.choice import SearchTarget
     from agentcore.tools.builtin.web.cloud_fallback import (
-        CLOUD_FALLBACK_NOTE,
         InferenceSearchCredentials,
         inference_search_credentials_scope,
     )
-    from agentcore.tools.builtin.web.search_choice import SearchTarget
 
     class _DownBackend:
         async def search(self, query, max_results=5, on_phase=None, *, language=None):
@@ -1775,7 +1760,7 @@ async def test_web_search_platform_sidecar_goes_straight_to_cloud(monkeypatch):
             )
 
     async def _platform(_user_id: str) -> SearchTarget:
-        return SearchTarget(kind="platform", protocol="searxng", proxy=True)
+        return SearchTarget(kind="platform", protocol="searxng")
 
     monkeypatch.setattr(search_mod, "get_search_backend", lambda: _DownBackend())
     monkeypatch.setattr(search_mod, "resolve_search_target", _platform)
@@ -1795,44 +1780,39 @@ async def test_web_search_platform_sidecar_goes_straight_to_cloud(monkeypatch):
     payload = json.loads(result.output)
     assert payload["results"][0]["url"] == "https://example.com/cloud"
     assert payload["results"][0]["snippet"] == "alpha beta findings from cloud search"
-    assert CLOUD_FALLBACK_NOTE not in (payload.get("note") or "")
-    assert result.metadata.get("cloud_fallback") is None
     assert result.metadata.get("backend") == "searxng"
     assert posted["url"] == "https://api.example.com/v1/inference/web_search"
     assert posted["auth"] == "Bearer jwt-test"
     assert posted["json"]["query"] == "alpha beta"
 
 
-async def test_web_search_cleversee_skips_local_and_fallback_chrome(monkeypatch):
-    """开析 on desktop goes straight to the cloud index, without fallback chrome."""
+async def test_web_search_deepseek_skips_local_and_fallback_chrome(monkeypatch):
+    """DeepSeek on desktop goes straight to the cloud index."""
+    from agentcore.search.choice import SearchTarget
     from agentcore.tools.builtin.web.cloud_fallback import (
-        CLOUD_FALLBACK_NOTE,
         InferenceSearchCredentials,
         inference_search_credentials_scope,
     )
-    from agentcore.tools.builtin.web.search_choice import SearchTarget
 
     phases: list[str] = []
 
-    async def _cleversee(_user_id: str) -> SearchTarget:
+    async def _deepseek(_user_id: str) -> SearchTarget:
         return SearchTarget(
             kind="provider",
-            protocol="cleversee",
+            protocol="deepseek",
             provider_id="p",
-            proxy=True,
         )
 
-    async def _cloud(creds, query, *, max_results, language, on_phase, as_fallback=True):
-        assert as_fallback is False
+    async def _cloud(creds, query, *, max_results, language, on_phase):
         assert creds.api_key == "jwt-test"
         if on_phase:
             on_phase("querying")
-        return [SearchResult("开析", "https://c.example", "杭州西湖")]
+        return [SearchResult("DeepSeek", "https://d.example", "杭州西湖")]
 
     def _no_local():
-        raise AssertionError("local SearXNG must not run when 开析 is selected")
+        raise AssertionError("local SearXNG must not run when DeepSeek is selected")
 
-    monkeypatch.setattr(search_mod, "resolve_search_target", _cleversee)
+    monkeypatch.setattr(search_mod, "resolve_search_target", _deepseek)
     monkeypatch.setattr(search_mod, "cloud_inference_web_search", _cloud)
     monkeypatch.setattr(search_mod, "get_search_backend", _no_local)
 
@@ -1848,14 +1828,12 @@ async def test_web_search_cleversee_skips_local_and_fallback_chrome(monkeypatch)
 
     assert result.success is True
     payload = json.loads(result.output)
-    assert payload["results"][0]["url"] == "https://c.example"
+    assert payload["results"][0]["url"] == "https://d.example"
     assert "fallback" not in phases
-    assert CLOUD_FALLBACK_NOTE not in (payload.get("note") or "")
-    assert result.metadata.get("backend") == "cleversee"
-    assert result.metadata.get("cloud_fallback") is None
+    assert result.metadata.get("backend") == "deepseek"
 
 
-async def test_web_search_no_cloud_fallback_without_credentials(monkeypatch):
+async def test_web_search_local_platform_does_not_post_cloud_without_credentials(monkeypatch):
     """No ContextVar creds → ConnectError surfaces; cloud not called."""
     from agentcore.tools.builtin.web.cloud_fallback import (
         bind_inference_search_credentials,
@@ -1892,48 +1870,6 @@ async def test_web_search_no_cloud_fallback_without_credentials(monkeypatch):
     assert "本地搜索" in (result.error or "") and "不可用" in (result.error or "")
     assert "出网受限" not in (result.error or "")
     assert "docker" not in (result.error or "").lower()
-    assert cloud_calls["n"] == 0
-
-
-async def test_web_search_no_cloud_fallback_on_http_403(monkeypatch):
-    """HTTP 403 from local SearXNG is not an unreachable-class failure."""
-    from agentcore.tools.builtin.web.cloud_fallback import (
-        InferenceSearchCredentials,
-        inference_search_credentials_scope,
-    )
-    from agentcore.tools.builtin.web.search_choice import SearchTarget
-
-    req = httpx.Request("GET", "http://localhost/search")
-    resp = httpx.Response(403, request=req)
-
-    class _ForbiddenBackend:
-        async def search(self, query, max_results=5, on_phase=None, *, language=None):
-            raise httpx.HTTPStatusError("forbidden", request=req, response=resp)
-
-    cloud_calls = {"n": 0}
-
-    async def _no_cloud(*args, **kwargs):
-        cloud_calls["n"] += 1
-        return []
-
-    async def _local_platform(_user_id: str) -> SearchTarget:
-        return SearchTarget(kind="platform", protocol="searxng", proxy=False)
-
-    monkeypatch.setattr(search_mod, "resolve_search_target", _local_platform)
-    monkeypatch.setattr(search_mod, "get_search_backend", lambda: _ForbiddenBackend())
-    monkeypatch.setattr(
-        "agentcore.tools.builtin.web.cloud_fallback.cloud_inference_web_search",
-        _no_cloud,
-    )
-
-    creds = InferenceSearchCredentials(
-        api_key="jwt-test",
-        base_url="https://api.example.com/v1/inference/v1",
-    )
-    with inference_search_credentials_scope(creds):
-        result = await WebSearchTool().execute({"query": "alpha"}, _ctx())
-
-    assert result.success is False
     assert cloud_calls["n"] == 0
 
 

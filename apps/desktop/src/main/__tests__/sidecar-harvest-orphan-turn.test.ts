@@ -39,6 +39,14 @@ import { abortLocalTurnPlaceholder } from "../outbox/projection";
 import { SidecarManager } from "../sidecar/manager";
 import type { Transport } from "../sidecar/transport";
 
+const BARE_SESSION = {
+  permissionAxes: { boundary: "folder" as const },
+  delegateMode: false,
+  folderId: null as string | null,
+  localRootId: null as string | null,
+  localSubpath: null as string | null,
+};
+
 const TURN_RESULT = {
   messageId: "m1",
   content: "hi",
@@ -264,6 +272,7 @@ describe("SidecarManager harvest orphan turn/event", () => {
         userMessageId: "u1",
         messageId: "m-asst",
         userMessage: "hello",
+        session: BARE_SESSION,
       },
       "/tmp/ws",
     );
@@ -308,6 +317,7 @@ describe("SidecarManager harvest orphan turn/event", () => {
         userMessageId: "u2",
         messageId: "m-asst",
         userMessage: "q",
+        session: BARE_SESSION,
       },
       "/tmp/ws",
     );
@@ -336,6 +346,7 @@ describe("SidecarManager harvest orphan turn/event", () => {
         userMessageId: "u3",
         messageId: "m-asst",
         userMessage: "q",
+        session: BARE_SESSION,
       },
       "/tmp/ws",
     );
@@ -382,6 +393,7 @@ describe("SidecarManager harvest orphan turn/event", () => {
         userMessageId: "u4",
         messageId: "m-asst",
         userMessage: "q",
+        session: BARE_SESSION,
       },
       "/tmp/ws",
     );
@@ -415,6 +427,7 @@ describe("SidecarManager harvest orphan turn/event", () => {
         userMessageId: "u5",
         messageId: "m-asst",
         userMessage: "q",
+        session: BARE_SESSION,
       },
       "/tmp/ws",
     );
@@ -462,6 +475,7 @@ describe("SidecarManager harvest orphan turn/event", () => {
         userMessageId: "u6",
         messageId: "m-asst",
         userMessage: "q",
+        session: BARE_SESSION,
       },
       "/tmp/ws",
     );
@@ -494,6 +508,7 @@ describe("SidecarManager harvest orphan turn/event", () => {
         userMessageId: "u-host",
         messageId: "m-host",
         userMessage: "q",
+        session: BARE_SESSION,
       },
       "/tmp/ws",
     );
@@ -533,6 +548,7 @@ describe("SidecarManager harvest orphan turn/event", () => {
         userMessageId: "u7",
         messageId: "m-asst",
         userMessage: "q",
+        session: BARE_SESSION,
       },
       "/tmp/ws",
     );
@@ -572,6 +588,7 @@ describe("SidecarManager harvest orphan turn/event", () => {
         userMessageId: "u8",
         messageId: "m-asst",
         userMessage: "q",
+        session: BARE_SESSION,
       },
       "/tmp/ws",
     );
@@ -596,6 +613,7 @@ describe("SidecarManager harvest orphan turn/event", () => {
         userMessageId: "u9",
         messageId: "m-asst",
         userMessage: "next",
+        session: BARE_SESSION,
       },
       "/tmp/ws",
     );
@@ -618,6 +636,7 @@ describe("SidecarManager harvest orphan turn/event", () => {
         userMessageId: "u10",
         messageId: "m-asst",
         userMessage: "stop me",
+        session: BARE_SESSION,
       },
       "/tmp/ws",
     );
@@ -643,6 +662,7 @@ describe("SidecarManager harvest orphan turn/event", () => {
         userMessageId: "u11",
         messageId: "m-asst",
         userMessage: "q",
+        session: BARE_SESSION,
       },
       "/tmp/ws",
     );
@@ -676,6 +696,7 @@ describe("SidecarManager harvest orphan turn/event", () => {
         userMessageId: "u12",
         messageId: "m-asst",
         userMessage: "q",
+        session: BARE_SESSION,
       },
       "/tmp/ws",
     );
@@ -708,6 +729,7 @@ describe("SidecarManager harvest orphan turn/event", () => {
         userMessageId: "u13",
         decision: "continue",
         note: "",
+        session: BARE_SESSION,
       },
       "/tmp/ws",
       undefined,
@@ -739,6 +761,7 @@ describe("SidecarManager harvest orphan turn/event", () => {
         userMessageId: "u14",
         messageId: "m-asst",
         userMessage: "q",
+        session: BARE_SESSION,
       },
       "/tmp/ws",
     );
@@ -769,6 +792,7 @@ describe("SidecarManager harvest orphan turn/event", () => {
         userMessageId: "u16",
         messageId: "m-asst",
         userMessage: "q",
+        session: BARE_SESSION,
       },
       "/tmp/ws",
     );
@@ -802,6 +826,7 @@ describe("SidecarManager harvest orphan turn/event", () => {
         userMessageId: "u15",
         messageId: "m-asst",
         userMessage: "q",
+        session: BARE_SESSION,
       },
       "/tmp/ws",
     );

@@ -1,6 +1,7 @@
 import { IconButton } from "@/components/ui";
 import { noticeChipNeutral } from "@/components/ui/tone-presets";
 import { collectClipboardFiles } from "@/lib/clipboardFiles";
+import { isComposerSubmitKey } from "@/lib/composerSendKey";
 import { cn } from "@/lib/utils";
 import {
   type ChatMention,
@@ -14,6 +15,7 @@ import {
   useChatMembers,
   useMessagingStore,
 } from "@/stores/messaging";
+import { useUIStore } from "@/stores/ui";
 import {
   AlertTriangle,
   FileText,
@@ -67,8 +69,8 @@ const MAX_ATTACHMENTS = 9;
 const MAX_FILE_BYTES = 50 * 1024 * 1024; // mirrors workspace_upload_max_bytes
 
 /**
- * IM message composer: an auto-growing textarea + attachments (图/文件). Enter
- * sends, Shift+Enter inserts a newline. Files can be added via the paperclip, by
+ * IM message composer: an auto-growing textarea + attachments (图/文件). Send
+ * chord follows 设置 · 通用（默认 Enter 发送，Shift+Enter 换行）. Files can be added via the paperclip, by
  * pasting an image, or by dragging files onto the composer; each shows a pending
  * chip/thumbnail until sent.
  *
@@ -90,6 +92,7 @@ export function ChatComposer({
   editTarget,
   onClearEdit,
 }: Props) {
+  const sendOnEnter = useUIStore((s) => s.sendOnEnter);
   const [value, setValue] = useState("");
   const [pending, setPending] = useState<Pending[]>([]);
   const [localError, setLocalError] = useState<string | null>(null);
@@ -454,7 +457,7 @@ export function ChatComposer({
         return;
       }
     }
-    if (e.key === "Enter" && !e.shiftKey) {
+    if (isComposerSubmitKey(e, sendOnEnter)) {
       e.preventDefault();
       handleSend();
     }

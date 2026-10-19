@@ -100,7 +100,6 @@ const PEEK_SUPPRESSED = new Set([
   "md_to_docx",
   "md_to_pdf",
   "md_export",
-  "read_image",
   "code_search",
   "git",
   "code_diagnostics",
@@ -411,7 +410,7 @@ export function ToolLine({
    *  （text-sm·灰·不加粗），与思考过程/工具组/过程摘要同级；组内子行（true）保留
    *  明细规格（text-sm·深色·加粗），靠 pl-3 缩进与父摘要行区分层级。 */
   nested?: boolean;
-  /** 所属对话（= conversationId）：browser 关键帧懒加载；云端 run「打开预览」换票。 */
+  /** 所属对话（= conversationId）：browser / host GUI 关键帧懒加载；云端 run「打开预览」换票。 */
   conversationId?: string | null;
 }) {
   const status = resolveToolWireStatus(step.status, step.failure);
@@ -659,7 +658,7 @@ export function ToolLineGroup({
   /** 该工具组的稳定标识（timelineNodeKeys，首个 tool 的 id）——组成持久化键；
    *  标记中段插入（insertBeforeTeam）不再位移它。 */
   groupKey?: string;
-  /** 所属对话（= conversationId）：透传给 browser 活动卡懒加载关键帧；其余分派忽略。 */
+  /** 所属对话（= conversationId）：透传给 browser / host GUI 关键帧懒加载；其余分派忽略。 */
   conversationId?: string | null;
 }) {
   // All-web_fetch groups (≥2) render as a self-folding source collection — no

@@ -15,6 +15,7 @@ from agentcore.sidecar.settlement_prewrite import (
     outbox_has_settlement_for_frame,
     prewrite_sidecar_resume_settlement,
 )
+from tests.sidecar_session import sidecar_session
 
 
 def _ask(message_id: str = "m1", conversation_id: str = "c1") -> AskUserSuspension:
@@ -366,6 +367,7 @@ def test_resume_failure_after_prewrite_does_not_restore_frame(tmp_path, monkeypa
                         "note": "",
                         "userMessageId": "u1",
                         "traceId": "a" * 32,
+                        "session": sidecar_session(),
                     },
                 }
             )

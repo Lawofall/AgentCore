@@ -19,9 +19,6 @@ Covered:
   and still persists the journal snapshot (``team_batch`` / ``obs.turn_spans``);
 * resume completion updates a paused snapshot in place;
 * a re-pause write-back with a fresh client user id reuses the paired user row;
-* a non-UUID ``user_message_id`` (sidecar ``resume-{turn_id}``) does not throw
-  and reuses the assistant-paired user row (miss before PG UUID bind);
-* unpaired ``resume-*`` is not pinned as ``messages.id`` on create.
 * complete / pause / cancel write-backs land a ``turn_metrics`` row;
   ``delegated`` / ``workers`` use ``turn_worker_stats`` (journal ``message_final``);
   tokens match the same finalize fields as ``messages.usage``;
@@ -1311,77 +1308,6 @@ async def test_record_local_turn_resume_after_pause_updates_assistant(monkeypatc
     assert metrics["status"] == "ok"
 
 
-async def test_record_local_turn_non_uuid_umid_reuses_paired_user(monkeypatch):
-    """Legacy sidecar ``resume-{turn_id}`` must not throw; pair via assistant id.
-
-    Production ``Message.id`` is a PG UUID column. asyncpg raises
-    ``DataError`` at bind; SQLAlchemy wraps it as ``DBAPIError`` (not
-    ``sqlalchemy.exc.DataError``). The consume path must miss *before* bind.
-    """
-    events: list = []
-    assistant_id = "11111111-1111-4111-8111-111111111111"
-    paired_user_id = "22222222-2222-4222-8222-222222222222"
-    resume_umid = f"resume-{assistant_id}"
-    assert len(resume_umid) == 43
-    _patch_persistence(
-        monkeypatch,
-        events,
-        existing_title="已有标题",
-        existing_ids={assistant_id},
-        existing_usage={assistant_id: {"status": "running", "paused": True}},
-        existing_content={assistant_id: "partial"},
-        paired_user_by_assistant={assistant_id: paired_user_id},
-        raise_on_invalid_uuid=True,
-    )
-
-    result = await record_local_turn(
-        conversation_id="c1",
-        user_id="u1",
-        user_message="原始问题",
-        assistant_content="续跑完成",
-        journal=[{"kind": "turn_end", "payload": {"finish_reason": "end_turn"}, "ts": "t1"}],
-        user_message_id=resume_umid,
-        message_id=assistant_id,
-        trace_id=_TRACE,
-        finish_reason=FinishReason.END_TURN.value,
-    )
-
-    assert not any(e[0] == "get_by_id" and e[1] == resume_umid for e in events)
-    assert not any(e[0] == "msg" and e[1] == "user" for e in events)
-    assert not any(e[0] == "msg_id" and e[1] == "user" and e[2] == resume_umid for e in events)
-    assert ("upsert", "assistant", "c1") in events
-    assert any(e[0] == "journal" for e in events)
-    assert result["user_message_id"] == paired_user_id
-    assert result["assistant_message_id"] == "assistant-id"
-    assert result["noop"] is False
-
-
-async def test_record_local_turn_non_uuid_umid_create_drops_illegal_pin(monkeypatch):
-    """Unpaired ``resume-*`` must not be used as ``messages.id`` on create."""
-    events: list = []
-    resume_umid = "resume-72b2662b-eec1-4954-af03-941d9d04352a"
-    assistant_id = "33333333-3333-4333-8333-333333333333"
-    _patch_persistence(monkeypatch, events, raise_on_invalid_uuid=True)
-
-    result = await record_local_turn(
-        conversation_id="c1",
-        user_id="u1",
-        user_message="原始问题",
-        assistant_content="续跑完成",
-        user_message_id=resume_umid,
-        message_id=assistant_id,
-        trace_id=_TRACE,
-        finish_reason=FinishReason.END_TURN.value,
-    )
-
-    assert not any(e[0] == "get_by_id" and e[1] == resume_umid for e in events)
-    assert ("msg", "user", "c1") in events
-    user_pin = next(e for e in events if e[0] == "msg_id" and e[1] == "user")
-    assert user_pin[2] is None
-    assert result["assistant_message_id"] == "assistant-id"
-    assert result["noop"] is False
-
-
 async def test_record_local_turn_repause_reuses_paired_user_row(monkeypatch):
     events: list = []
     _patch_persistence(
@@ -1457,7 +1383,6 @@ async def test_record_local_turn_cancelled_incomplete_persists_journal(monkeypat
     assert projected is not None
     assert projected["finish_reason"] == "cancelled"
     assert not any(e[0] == "title" for e in events)
-    assert not any(e[0] == "followups" for e in events)
     assert consolidation == []
     assert result["title"] is None
 
@@ -1575,26 +1500,6 @@ async def test_record_local_turn_prefers_progressive_journal_over_runs(monkeypat
     assert ("journal", "assistant-id") in events
     assert journal_entries == [progressive]
     assert result["assistant_message_id"] == "assistant-id"
-
-
-async def test_record_local_turn_does_not_persist_followups(monkeypatch):
-    events: list = []
-    _patch_persistence(monkeypatch, events, existing_title="已有标题")
-
-    result = await record_local_turn(
-        conversation_id="c1",
-        user_id="u1",
-        user_message="hi",
-        assistant_content="ok reply",
-        runs={"events": [], "finish_reason": "end_turn"},
-        user_message_id=_USER_MSG_ID,
-        message_id="m-fu",
-        trace_id=_TRACE,
-        finish_reason=FinishReason.END_TURN.value,
-    )
-
-    assert not any(e[0] == "followups" for e in events)
-    assert result["followups"] is None
 
 
 async def test_record_local_turn_empty_um_with_journal_skips_user_create(monkeypatch):

@@ -15,6 +15,7 @@ import { ReplayPage } from "@/pages/ReplayPage";
 import { BetaGroupPage } from "@/pages/BetaGroupPage";
 import { NoticesPage } from "@/pages/NoticesPage";
 import { PlatformQuotaPage } from "@/pages/PlatformQuotaPage";
+import { RedemptionCodesPage } from "@/pages/RedemptionCodesPage";
 import { SkillStorePage } from "@/pages/SkillStorePage";
 import { UsersPage } from "@/pages/UsersPage";
 import { setUnauthorizedHandler } from "@/services/api";
@@ -125,6 +126,7 @@ export function App() {
           <Route path="store" element={<SkillStorePage />} />
           <Route path="beta-group" element={<BetaGroupPage />} />
           <Route path="quota" element={<PlatformQuotaPage />} />
+          <Route path="redemption-codes" element={<RedemptionCodesPage />} />
           <Route path="account" element={<AccountPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Route>

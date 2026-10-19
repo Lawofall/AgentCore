@@ -1521,7 +1521,7 @@ def test_progress_tool_resets_spin_streak():
     assert c.convergence_action() is Intervention.CONTINUE
 
 
-# --- delivery_idle / 调查轮绝对顶：factory 关死；教案注入已撤 ---
+# --- 调查轮绝对顶：factory 关死；delivery_idle 已删 ---
 
 
 def test_factory_convergence_finalize_setting_absent():
@@ -1530,8 +1530,6 @@ def test_factory_convergence_finalize_setting_absent():
     from agentcore.runtime.engine.governance import create_loop_controller
 
     assert not hasattr(settings, "engine_convergence_finalize_rounds")
-    assert not hasattr(settings, "engine_delivery_idle_nudge_rounds")
-    assert not hasattr(settings, "engine_delivery_idle_narrow_rounds")
     assert not hasattr(settings, "engine_recon_idle_nudge_rounds")
     c = create_loop_controller(frozenset({"read", "web_search"}))
     for i in range(12):
@@ -1540,132 +1538,18 @@ def test_factory_convergence_finalize_setting_absent():
     assert c.convergence_action() is Intervention.CONTINUE
 
 
-def test_delivery_idle_does_not_finalize_mid_loop():
-    """Idle 读不 FINALIZE；交文件与调查 factory tracking 均关（rounds=0）。"""
-    from agentcore.runtime.engine.governance import create_loop_controller
+def test_delivery_idle_machinery_removed():
+    """LoopController has no delivery_idle_* attrs; inject helper is gone."""
+    from agentcore.runtime.engine import governance
 
-    c = create_loop_controller(
-        frozenset({"read", "file_list", "grep"}),
-        files_expected=True,
-        short_write_posture=False,
+    c = LoopController()
+    assert not any(
+        name.startswith("delivery_idle") or name.startswith("_delivery_idle")
+        for name in dir(c)
     )
-    assert c.delivery_idle_nudge_rounds == 0
-    assert c.delivery_idle_narrow_rounds == 0
-    assert c.delivery_idle_report is False
-    for i in range(12):
-        c.record([ToolAttempt(fingerprint=f"f{i}", tool_name="read", success=True)])
-    assert c.convergence_action() is Intervention.CONTINUE
-    assert not c.is_thrashing()
-    assert c.delivery_idle_rounds == 0
-    assert not c.delivery_idle_nudge_due()
-    assert not c.delivery_idle_narrow_due()
-
-    recon = create_loop_controller(
-        frozenset({"read"}),
-        files_expected=False,
-        short_write_posture=True,
-        max_rounds=4,
-    )
-    assert recon.delivery_idle_nudge_rounds == 0
-    assert recon.delivery_idle_narrow_rounds == 0
-    assert recon.delivery_idle_recon is False
-    for i in range(6):
-        recon.record([ToolAttempt(fingerprint=f"p{i}", tool_name="read", success=True)])
-    assert recon.convergence_action() is Intervention.CONTINUE
-
-
-def test_factory_does_not_inject_files_or_report_delivery_idle():
-    """Factory 对 files/report 不注入 nudge/narrow；退役梯子不再是产品路径。"""
-    from agentcore.runtime.engine.governance import (
-        create_loop_controller,
-        maybe_inject_delivery_idle,
-    )
-
-    files = create_loop_controller(
-        frozenset({"read", "file_list", "grep", "web_search"}),
-        files_expected=True,
-    )
-    assert files.delivery_idle_nudge_rounds == 0
-    assert files.delivery_idle_narrow_rounds == 0
-    assert files.delivery_idle_report is False
-    for i in range(12):
-        files.record([ToolAttempt(fingerprint=f"r{i}", tool_name="read", success=True)])
-    assert (
-        maybe_inject_delivery_idle(
-            files, messages=[], run_id="files", round_idx=12, role="worker"
-        )
-        == "none"
-    )
-    assert not files.take_delivery_idle_narrow_apply()
-
-    report = create_loop_controller(
-        frozenset({"grep", "read"}),
-        files_expected=True,
-        report_delivery=True,
-    )
-    assert report.delivery_idle_nudge_rounds == 0
-    assert report.delivery_idle_narrow_rounds == 0
-    assert report.delivery_idle_report is False
-    for i in range(12):
-        report.record([ToolAttempt(fingerprint=f"g{i}", tool_name="grep", success=True)])
-    assert (
-        maybe_inject_delivery_idle(
-            report, messages=[], run_id="report", round_idx=12, role="worker"
-        )
-        == "none"
-    )
-    assert not report.take_delivery_idle_narrow_apply()
-
-
-def test_recon_idle_factory_never_nudges():
-    """Recon-idle factory is retired: no conclude nudge, no tool narrow."""
-    from agentcore.runtime.engine.governance import (
-        create_loop_controller,
-        maybe_inject_delivery_idle,
-    )
-
-    plain = create_loop_controller(
-        frozenset({"read"}),
-        files_expected=False,
-    )
-    assert plain.delivery_idle_recon is False
-    assert plain.delivery_idle_nudge_rounds == 0
-    assert plain.delivery_idle_narrow_rounds == 0
-    for i in range(12):
-        plain.record(
-            [ToolAttempt(fingerprint=f"p{i}", tool_name="read", success=True)]
-        )
-    assert plain.delivery_idle_rounds == 0
-    messages: list = []
-    assert (
-        maybe_inject_delivery_idle(
-            plain, messages=messages, run_id="r", round_idx=12, role="worker"
-        )
-        == "none"
-    )
-    assert messages == []
-    assert not plain.take_delivery_idle_narrow_apply()
-
-
-def test_explicit_controller_does_not_inject_delivery_idle():
-    """Product-retired: explicit bars no longer inject."""
-    from agentcore.runtime.engine.governance import maybe_inject_delivery_idle
-
-    explicit = LoopController(
-        investigation_tools=frozenset({"read"}),
-        delivery_idle_nudge_rounds=2,
-        delivery_idle_recon=True,
-    )
-    explicit.record([ToolAttempt(fingerprint="p0", tool_name="read", success=True)])
-    explicit.record([ToolAttempt(fingerprint="p1", tool_name="read", success=True)])
-    messages: list = []
-    assert (
-        maybe_inject_delivery_idle(
-            explicit, messages=messages, run_id="r", round_idx=2, role="worker"
-        )
-        == "none"
-    )
-    assert messages == []
+    assert getattr(governance, "maybe_inject_delivery_idle", None) is None
+    with pytest.raises(ImportError):
+        from agentcore.runtime.engine.governance import maybe_inject_delivery_idle  # noqa: F401
 
 
 def test_landing_success_latches_for_wind_down():

@@ -19,10 +19,11 @@ import type { InjectGraphOverlay } from "@/lib/causalInject";
 import {
   chunksTailText,
   estimateTokensFromCharCount,
-  formatDisplayCost,
+  formatCostBill,
   headText,
-  pickCostMoney,
+  splitCostMoney,
   sumChunkChars,
+  sumSplitCosts,
 } from "@/lib/format";
 import { isGraphPerfEnabled, markGraphPerf } from "@/services/graphPerf";
 import { useActiveMessageContent } from "@/stores/conversation";
@@ -172,7 +173,7 @@ function agentFaceSig(agent: AgentState | undefined): string {
 
 function runFaceSig(run: RunNode): string {
   const usage = run.usage;
-  const cost = pickCostMoney(run.cost);
+  const cost = splitCostMoney(run.cost);
   return [
     run.status,
     run.phase ?? "",
@@ -183,7 +184,12 @@ function runFaceSig(run: RunNode): string {
     run.error ? "1" : "0",
     run.failureKind ?? "",
     usage ? `${usage.input}+${usage.output}` : "",
-    cost ? `${cost.nano}:${cost.estimated ? 1 : 0}:${cost.currency}` : "",
+    cost.billed
+      ? `${cost.billed.nano}:${cost.billed.unit}:${cost.billed.currency}`
+      : "",
+    cost.extra
+      ? `${cost.extra.nano}:${cost.extra.unit}:${cost.extra.currency}`
+      : "",
     run.checkpoint?.status ?? "",
     escalationCountSig(run),
   ].join("|");
@@ -381,17 +387,8 @@ export function deriveAgentNodeLive(
   const foldedChildCount = foldInfo?.descendants.get(run.id)?.length ?? 0;
   const durationMs =
     overlay.length > 0 ? sumDurationMs(roundRuns) : run.durationMs;
-  // 无 FX：同一节点内各 run 同凭据来源 → 同价卡表 → 同币种，按首个记名。
-  let costNano = 0;
-  let costEstimated = false;
-  let costCurrency: string | null = null;
-  for (const r of roundRuns) {
-    const m = pickCostMoney(r.cost);
-    if (!m || m.nano <= 0) continue;
-    costNano += m.nano;
-    if (m.estimated) costEstimated = true;
-    costCurrency ??= m.currency;
-  }
+  // 无 FX：同一节点内各 run 同凭据来源 → 同价卡表 → 同币种；混合来源拆积分 / ¥。
+  const roundCost = sumSplitCosts(roundRuns.map((r) => r.cost));
   const realTokens = roundRuns.reduce(
     (n, r) => n + (r.usage ? r.usage.input + r.usage.output : 0),
     0,
@@ -463,10 +460,7 @@ export function deriveAgentNodeLive(
     durationMs,
     startedAt: faceRun.startedAt ?? run.startedAt,
     realTokens,
-    costText:
-      costNano > 0
-        ? formatDisplayCost(costNano, costEstimated, costCurrency)
-        : undefined,
+    costText: formatCostBill(roundCost.billed, roundCost.extra) ?? undefined,
     handleDirection: opts.handleDirection,
     isSubtask,
     isRevision: isContinuation,

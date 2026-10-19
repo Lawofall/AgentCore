@@ -224,10 +224,18 @@ async def test_host_shell_cloud_does_not_forward_model_cwd():
 def test_host_dynamic_timeout_aligns_today_tiers():
     schema = HostTool().schema
     assert schema.timeout_seconds is None
-    assert set(schema.parameters["properties"]) == {"command"}
-    assert schema.parameters["required"] == ["command"]
+    assert set(schema.parameters["properties"]) == {
+        "action",
+        "command",
+        "ref",
+        "text",
+        "snapshot_version",
+    }
+    assert "required" not in schema.parameters
     assert host_tool_timeout_seconds({"command": "echo ok"}) == 75.0
     assert host_tool_timeout_seconds({"command": "winget install Git.Git"}) == 630.0
+    assert host_tool_timeout_seconds({"action": "attach"}) == 200.0
+    assert host_tool_timeout_seconds({"action": "snapshot"}) == 60.0
     assert resolve_tool_timeout(schema, {"command": "echo ok"}) == 75.0
     assert resolve_tool_timeout(schema, {"command": "brew install --cask docker"}) == 630.0
 
@@ -235,14 +243,24 @@ def test_host_dynamic_timeout_aligns_today_tiers():
 def test_host_call_requires_approval_for_command():
     assert host_call_requires_approval({"command": "echo ok"})
     assert host_call_requires_approval({"command": "winget install Git.Git"})
+    assert host_call_requires_approval({"action": "attach"})
     assert not host_call_requires_approval({})
     assert not host_call_requires_approval({"command": "  "})
+    assert not host_call_requires_approval({"action": "snapshot"})
+    assert not host_call_requires_approval({"action": "click", "ref": "e1"})
+    assert not host_call_requires_approval({"action": "type", "ref": "e1", "text": "hi"})
 
 
-def test_host_schema_is_command_only():
+def test_host_schema_includes_gui_actions():
     props = HostTool().schema.parameters["properties"]
-    assert set(props) == {"command"}
-    assert "action" not in props
+    assert set(props) == {"action", "command", "ref", "text", "snapshot_version"}
+    assert set(props["action"]["enum"]) == {
+        "attach",
+        "click",
+        "shell",
+        "snapshot",
+        "type",
+    }
 
 
 @pytest.mark.asyncio

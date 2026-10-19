@@ -5,7 +5,6 @@ type Schemas = components["schemas"];
 
 export type SearchConnectionResponse = Schemas["SearchConnectionResponse"];
 export type SearchEngine = SearchConnectionResponse["selected"];
-export type OwnSearchEngine = Exclude<SearchEngine, "platform">;
 
 export function getSearchConnection(): Promise<SearchConnectionResponse> {
   return api.get<SearchConnectionResponse>("/v1/users/me/search-connection");
@@ -20,31 +19,14 @@ export function selectSearchEngine(
   );
 }
 
-export function connectCleverSee(
-  apiKey: string,
-): Promise<SearchConnectionResponse> {
+export function connectDeepSeekFromProvider(): Promise<SearchConnectionResponse> {
   return api.post<SearchConnectionResponse>(
-    "/v1/users/me/search-connection/cleversee",
-    { api_key: apiKey },
+    "/v1/users/me/search-connection/deepseek",
   );
 }
 
-export function connectSearxng(
-  baseUrl: string,
-  apiKey: string,
-): Promise<SearchConnectionResponse> {
-  return api.post<SearchConnectionResponse>(
-    "/v1/users/me/search-connection/searxng",
-    { base_url: baseUrl, api_key: apiKey },
+export function disconnectDeepSeek(): Promise<SearchConnectionResponse> {
+  return api.delete<SearchConnectionResponse>(
+    "/v1/users/me/search-connection/deepseek",
   );
-}
-
-export function disconnectSearchEngine(
-  engine: OwnSearchEngine,
-): Promise<SearchConnectionResponse> {
-  const path =
-    engine === "cleversee"
-      ? "/v1/users/me/search-connection/cleversee"
-      : "/v1/users/me/search-connection/searxng";
-  return api.delete<SearchConnectionResponse>(path);
 }

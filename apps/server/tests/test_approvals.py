@@ -1118,6 +1118,32 @@ async def test_session_host_trust_still_prompts_package_install():
     )
 
 
+def test_session_host_trust_still_prompts_gui_attach():
+    """host(action=attach) is always-confirm — not covered by host=session."""
+    from agentcore.core.types import WorkspaceBoundary
+    from agentcore.tools.registration import host_class_tool_names
+
+    host_tools = host_class_tool_names()
+    gate = ApprovalGate(
+        sink=EventSink(),
+        conversation_id="conv-1",
+        registry=InteractionRegistry(),
+        timeout_seconds=5.0,
+        host_class_tools=host_tools,
+        permission_axes=WorkspaceBoundary.COMPUTER,
+    )
+    assert not gate.will_prompt(
+        tool_name="host", arguments={"command": "Get-Date"}
+    )
+    assert not gate.will_prompt(
+        tool_name="host", arguments={"action": "snapshot"}
+    )
+    assert not gate.will_prompt(
+        tool_name="host", arguments={"action": "click", "ref": "e1"}
+    )
+    assert gate.will_prompt(tool_name="host", arguments={"action": "attach"})
+
+
 async def test_session_file_trust_does_not_cover_run():
     """执行类仍需 delegation grant / 逐次审批，不被文件会话信任短路。"""
     from agentcore.core.types import WorkspaceBoundary
@@ -1190,6 +1216,15 @@ def test_host_actions_require_approval_like_git_writes():
     )
     assert tool_call_requires_approval(
         "host", schema.approval, {"command": "winget install Git.Git"}
+    )
+    assert tool_call_requires_approval(
+        "host", schema.approval, {"action": "attach"}
+    )
+    assert not tool_call_requires_approval(
+        "host", schema.approval, {"action": "snapshot"}
+    )
+    assert not tool_call_requires_approval(
+        "host", schema.approval, {"action": "click", "ref": "e1"}
     )
 
 

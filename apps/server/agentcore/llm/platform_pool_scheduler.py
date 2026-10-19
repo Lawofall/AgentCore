@@ -3,13 +3,15 @@
 Selection stays inside ``platform_llm_credentials``. This module decides *which*
 enabled member is eligible: sticky conversation pin, then the oldest healthy
 member (fill-first). 80% demotion is not applied this round — only upstream
-429 / CreditsError / workspace month-or-member caps / 403 ``RegionError`` move
-a member out of the healthy set. ``AuthError`` (401 ban / bad key) blocks
-without hopping the current request.
+429 / typed balance exhaustion / workspace month-or-member caps / 403 region
+or config misses move a member out of the healthy set. ``AuthError`` (401 ban
+/ bad key) blocks without hopping the current request.
 
 Recovery times come from the 429 ``Retry-After`` (and ``metadata.limitName``
-to distinguish monthly exhausted from a 5h/weekly cool-off). Missing headers
-use the 5h window or this row's subscription-month end — not a 1s placeholder.
+when the upstream labels a monthly cap vs a rolling window). Missing headers:
+named Go-style windows cool for 5h; unnamed 429s cool for 60s; monthly /
+balance exhaustion uses this row's subscription-month end. Never a 1s
+placeholder that fill-first would bounce onto.
 """
 
 from __future__ import annotations
@@ -20,6 +22,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Literal
 
+from agentcore.billing.go_windows import subscription_month_bounds
 from agentcore.core.errors import LLMAuthError, LLMQuotaExceededError
 from agentcore.core.logging import get_logger
 from agentcore.llm.platform_pool import PlatformPoolMember, iter_platform_pool_members
@@ -34,12 +37,15 @@ _MONTHLY_NAMES = frozenset({"monthly", "month"})
 _WINDOW_NAMES = frozenset(
     {"weekly", "week", "5 hour", "5h", "5-hour", "5_hour", "5hour"}
 )
-# Go's shortest shared window. Used only when a 429 carries no Retry-After —
-# a 1s placeholder would let fill-first bounce straight back onto the empty key.
+# Go's shortest shared window. Used only when ``limit_name`` classifies as
+# ``window`` and the 429 carries no Retry-After.
 _DEFAULT_WINDOW_COOLING_SECONDS = 5 * 3600
+# Bare / OpenAI-compat 429 with no window name and no Retry-After. Longer than
+# 1s (fill-first would bounce back); shorter than Go's 5h RPM-unrelated cap.
+_DEFAULT_UNKNOWN_COOLING_SECONDS = 60
 
 
-def classify_go_limit_name(name: str | None) -> LimitKind:
+def classify_limit_name(name: str | None) -> LimitKind:
     """Map structured ``metadata.limitName`` to a state-machine kind."""
     if not name:
         return "unknown"
@@ -142,8 +148,6 @@ def pick_last_resort_platform_pool_member() -> PlatformPoolMember | None:
 
 
 def _monthly_recovery_at(subscription_day: int, *, now: float) -> float:
-    from agentcore.billing.go_windows import subscription_month_bounds
-
     moment = datetime.fromtimestamp(now, tz=UTC)
     _start, end = subscription_month_bounds(moment, subscription_day)
     return end.timestamp()
@@ -162,7 +166,7 @@ def record_platform_rate_limit(
     if member is None:
         return
     now = time.time()
-    kind = classify_go_limit_name(limit_name)
+    kind = classify_limit_name(limit_name)
     wait = (
         float(retry_after_seconds)
         if retry_after_seconds is not None and retry_after_seconds > 0
@@ -181,9 +185,12 @@ def record_platform_rate_limit(
             source=retry_after_source,
         )
     else:
-        recovery = (
-            now + wait if wait is not None else now + _DEFAULT_WINDOW_COOLING_SECONDS
+        default_cool = (
+            _DEFAULT_WINDOW_COOLING_SECONDS
+            if kind == "window"
+            else _DEFAULT_UNKNOWN_COOLING_SECONDS
         )
+        recovery = now + wait if wait is not None else now + default_cool
         record = AccountRecord(
             status="cooling",
             recovery_at=recovery,

@@ -54,4 +54,23 @@ describe("ProcessTimeline body paths", () => {
     expect(screen.getByText("src/auth/login.ts").tagName).toBe("CODE");
     expect(screen.queryByRole("link")).toBeNull();
   });
+
+  it("does not render 4-space-padded content as a text code block", () => {
+    renderTimeline(
+      [
+        {
+          kind: "content",
+          text: "    工作区是空的，我会做成无需安装依赖的单页博客。",
+        },
+      ],
+      "",
+    );
+    expect(document.querySelector(".code-block-lang")).toBeNull();
+    expect(document.body.textContent).toContain("工作区是空的");
+  });
+
+  it("keeps a fenced content step as a code block", () => {
+    renderTimeline([{ kind: "content", text: "```js\nconst x = 1\n```" }], "");
+    expect(document.querySelector(".code-block-lang")?.textContent).toBe("js");
+  });
 });

@@ -48,21 +48,15 @@ def test_delegate_off_withholds_companions_and_leaves_debate():
 
 def test_files_and_web_name_sets():
     files = withheld_names(["files"])
-    assert files == frozenset(
-        {"write", "edit", "file_delete", "file_batch", "md_export"}
-    )
+    assert files == frozenset({"write", "edit", "file_delete", "file_batch", "md_export"})
     assert withheld_names(["web"]) == frozenset({"web_search", "web_fetch"})
     assert withheld_names(["run"]) == frozenset({"run"})
     assert "browser" not in withheld_names(["run"])
     assert "host" in withheld_names(["host"])
-    assert withheld_names(["look"]) == frozenset(
-        {"read", "file_list", "glob", "grep"}
-    )
+    assert withheld_names(["look"]) == frozenset({"read", "file_list", "glob", "grep"})
     assert withheld_names(["debate"]) == frozenset({"debate"})
     assert withheld_names(["folders"]) == frozenset({"folders"})
-    assert withheld_names(["chats"]) == frozenset(
-        {"search_conversations", "read_conversation"}
-    )
+    assert withheld_names(["chats"]) == frozenset({"search_conversations", "read_conversation"})
 
 
 def test_omit_unregisters_only_the_bound_set():
@@ -198,26 +192,53 @@ def test_chats_off_skips_wire_and_default_still_wires():
 
 
 async def test_factory_catalog_omit_hides_official_rows():
-    from agentcore.assembly.bind import (
-        bind_omit_factory_catalog,
-        reset_omit_factory_catalog,
-    )
     from agentcore.runtime.context.consult_sources import SkillConsultSource
     from agentcore.runtime.skills import build_system_skill_registry
+    from agentcore.runtime.skills.factory_switches import (
+        all_factory_skill_names,
+        bind_omitted_factory_skills,
+        reset_omitted_factory_skills,
+    )
 
     source = SkillConsultSource(
         registry=build_system_skill_registry(),
         tool_names={"read"},
         audience="ceo",
     )
-    token = bind_omit_factory_catalog(True)
+    token = bind_omitted_factory_skills(list(all_factory_skill_names()))
     try:
         assert await source.list_directory("u") == []
         assert await source.fetch_by_name("u", "page_ui") is None
+        assert await source.fetch_by_name("u", "product_help:这是什么") is None
     finally:
-        reset_omit_factory_catalog(token)
+        reset_omitted_factory_skills(token)
     listed = await source.list_directory("u")
     assert any(row.name == "page_ui" for row in listed)
+
+
+async def test_factory_catalog_omits_one_official_row():
+    from agentcore.runtime.context.consult_sources import SkillConsultSource
+    from agentcore.runtime.skills import build_system_skill_registry
+    from agentcore.runtime.skills.factory_switches import (
+        bind_omitted_factory_skills,
+        reset_omitted_factory_skills,
+    )
+
+    source = SkillConsultSource(
+        registry=build_system_skill_registry(),
+        tool_names={"read"},
+        audience="ceo",
+    )
+    token = bind_omitted_factory_skills(["page_ui"])
+    try:
+        listed = {row.name for row in await source.list_directory("u")}
+        assert "page_ui" not in listed
+        assert "prompts" in listed
+        assert "product_help" in listed
+        assert await source.fetch_by_name("u", "page_ui") is None
+        assert await source.fetch_by_name("u", "prompts") is not None
+    finally:
+        reset_omitted_factory_skills(token)
 
 
 async def test_consult_stays_off_the_table_when_the_directory_is_empty(monkeypatch):
@@ -285,14 +306,10 @@ async def _create_with_tools(monkeypatch, *, account: list[str], body=None):
             return conv
 
     seed = AsyncMock(return_value=list(account))
-    monkeypatch.setattr(
-        "agentcore.tools.switchboard.disabled_tools_for_user", seed
-    )
+    monkeypatch.setattr("agentcore.tools.switchboard.disabled_tools_for_user", seed)
     monkeypatch.setattr(
         "agentcore.api.routes.conversations.crud.default_permission_axes_for_user",
-        AsyncMock(
-            return_value=SimpleNamespace(to_dict=lambda: {"boundary": "folder"})
-        ),
+        AsyncMock(return_value=SimpleNamespace(to_dict=lambda: {"boundary": "folder"})),
     )
     monkeypatch.setattr(
         "agentcore.llm.model_profiles.LlmModelProfileService.snapshot_default_profile_id",

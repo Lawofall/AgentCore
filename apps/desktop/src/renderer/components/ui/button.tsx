@@ -33,6 +33,23 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   icon?: ReactNode;
 }
 
+export function buttonClassName({
+  variant = "primary",
+  size = "sm",
+  className,
+}: {
+  variant?: ButtonVariant;
+  size?: ButtonSize;
+  className?: string;
+} = {}): string {
+  return cn(
+    "inline-flex items-center justify-center rounded-lg font-medium transition-colors duration-fast motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40",
+    variantClass[variant],
+    sizeClass[size],
+    className,
+  );
+}
+
 /** Primary action control — maps to desktop-layout.mdc button tiers (sm h-7, md h-8). */
 export function Button({
   variant = "primary",
@@ -46,12 +63,7 @@ export function Button({
   return (
     <button
       type={type}
-      className={cn(
-        "inline-flex items-center justify-center rounded-lg font-medium transition-colors duration-fast motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40",
-        variantClass[variant],
-        sizeClass[size],
-        className,
-      )}
+      className={buttonClassName({ variant, size, className })}
       {...props}
     >
       {icon}

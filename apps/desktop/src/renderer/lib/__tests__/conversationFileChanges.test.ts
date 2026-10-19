@@ -1,9 +1,11 @@
 import {
+  conversationChangeCounts,
   conversationHasFileArtifacts,
   conversationHasRestorableEntry,
   shouldBounceChangesTabToWorkspace,
   shouldIncludeChangesTurn,
   shouldPinChangesTab,
+  shouldShowComposerChangesHint,
 } from "@/lib/conversationFileChanges";
 import type { Message } from "@/stores/conversation/types";
 import { CHANGES_TAB_ID, WORKSPACE_TAB_ID } from "@/stores/sidePanel/types";
@@ -62,6 +64,51 @@ describe("conversationHasFileArtifacts", () => {
         {},
       ),
     ).toBe(true);
+  });
+});
+
+describe("conversationChangeCounts", () => {
+  it("counts last op per path", () => {
+    expect(
+      conversationChangeCounts(
+        [
+          msg({
+            id: "a1",
+            role: "assistant",
+            process: [
+              toolStep("write", { file_path: "a.ts", content: "x" }),
+              toolStep("edit", {
+                file_path: "b.ts",
+                old_string: "a",
+                new_string: "b",
+              }),
+              toolStep("file_delete", { path: "c.ts" }),
+            ],
+          }),
+        ],
+        {},
+      ),
+    ).toEqual({ added: 1, modified: 1, deleted: 1 });
+  });
+
+  it("later op on the same path wins", () => {
+    expect(
+      conversationChangeCounts(
+        [
+          msg({
+            id: "a1",
+            role: "assistant",
+            process: [toolStep("write", { file_path: "a.ts", content: "x" })],
+          }),
+          msg({
+            id: "a2",
+            role: "assistant",
+            process: [toolStep("file_delete", { path: "a.ts" })],
+          }),
+        ],
+        {},
+      ),
+    ).toEqual({ added: 0, modified: 0, deleted: 1 });
   });
 });
 
@@ -158,6 +205,43 @@ describe("shouldPinChangesTab (P0c · 按需)", () => {
 
   it("is false when nothing supports the tab", () => {
     expect(shouldPinChangesTab(pinBase)).toBe(false);
+  });
+});
+
+describe("shouldShowComposerChangesHint", () => {
+  const hintBase = {
+    conversationId: "c1" as string | null,
+    hasRestorable: true,
+    changesOpen: false,
+    isChangesFloating: false,
+  };
+
+  it("lights when this conversation has restorable changes and 改动 is closed", () => {
+    expect(shouldShowComposerChangesHint(hintBase)).toBe(true);
+  });
+
+  it("stays off for drafts", () => {
+    expect(
+      shouldShowComposerChangesHint({ ...hintBase, conversationId: null }),
+    ).toBe(false);
+  });
+
+  it("stays off when nothing is restorable", () => {
+    expect(
+      shouldShowComposerChangesHint({ ...hintBase, hasRestorable: false }),
+    ).toBe(false);
+  });
+
+  it("hides once 改动 is already open", () => {
+    expect(
+      shouldShowComposerChangesHint({ ...hintBase, changesOpen: true }),
+    ).toBe(false);
+  });
+
+  it("hides while 改动 is floating", () => {
+    expect(
+      shouldShowComposerChangesHint({ ...hintBase, isChangesFloating: true }),
+    ).toBe(false);
   });
 });
 

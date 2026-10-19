@@ -557,6 +557,7 @@ async def validate_identity_in_catalog(
     catalog: ModelCatalog | None = None,
 ) -> str:
     """非空身份须过目录校验；失败返回错误文案，成功返回空串。"""
+    from agentcore.db.repositories import UserRepository
     from agentcore.llm.catalog import resolve_model_catalog, validate_model_choice
 
     ident = ident.normalized()
@@ -565,10 +566,15 @@ async def validate_identity_in_catalog(
         return shape
     if ident.is_empty():
         return ""
+    enabled_refs: tuple[str, ...] = ()
+    if session is not None:
+        enabled_refs = await UserRepository(session).enabled_model_refs(user_id)
     if catalog is None:
         if session is None:
             return f"{where} 无法校验目录（缺少 session）。"
-        catalog = await resolve_model_catalog(session, user_id)
+        catalog = await resolve_model_catalog(
+            session, user_id, enabled_refs=enabled_refs
+        )
 
     want_provider = ident.provider_id if ident.origin == "byok" else None
     exact = [
@@ -593,6 +599,7 @@ async def validate_identity_in_catalog(
             ident.model,
             ident.origin,  # type: ignore[arg-type]
             ident.provider_id or None,
+            enabled_refs=enabled_refs,
         )
         if ok:
             return ""
@@ -624,12 +631,14 @@ async def prepare_debate_model_plan(
     - 裁判：``moderator_model`` 提及/句柄非空 → 消歧或校验写回；空 → 系统默认（可同模）
     - ``user_message`` + motion → :func:`infer_utterance_origin_preference` 作消歧偏好
     """
+    from agentcore.db.repositories import UserRepository
     from agentcore.llm.catalog import resolve_model_catalog
 
     config.model_candidates = []
 
     if catalog is None and session is not None and user_id:
-        catalog = await resolve_model_catalog(session, user_id)
+        refs = await UserRepository(session).enabled_model_refs(user_id)
+        catalog = await resolve_model_catalog(session, user_id, enabled_refs=refs)
 
     turn_main = ModelIdentity(
         model=turn_model, origin=turn_origin, provider_id=turn_provider_id

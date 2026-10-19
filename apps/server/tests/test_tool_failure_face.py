@@ -254,7 +254,7 @@ def test_tool_use_end_channel_redirect_is_not_error():
     assert "禁止用" in ev.payload["result"]
 
 
-def test_legacy_error_payload_normalizes_to_redirect():
+def test_error_payload_with_redirect_code_stays_error():
     from agentcore.runtime.engine.tool_channel_redirect import (
         process_tool_status_from_end,
     )
@@ -263,6 +263,18 @@ def test_legacy_error_payload_normalizes_to_redirect():
         process_tool_status_from_end(
             {
                 "status": "error",
+                "failure": {
+                    "message": "这一步想用脚本打开源码再搜索，没有执行。",
+                    "code": "source_grep_redirect",
+                },
+            }
+        )
+        == "error"
+    )
+    assert (
+        process_tool_status_from_end(
+            {
+                "status": "redirect",
                 "failure": {
                     "message": "这一步想用脚本打开源码再搜索，没有执行。",
                     "code": "source_grep_redirect",

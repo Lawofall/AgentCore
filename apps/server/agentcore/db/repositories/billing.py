@@ -10,19 +10,49 @@ from collections.abc import Collection, Sequence
 from datetime import datetime
 from typing import Literal
 
-from sqlalchemy import case, distinct, func, select
+from sqlalchemy import case, distinct, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
 from agentcore.core.types import new_id
 from agentcore.costing import run_cost_from_calls
-from agentcore.db.models import CostCall, CostEvent, User
+from agentcore.db.models import Conversation, CostCall, CostEvent, User
 from agentcore.llm.pricing import CURRENCY_CNY
 
 from ._base import _json_int, _sum_int
 
 CredentialSourceApi = Literal["user", "platform"]
+
+_ASSIST_TITLE = "AI 改写"
+_UNTITLED_CONVERSATION = "未命名对话"
+_DELETED_CONVERSATION = "已删除的对话"
+
+
+def _activity_title(
+    *,
+    conversation_id: str | None,
+    stored_title: str | None,
+    persona: str | None,
+) -> str:
+    if conversation_id is None:
+        label = (persona or "").strip()
+        return label or _ASSIST_TITLE
+    if stored_title is None:
+        return _DELETED_CONVERSATION
+    title = stored_title.strip()
+    return title or _UNTITLED_CONVERSATION
+
+
+def _platform_prepaid_call() -> ColumnElement:
+    """``cost_calls`` that hit the platform key — not BYOK, not vendor extras.
+
+    Missing ``credential_source`` follows ledger ``split_cost`` (defaults to
+    platform). This is「平台付的钱」, not「走了 Go」. Go-window reads further
+    restrict to pool members whose persisted ``base_url`` is the Go endpoint.
+    """
+    src = func.coalesce(CostCall.cost["credential_source"].astext, "platform")
+    return src == "platform"
 
 
 def _fold_call_models_and_source(
@@ -49,17 +79,6 @@ def _fold_call_models_and_source(
         if str(raw) == "user":
             any_user = True
     return models, ("user" if any_user else "platform")
-
-
-def _platform_prepaid_call() -> ColumnElement:
-    """``cost_calls`` that hit the platform key — not BYOK, not vendor extras.
-
-    Missing ``credential_source`` follows ledger ``split_cost`` (defaults to
-    platform). This is「平台付的钱」, not「走了 Go」. Go-window reads further
-    restrict to pool members whose persisted ``base_url`` is the Go endpoint.
-    """
-    src = func.coalesce(CostCall.cost["credential_source"].astext, "platform")
-    return src == "platform"
 
 
 def _run_row_values(
@@ -582,16 +601,252 @@ class CostEventRepository:
             for row in rows
         ]
 
+    async def aggregate_activity_for_window(
+        self,
+        *,
+        user_id: str,
+        since: datetime,
+        model: str | None = None,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> dict:
+        """Conversation-level spend in a window — the account usage activity list.
+
+        One row per ``conversation_id`` (NULL = account-level AI 改写, grouped
+        together). Default money/tokens come from ``cost_events`` so a multi-agent
+        turn stays one line. ``model`` filters to conversations that used that
+        model and slices tokens/cost from ``cost_calls`` (the call-level authority).
+        Ordered by last spend descending. Titles join ``conversations`` on
+        ``(id, user_id)`` so a stray id cannot leak another account's name.
+        """
+        table = CostCall if model else CostEvent
+        conditions: list[ColumnElement] = [
+            table.user_id == user_id,
+            table.created_at >= since,
+        ]
+        if model:
+            conditions.append(CostCall.model == model)
+
+        billed = table.cost_total_nano > 0
+        estimated = table.cost_estimated_nano > 0
+        grouped = (
+            select(
+                table.conversation_id.label("conversation_id"),
+                _sum_int(_json_int(table.tokens, "input")).label("t_input"),
+                _sum_int(_json_int(table.tokens, "output")).label("t_output"),
+                _sum_int(_json_int(table.tokens, "reasoning")).label("t_reasoning"),
+                _sum_int(_json_int(table.tokens, "cache_hit")).label("t_cache_hit"),
+                _sum_int(_json_int(table.tokens, "cache_miss")).label("t_cache_miss"),
+                _sum_int(case((billed, _json_int(table.cost, "input")), else_=0)).label(
+                    "c_input"
+                ),
+                _sum_int(case((billed, _json_int(table.cost, "cached")), else_=0)).label(
+                    "c_cached"
+                ),
+                _sum_int(case((billed, _json_int(table.cost, "output")), else_=0)).label(
+                    "c_output"
+                ),
+                _sum_int(table.cost_total_nano).label("c_total"),
+                _sum_int(case((estimated, _json_int(table.cost, "input")), else_=0)).label(
+                    "e_input"
+                ),
+                _sum_int(case((estimated, _json_int(table.cost, "cached")), else_=0)).label(
+                    "e_cached"
+                ),
+                _sum_int(case((estimated, _json_int(table.cost, "output")), else_=0)).label(
+                    "e_output"
+                ),
+                _sum_int(table.cost_estimated_nano).label("c_estimated"),
+                func.max(case((billed, table.currency))).label("c_currency"),
+                func.max(case((estimated, table.currency))).label("e_currency"),
+                func.count(distinct(table.message_id)).label("turns"),
+                func.max(table.created_at).label("last_at"),
+                func.max(table.persona).label("persona"),
+            )
+            .where(*conditions)
+            .group_by(table.conversation_id)
+        )
+        grouped_sq = grouped.subquery()
+        totals_row = (
+            await self._session.execute(
+                select(
+                    func.count().label("n"),
+                    _sum_int(grouped_sq.c.t_input).label("t_input"),
+                    _sum_int(grouped_sq.c.t_output).label("t_output"),
+                    _sum_int(grouped_sq.c.t_reasoning).label("t_reasoning"),
+                    _sum_int(grouped_sq.c.t_cache_hit).label("t_cache_hit"),
+                    _sum_int(grouped_sq.c.t_cache_miss).label("t_cache_miss"),
+                    _sum_int(grouped_sq.c.c_input).label("c_input"),
+                    _sum_int(grouped_sq.c.c_cached).label("c_cached"),
+                    _sum_int(grouped_sq.c.c_output).label("c_output"),
+                    _sum_int(grouped_sq.c.c_total).label("c_total"),
+                    _sum_int(grouped_sq.c.e_input).label("e_input"),
+                    _sum_int(grouped_sq.c.e_cached).label("e_cached"),
+                    _sum_int(grouped_sq.c.e_output).label("e_output"),
+                    _sum_int(grouped_sq.c.c_estimated).label("c_estimated"),
+                    func.max(grouped_sq.c.c_currency).label("c_currency"),
+                    func.max(grouped_sq.c.e_currency).label("e_currency"),
+                ).select_from(grouped_sq)
+            )
+        ).one()
+        total = int(totals_row.n)
+        page_stmt = (
+            grouped.order_by(
+                func.max(table.created_at).desc(),
+                table.conversation_id.desc().nulls_last(),
+            )
+            .limit(limit)
+            .offset(offset)
+        )
+        page = (await self._session.execute(page_stmt)).all()
+        titles = await self._activity_titles(
+            user_id, [row.conversation_id for row in page]
+        )
+        models_by_conv = (
+            {row.conversation_id: [model] for row in page}
+            if model
+            else await self._activity_models(
+                user_id, since, [row.conversation_id for row in page]
+            )
+        )
+        items = [
+            {
+                "conversation_id": row.conversation_id,
+                "kind": "assist" if row.conversation_id is None else "conversation",
+                "title": _activity_title(
+                    conversation_id=row.conversation_id,
+                    stored_title=titles.get(row.conversation_id),
+                    persona=row.persona,
+                ),
+                "deleted": bool(
+                    row.conversation_id is not None
+                    and row.conversation_id not in titles
+                ),
+                "models": models_by_conv.get(row.conversation_id, []),
+                "usage": {
+                    "input": int(row.t_input),
+                    "output": int(row.t_output),
+                    "reasoning": int(row.t_reasoning),
+                    "cache_hit": int(row.t_cache_hit),
+                    "cache_miss": int(row.t_cache_miss),
+                },
+                "cost": {
+                    "input": int(row.c_input),
+                    "cached": int(row.c_cached),
+                    "output": int(row.c_output),
+                    "total": int(row.c_total),
+                    "currency": str(row.c_currency or CURRENCY_CNY),
+                    "pricing_source": "curated",
+                },
+                "estimated_cost": {
+                    "input": int(row.e_input),
+                    "cached": int(row.e_cached),
+                    "output": int(row.e_output),
+                    "total": int(row.c_estimated),
+                    "currency": str(row.e_currency or CURRENCY_CNY),
+                    "pricing_source": "estimated",
+                },
+                "last_at": row.last_at,
+                "turns": int(row.turns),
+            }
+            for row in page
+        ]
+        return {
+            "items": items,
+            "total": total,
+            "usage": {
+                "input": int(totals_row.t_input),
+                "output": int(totals_row.t_output),
+                "reasoning": int(totals_row.t_reasoning),
+                "cache_hit": int(totals_row.t_cache_hit),
+                "cache_miss": int(totals_row.t_cache_miss),
+            },
+            "cost": {
+                "input": int(totals_row.c_input),
+                "cached": int(totals_row.c_cached),
+                "output": int(totals_row.c_output),
+                "total": int(totals_row.c_total),
+                "currency": str(totals_row.c_currency or CURRENCY_CNY),
+                "pricing_source": "curated",
+            },
+            "estimated_cost": {
+                "input": int(totals_row.e_input),
+                "cached": int(totals_row.e_cached),
+                "output": int(totals_row.e_output),
+                "total": int(totals_row.c_estimated),
+                "currency": str(totals_row.e_currency or CURRENCY_CNY),
+                "pricing_source": "estimated",
+            },
+        }
+
+    async def _activity_titles(
+        self, user_id: str, conversation_ids: list[str | None]
+    ) -> dict[str, str]:
+        ids = [cid for cid in conversation_ids if cid]
+        if not ids:
+            return {}
+        rows = (
+            await self._session.execute(
+                select(Conversation.id, Conversation.title).where(
+                    Conversation.user_id == user_id,
+                    Conversation.id.in_(ids),
+                )
+            )
+        ).all()
+        return {row.id: str(row.title or "") for row in rows}
+
+    async def _activity_models(
+        self,
+        user_id: str,
+        since: datetime,
+        conversation_ids: list[str | None],
+    ) -> dict[str | None, list[str]]:
+        if not conversation_ids:
+            return {}
+        ids = [cid for cid in conversation_ids if cid]
+        want_assist = any(cid is None for cid in conversation_ids)
+        id_cond: list[ColumnElement] = []
+        if ids:
+            id_cond.append(CostCall.conversation_id.in_(ids))
+        if want_assist:
+            id_cond.append(CostCall.conversation_id.is_(None))
+        if not id_cond:
+            return {}
+        rows = (
+            await self._session.execute(
+                select(
+                    CostCall.conversation_id,
+                    CostCall.model,
+                    func.min(CostCall.created_at).label("first_at"),
+                )
+                .where(
+                    CostCall.user_id == user_id,
+                    CostCall.created_at >= since,
+                    or_(*id_cond),
+                )
+                .group_by(CostCall.conversation_id, CostCall.model)
+                .order_by(func.min(CostCall.created_at).asc())
+            )
+        ).all()
+        by_conv: dict[str | None, list[str]] = {}
+        for row in rows:
+            model = (row.model or "").strip()
+            if not model:
+                continue
+            by_conv.setdefault(row.conversation_id, []).append(model)
+        return by_conv
+
     async def aggregate_daily_for_window(
         self, *, user_id: str | None = None, since: datetime
     ) -> dict[str, int]:
-        """Daily spend (UTC days) since a cutoff — the dashboard 7-day trend sparkline.
+        """Daily spend (UTC days) since a cutoff — the dashboard trend sparkline.
 
         Groups the window into UTC calendar days and SUMs ``cost_total_nano`` per
         day, returning an ``{iso_date: nano_total}`` map (only days that had rows).
-        The caller zero-fills the absent days so the series is a fixed length. The
-        day key is computed in UTC (``created_at AT TIME ZONE 'UTC'``) to match the
-        account window boundaries. ``user_id`` scopes to one account (hits
+        The caller zero-fills the absent days so the series is a fixed length
+        (account dashboard 30 days; admin 看板 7). The day key is computed in UTC
+        (``created_at AT TIME ZONE 'UTC'``) to match the account window
+        boundaries. ``user_id`` scopes to one account (hits
         ``ix_cost_events_user_created``); ``None`` is platform-wide (admin 看板).
         """
         day = func.date_trunc("day", func.timezone("UTC", CostEvent.created_at))

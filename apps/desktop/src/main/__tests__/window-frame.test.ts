@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fitToWorkArea } from "../window-frame";
+import { fitToWorkArea, resolveStartupFramePreset } from "../window-frame";
 
 describe("fitToWorkArea", () => {
   it("returns the same size when it already fits", () => {
@@ -14,5 +14,19 @@ describe("fitToWorkArea", () => {
     expect(fitted.width).toBeLessThanOrEqual(1366);
     expect(fitted.height).toBeLessThanOrEqual(768);
     expect(fitted.width / fitted.height).toBeCloseTo(16 / 9, 2);
+  });
+});
+
+describe("resolveStartupFramePreset", () => {
+  it("keeps the saved lock when unpackaged", () => {
+    expect(resolveStartupFramePreset("4:3-uxga", false)).toBe("4:3-uxga");
+    expect(resolveStartupFramePreset("16:9-1080", false)).toBe("16:9-1080");
+    expect(resolveStartupFramePreset("free", false)).toBe("free");
+  });
+
+  it("forces free in packaged builds so there is no lock without an unlock UI", () => {
+    expect(resolveStartupFramePreset("4:3-uxga", true)).toBe("free");
+    expect(resolveStartupFramePreset("16:9-1080", true)).toBe("free");
+    expect(resolveStartupFramePreset("free", true)).toBe("free");
   });
 });

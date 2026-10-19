@@ -4,6 +4,7 @@ import { type GrantFolderHints, grantIpcFields } from "@/lib/grantFolderHints";
 import { revokeExternalGrant } from "@/lib/revokeExternalGrant";
 import { ApiError, api } from "@/services/api";
 import { invalidateExternalGrants } from "@/services/externalGrants";
+import { peekConversationBoundary } from "@/services/permissionAxes";
 import type {
   FsRoot,
   GrantSessionReadonlyRootFailReason,
@@ -75,10 +76,12 @@ export async function pickAndGrantReadonlyFolder(
     return { ok: false, reason: "unavailable" };
   }
   try {
+    const boundary = await peekConversationBoundary(conversationId);
     const granted = await window.fsApi.grantSessionReadonlyRoot({
       conversationId,
       mode: "readonly",
       ...grantIpcFields(hints),
+      ...(boundary ? { boundary } : {}),
     });
     if (!granted.ok) {
       const reason = granted.reason;

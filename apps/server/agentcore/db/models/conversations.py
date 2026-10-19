@@ -50,31 +50,20 @@ class Conversation(Base):
         server_default=text("'00000000-0000-0000-0000-000000000000'"),
     )
     title: Mapped[str] = mapped_column(String(500), nullable=False, server_default=text("''"))
-    # Sidebar housekeeping (对话基础功能补齐):
-    # - ``pinned`` floats a conversation to the top of the sidebar / list (ordered
-    #   pinned-first, then by recency).
-    # - ``archived`` hides a conversation from the default sidebar / grouped list
-    #   without deleting it; surfaced only in the「已归档」view, reversible.
-    pinned: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
-    archived: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
-    # Why this row is archived (最近删除 · 项目恢复). ``archived`` alone cannot tell a
-    # user's own「归档」apart from the collateral archive a project soft-delete does,
-    # so restoring the project would drag deliberately-archived chats back into the
-    # sidebar. Set ONLY on rows that were still un-archived at project delete time,
-    # and cleared when that project is restored. Rows soft-deleted before this column
-    # existed carry false — those projects restore with their chats left archived.
+    # Collateral archive when a project is soft-deleted. Restore clears this so
+    # chats the user archived themselves (conversation_preferences) stay archived.
     archived_by_folder_delete: Mapped[bool] = mapped_column(
         Boolean, server_default=text("false")
     )
     mode: Mapped[str] = mapped_column(String(20), default="chat", server_default=text("'chat'"))
     # Conversation boundary (会话级权限 · 安全权限与治理):
-    # {"boundary": "read"|"folder"|"computer"}. Runtime gates read THIS column.
-    # users.autonomy_policy only seeds new conversations.
+    # {"boundary": "read"|"folder"|"computer"|"full"}. Runtime gates read THIS column.
+    # users.autonomy_policy is last-picked (seeds new conversations only).
     permission_axes: Mapped[dict] = mapped_column(
         JSONB,
         nullable=False,
-        default=lambda: {"boundary": "folder"},
-        server_default=text("'{\"boundary\":\"folder\"}'::jsonb"),
+        default=lambda: {"boundary": "computer"},
+        server_default=text("'{\"boundary\":\"computer\"}'::jsonb"),
     )
     # 深度研究自治（会话级独立旗标）: when True, CEO may auto-adopt worker motion_cards
     # and call debate (prompt-layer fork). Only this column enables that path.
@@ -91,6 +80,13 @@ class Conversation(Base):
     # conversation that points here.
     assembly_id: Mapped[str | None] = mapped_column(
         PG_UUID(as_uuid=False), nullable=True
+    )
+    # This conversation's model slots. Null = inherit the assembly. A write
+    # here does not change other chats on the same assembly.
+    model_override: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    # 输入区「统筹」：True = 优先派 description；False = 现行注意力尺。
+    delegate_mode: Mapped[bool] = mapped_column(
+        Boolean, server_default=text("false")
     )
     # Project this conversation was born into; NULL = 裸聊 (ungrouped).
     # ``fk_conversations_folder_id`` is RESTRICT: soft-delete keeps the folder
@@ -271,8 +267,7 @@ class FolderMember(Base):
 class ConversationPreference(Base):
     """Per-user pin/archive for a conversation (对标 ChatMember.pinned).
 
-    Conversation.pinned / archived stay as legacy columns; list and PATCH read
-    this table so two members cannot stomp each other.
+    List and PATCH read this table so two members cannot stomp each other.
     """
 
     __tablename__ = "conversation_preferences"
@@ -376,13 +371,8 @@ class Message(Base):
     evidence_ledger: Mapped[list] = mapped_column(
         JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb")
     )
-    # 历史「下一步推荐」chips 列：live mint / ``followups_generated`` 已下线，新回合写空
-    # []；列保留给旧行回放。开辩入口走 stage_card。
-    followups: Mapped[list] = mapped_column(
-        JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb")
-    )
     # 回合 ¥ 成本 (P2 DERIVED)：finalize 回写的 message_end.cost 快照（nano-CNY 分量 +
-    # currency；cny_total 在读路径按 nano/1e9 投影为元）。与 followups/title 同辙——重载 footer
+    # currency；cny_total 在读路径按 nano/1e9 投影为元）。与 title 同辙——重载 footer
     # 直接用；hover 工资单明细仍走 GET /v1/messages/{id}/cost（cost_events 台账）。
     # NULL for user / unmetered / pre-feature rows.
     cost: Mapped[dict | None] = mapped_column(JSONB, nullable=True)

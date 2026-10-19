@@ -131,10 +131,13 @@ export interface BrowserDisplay {
   host_kind?: "local" | "sandbox" | string;
 }
 
-/** Non-process Host result (status / os_log / settings). Process envelopes
- * (`stdout` / `exit_code`) reuse {@link CodeExecDisplay} instead. */
+/** Non-process Host result (status / os_log / settings / GUI). Process envelopes
+ * (`stdout` / `exit_code`) reuse {@link CodeExecDisplay} instead.
+ * GUI key-frames reuse the browser lazy-fetch path (`host/step-NNNN.jpg`). */
 export interface HostDisplay {
   kind: "host";
   action: string;
   body: string;
+  title?: string;
+  frame?: string;
 }

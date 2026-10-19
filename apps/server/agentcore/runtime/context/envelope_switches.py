@@ -48,7 +48,7 @@ PROJECTIONS: tuple[EnvelopeProjection, ...] = (
     EnvelopeProjection(
         BOUNDARY,
         "边界",
-        "信封报只看、这个文件夹或这台电脑。关掉不改这道边界。",
+        "信封报只看、本文件夹、这台电脑或完全权限。关掉不改这道边界。",
     ),
     EnvelopeProjection(
         DESK,

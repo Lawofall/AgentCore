@@ -343,6 +343,7 @@ async function runContractsSection(baseline) {
   run("doc section pointers", "node", [
     "scripts/check-doc-section-pointers.mjs",
   ]);
+  run("agentcore rules mirror", "pnpm", ["sync:rules:check"]);
   await assertContractsInSync(baseline);
 }
 

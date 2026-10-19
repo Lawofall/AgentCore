@@ -13,6 +13,7 @@ from agentcore.sidecar.identity import (
     resolve_sidecar_user_id,
 )
 from agentcore.sidecar.server import SidecarServer
+from tests.sidecar_session import sidecar_session
 
 
 def _recorder() -> tuple[list[dict[str, Any]], Any]:
@@ -127,7 +128,7 @@ def test_start_turn_refreshes_user_id_per_turn(tmp_path, monkeypatch):
                         "userMessageId": "11111111-1111-4111-8111-111111111111",
                         "messageId": "22222222-2222-4222-8222-222222222222",
                         "traceId": "a" * 32,
-                        "folderId": None,
+                        "session": sidecar_session(),
                         **extra,
                     },
                 }

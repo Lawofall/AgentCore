@@ -120,6 +120,7 @@ def estimate_message_tokens(message: LLMMessage) -> int:
         if isinstance(block, dict):
             n += estimate_text_tokens(str(block.get("thinking") or ""))
             n += estimate_text_tokens(str(block.get("data") or ""))
+            n += estimate_text_tokens(str(block.get("encrypted_content") or ""))
     for call in message.tool_calls or ():
         n += estimate_text_tokens(call.function.name or "")
         n += estimate_text_tokens(call.function.arguments or "")

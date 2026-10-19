@@ -38,6 +38,20 @@ def test_kimi_k25_unchanged():
     assert meta.display_name == "Kimi K2.5"
 
 
+def test_glm_53_exact_not_family_flash():
+    glm = model_metadata_for("glm-5.3")
+    assert glm.display_name == "GLM-5.3"
+    assert glm.vendor == "智谱 AI"
+    assert glm.context_length == 1_000_000
+    assert CAPABILITY_VISION not in glm.capabilities
+
+    flash = model_metadata_for("glm-5.3-flash")
+    assert flash.display_name == "GLM-5.3 Flash"
+    assert flash.vendor == "智谱 AI"
+    assert flash.context_length == 1_000_000
+    assert CAPABILITY_VISION in flash.capabilities
+
+
 def test_hy3_exact_display():
     meta = model_metadata_for("hy3")
     assert meta.display_name == "Hy3"

@@ -81,7 +81,7 @@ def _query_key(
     discipline). ``language`` is part of the key so a zh-pinned result set never
     serves an en (or ja) request for the same ASCII query string. ``engine`` is
     part of the key when it is not the default searxng index, so switching to
-    开析 does not replay the other index's hits. The searxng key shape is unchanged.
+    DeepSeek does not replay the other index's hits. The searxng key shape is unchanged.
     """
     base = re.sub(r"\s+", " ", (query or "").strip().casefold())
     if not exact and base:

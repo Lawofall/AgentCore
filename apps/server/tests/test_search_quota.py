@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 import pytest
 
 from agentcore.core.errors import QuotaExceededError
-from agentcore.tools.builtin.web.provider_service import (
+from agentcore.search.connection import (
     normalize_search_base_url,
     normalize_search_label,
 )
@@ -24,7 +24,7 @@ def test_search_quota_blocks_the_exhausted_window():
     assert isinstance(daily, QuotaExceededError)
     assert daily.dimension == "search_daily"
     assert "今日平台搜索次数" in str(daily)
-    assert "设置 · 通用" in str(daily)
+    assert "设置 · 联网搜索" in str(daily)
 
     monthly = search_quota_block(
         SearchQuotaLimits(daily=0, monthly=400),
@@ -58,8 +58,9 @@ def test_search_quota_unlimited_windows_do_not_block():
 
 
 def test_normalize_search_address_and_label():
-    assert normalize_search_base_url("searxng", "https://search.example/").startswith("https://")
-    assert normalize_search_label("cleversee", "") == "开析"
-    assert normalize_search_label("searxng", "") == "SearXNG"
-    with pytest.raises(Exception, match="http"):
-        normalize_search_base_url("searxng", "ftp://search.example")
+    assert normalize_search_base_url("deepseek", "") == "https://api.deepseek.com"
+    assert normalize_search_label("deepseek", "") == "DeepSeek"
+    with pytest.raises(Exception, match="不支持"):
+        normalize_search_base_url("searxng", "https://search.example")
+    with pytest.raises(Exception, match="不支持"):
+        normalize_search_label("searxng", "")

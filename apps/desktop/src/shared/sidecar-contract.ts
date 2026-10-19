@@ -63,10 +63,51 @@ export interface SidecarBrowserBridge {
 
 /** 会话边界（安全权限与治理）——与服务端 `{"boundary": ...}` 对齐。
  *  sidecar 无会话库，桌面按回合把当前边界随参数送达本地引擎。 */
-export type SidecarWorkspaceBoundary = "read" | "folder" | "computer";
+export type SidecarWorkspaceBoundary = "read" | "folder" | "computer" | "full";
 
 export interface SidecarPermissionAxes {
   boundary: SidecarWorkspaceBoundary;
+}
+
+/**
+ * 本回合会话快照。sidecar 无会话库，桌面每次 startTurn / resume 必送齐。
+ * 缺对象或缺任一必填键 → 引擎 ``SessionRequiredError``（请更新桌面）。
+ */
+export interface SidecarConversationSnapshot {
+  permissionAxes: SidecarPermissionAxes;
+  /** 本会话「统筹」。true = 优先派；false = 现行注意力尺。 */
+  delegateMode: boolean;
+  /**
+   * 当前对话所属项目 folderId。`null` = 裸聊。
+   * 与列表 / grouped 的 `conversation.folderId` 同形。
+   */
+  folderId: string | null;
+  /**
+   * 项目本地 FS 绑定（与 `FolderMeta.localRootId` 同形）。
+   * 裸聊 / 云项目 / 缓存无绑定 → `null`。**不是**寻址用 `rootId`。
+   */
+  localRootId: string | null;
+  /**
+   * 项目本地子路径。有 `localRootId` 时传 `folder.localSubpath ?? ""`；无绑定 → `null`。
+   */
+  localSubpath: string | null;
+  /**
+   * 装配上调低的上下文长度（token）。缺省 = 用模型自己的窗口。
+   */
+  contextBudget?: number;
+}
+
+export function buildSidecarConversationSnapshot(
+  input: SidecarConversationSnapshot,
+): SidecarConversationSnapshot {
+  return {
+    permissionAxes: input.permissionAxes,
+    delegateMode: input.delegateMode,
+    folderId: input.folderId ?? null,
+    localRootId: input.localRootId ?? null,
+    localSubpath: input.localSubpath ?? null,
+    ...(input.contextBudget ? { contextBudget: input.contextBudget } : {}),
+  };
 }
 
 /** Conversation-page soft @Agent mention (prompt hint; not a hard route). */
@@ -141,11 +182,6 @@ export interface SidecarStartTurnRequest {
    */
   history?: SidecarHistoryEntry[];
   /**
-   * 装配上调低的上下文长度（token）。缺省 = 用模型自己的窗口。
-   * 只进本机引擎，云端回合仍读装配行。
-   */
-  contextBudget?: number;
-  /**
    * 云代理凭据。桌面侧开跑前必须已铸票；缺省时引擎 `build_turn_router` 硬拒空凭据
    * （无本机平台模型 / sidecar 自身配置回退）。
    */
@@ -170,37 +206,14 @@ export interface SidecarStartTurnRequest {
    * 避免 spawn-env 过期 / 未注入导致 browser 永久未装配。
    */
   browserBridge?: SidecarBrowserBridge;
-  /** 本会话当前边界。缺省 = sidecar 沿用当前值（初始默认这个文件夹）。 */
-  permissionAxes?: SidecarPermissionAxes;
-  /**
-   * 当前对话所属项目 folderId（与列表 / grouped 的 `conversation.folderId` 同形）。
-   * `null` / 缺省 = 裸聊（无项目）；主进程原样写入 startTurn RPC `params.folderId`
-   *（键在则引擎不查本机库；与 sidecar turns 约定对齐）。
-   */
-  folderId?: string | null;
-  /**
-   * 项目本地 FS 绑定（与 `FolderMeta.localRootId` 同形，camelCase）。
-   * 有项目且 folders 缓存带 `localRootId` 时传入；裸聊 / 云项目 / 缓存无绑定 → `null`
-   *（键仍下发，引擎拼记忆 workspace key 时勿再查本机 Folder 行）。
-   * **不是** `rootId`：本字段进 startTurn RPC；`rootId` 仅主进程寻址。
-   */
-  localRootId?: string | null;
-  /**
-   * 项目本地子路径（与 `FolderMeta.localSubpath` 同形）。有 `localRootId` 时传
-   * `folder.localSubpath ?? ""`；无绑定 → `null`。进 RPC；勿与寻址用 `subpath` 混淆。
-   */
-  localSubpath?: string | null;
+  /** 本回合会话快照（权限 / 统筹 / 项目 / 绑定 / 上下文窗）。必送。 */
+  session: SidecarConversationSnapshot;
   /**
    * 本机 FIFO 出队：带上 queueId 时 sidecar 首帧发 ``turn_queue_started``。
    * 渲染进程先认领这个 turn，再 startTurn；时间线只认那一帧。
    */
   queueId?: string;
   attachments?: SidecarQueuedAttachment[];
-  /**
-   * This turn's selected table row ids (``<表格>``). Omitted / empty = no
-   * selection block. Not stored on the message row.
-   */
-  tableSelection?: string[];
 }
 
 /** sidecar → 主进程：FIFO 已出队，请渲染进程认领后再 ``startTurn``。 */
@@ -218,7 +231,6 @@ export interface SidecarQueueNeedStart {
   userMessage: string;
   agentMentions?: SidecarStartTurnRequest["agentMentions"];
   attachments?: SidecarQueuedAttachment[];
-  tableSelection?: string[];
 }
 
 /** 一条历史里的工具调用（与服务端 ``HistoryToolCall`` 同形）。 */
@@ -358,8 +370,6 @@ export interface SidecarResumeRequest {
    * 覆盖进程级 initialize / 帧内旧 ``suspension.user_id``。
    */
   userId?: string;
-  /** 同 {@link SidecarStartTurnRequest.contextBudget}。续跑按当前装配重送。 */
-  contextBudget?: number;
   /** 挂起时已落库的原始 user 气泡 id —— outbox 幂等锚（同 startTurn.userMessageId）。 */
   userMessageId?: string;
   /** continue / adjust / stop（冷 resume）。 */
@@ -384,21 +394,8 @@ export interface SidecarResumeRequest {
   workspacesAuth?: SidecarWorkspacesAuth;
   /** DesktopBrowserBridge 本回合凭证（同 `startTurn.browserBridge`）。 */
   browserBridge?: SidecarBrowserBridge;
-  /** 本会话当前权限轴（同 `startTurn.permissionAxes`）。 */
-  permissionAxes?: SidecarPermissionAxes;
-  /**
-   * 当前对话所属项目 folderId（同 {@link SidecarStartTurnRequest.folderId}）：
-   * 续跑对称下发；键在（含 `null`=裸聊）则覆盖帧内 `suspension.folder_id`；
-   * 缺键保留帧内值（旧客户端兼容）。
-   */
-  folderId?: string | null;
-  /**
-   * 项目本地 FS 绑定（同 {@link SidecarStartTurnRequest.localRootId}）：续跑对称下发，
-   * 供引擎拼 workspace key；`null` = 裸聊 / 云项目 / 无绑定。
-   */
-  localRootId?: string | null;
-  /** 同 {@link SidecarStartTurnRequest.localSubpath}。 */
-  localSubpath?: string | null;
+  /** 本回合会话快照（同 {@link SidecarStartTurnRequest.session}）。必送。 */
+  session: SidecarConversationSnapshot;
 }
 
 /** A1+ 本机回合文件真 diff（相对 `AgentCore/baselines/{messageId}.zip`）。 */
@@ -493,9 +490,7 @@ export interface SidecarListBrowserSessionsResult {
  * Build the Python JSON-RPC ``resume`` params from a renderer IPC request.
  *
  * ``rootId`` / ``subpath`` are main-process routing only — they never cross stdio.
- * ``folderId`` is project ownership (always sent, including null = bare chat).
- * ``localRootId`` / ``localSubpath`` are project binding for the engine workspace key
- * (always sent, including null) — not routing keys.
+ * ``session`` is the conversation snapshot (permission / 统筹 / folder / bind).
  * ``selected`` is always sent (empty array when absent) so Python never has to guess.
  */
 export function buildSidecarResumeRpcParams(
@@ -509,11 +504,7 @@ export function buildSidecarResumeRpcParams(
     | "selected"
     | "userId"
     | "userMessageId"
-    | "contextBudget"
-    | "permissionAxes"
-    | "folderId"
-    | "localRootId"
-    | "localSubpath"
+    | "session"
   >,
   inference?: SidecarInference,
   browserBridge?: SidecarBrowserBridge | null,
@@ -528,13 +519,8 @@ export function buildSidecarResumeRpcParams(
     decision: req.decision,
     note: req.note,
     selected: req.selected ?? [],
-    // Project ownership (conversation.folderId 同形)；键始终下发，含 null=裸聊。
-    folderId: req.folderId ?? null,
-    // Project local binding (FolderMeta 同形)；键始终下发，含 null。
-    localRootId: req.localRootId ?? null,
-    localSubpath: req.localSubpath ?? null,
+    session: buildSidecarConversationSnapshot(req.session),
     ...(req.userId ? { userId: req.userId } : {}),
-    ...(req.contextBudget ? { contextBudget: req.contextBudget } : {}),
     ...(req.userMessageId ? { userMessageId: req.userMessageId } : {}),
     ...(inference ? { inference } : {}),
     ...(foldersAuth ? { foldersAuth } : {}),
@@ -542,7 +528,6 @@ export function buildSidecarResumeRpcParams(
     ...(workspacesAuth ? { workspacesAuth } : {}),
     // Explicit null clears sticky spawn-env leftovers on the Python side.
     ...(browserBridge !== undefined ? { browserBridge } : {}),
-    ...(req.permissionAxes ? { permissionAxes: req.permissionAxes } : {}),
   };
 }
 
@@ -804,8 +789,6 @@ export interface SidecarDeliverMessageRequest {
   traceId: string;
   attachments?: SidecarQueuedAttachment[];
   agentMentions?: SidecarAgentMention[];
-  /** This turn's selected table row ids. Omitted / empty = no selection block. */
-  tableSelection?: string[];
 }
 
 /** 排队附件：与 REST ``MessageAttachment`` / 桌面 ``OutgoingAttachment`` 同形。 */

@@ -306,16 +306,16 @@ def test_pacing_step_never_rewinds_clock():
 
 def test_remint_interaction_ids_maps_all_interaction_keys_deterministically():
     events = [
-        {"kind": "checkpoint_required", "payload": {"checkpoint_id": "cp-1", "question": "q"}},
-        {"kind": "approval_required", "payload": {"approval_id": "ap-1"}},
-        {"kind": "run_escalation", "payload": {"escalation_id": "esc-1"}},
-        {"kind": "interaction_orphaned", "payload": {"interaction_id": "cp-1"}},
+        {"type": "checkpoint_required", "payload": {"checkpoint_id": "cp-1", "question": "q"}},
+        {"type": "approval_required", "payload": {"approval_id": "ap-1"}},
+        {"type": "run_escalation", "payload": {"escalation_id": "esc-1"}},
+        {"type": "interaction_orphaned", "payload": {"interaction_id": "cp-1"}},
         # Execution identities stay AS RECORDED (message-scoped + structured strings).
-        {"kind": "run_started", "payload": {"run_id": "debate_x_r1_lv", "kind": "agent"}},
-        {"kind": "content_delta", "payload": {"delta": "hi"}},
+        {"type": "run_started", "payload": {"run_id": "debate_x_r1_lv", "kind": "agent"}},
+        {"type": "content_delta", "payload": {"delta": "hi"}},
     ]
     out = remint_interaction_ids(events, message_id="m1")
-    by_kind = {e["kind"]: e["payload"] for e in out}
+    by_kind = {e["type"]: e["payload"] for e in out}
 
     for kind, key, original in (
         ("checkpoint_required", "checkpoint_id", "cp-1"),
@@ -347,28 +347,27 @@ def test_remint_interaction_ids_maps_all_interaction_keys_deterministically():
 
 
 def test_build_tape_from_recording_stitches_segments_and_cuts_excluded():
-    # Input uses legacy kind/ts dialect — cut must still work and emit type/timestamp.
     recording = {
-        "version": 1,
+        "version": 2,
         "kind": "demo_tape_recording",
         "meta": {"conversation_id": "conv-1", "message_id": "msg-1"},
         "segments": [
             {
                 "wall_t0_ms": 1_000_000,
                 "events": [
-                    {"kind": "message_start", "payload": {}, "ts": None, "t_ms": 0},
-                    {"kind": "reasoning_delta", "payload": {"delta": "想"}, "ts": None, "t_ms": 10},
-                    {"kind": "content_delta", "payload": {"delta": "简介"}, "ts": None, "t_ms": 500},
+                    {"type": "message_start", "payload": {}, "timestamp": None, "t_ms": 0},
+                    {"type": "reasoning_delta", "payload": {"delta": "想"}, "timestamp": None, "t_ms": 10},
+                    {"type": "content_delta", "payload": {"delta": "简介"}, "timestamp": None, "t_ms": 500},
                     {
-                        "kind": "checkpoint_required",
+                        "type": "checkpoint_required",
                         "payload": {"checkpoint_id": "cp-src", "question": "继续？"},
-                        "ts": None,
+                        "timestamp": None,
                         "t_ms": 900,
                     },
                     {
-                        "kind": "message_end",
+                        "type": "message_end",
                         "payload": {"finish_reason": "paused"},
-                        "ts": None,
+                        "timestamp": None,
                         "t_ms": 910,
                     },
                 ],
@@ -378,22 +377,22 @@ def test_build_tape_from_recording_stitches_segments_and_cuts_excluded():
                 "wall_t0_ms": 1_013_000,
                 "events": [
                     {
-                        "kind": "checkpoint_resolved",
+                        "type": "checkpoint_resolved",
                         "payload": {"checkpoint_id": "cp-src", "decision": "continue"},
-                        "ts": None,
+                        "timestamp": None,
                         "t_ms": 0,
                     },
                     {
-                        "kind": "run_output_delta",
+                        "type": "run_output_delta",
                         "payload": {"run_id": "w1", "delta": "观点"},
-                        "ts": None,
+                        "timestamp": None,
                         "t_ms": 100,
                     },
-                    {"kind": "content_delta", "payload": {"delta": "汇总"}, "ts": None, "t_ms": 400},
+                    {"type": "content_delta", "payload": {"delta": "汇总"}, "timestamp": None, "t_ms": 400},
                     {
-                        "kind": "message_end",
+                        "type": "message_end",
                         "payload": {"finish_reason": "end_turn"},
-                        "ts": None,
+                        "timestamp": None,
                         "t_ms": 450,
                     },
                 ],
@@ -442,15 +441,15 @@ def test_build_tape_from_recording_clamps_wall_clock_jitter():
             {
                 "wall_t0_ms": 2_000,
                 "events": [
-                    {"kind": "content_delta", "payload": {"delta": "a"}, "t_ms": 0},
-                    {"kind": "content_delta", "payload": {"delta": "b"}, "t_ms": 500},
+                    {"type": "content_delta", "payload": {"delta": "a"}, "t_ms": 0},
+                    {"type": "content_delta", "payload": {"delta": "b"}, "t_ms": 500},
                 ],
             },
             {
                 # Wall clock stepped BACK (NTP jitter) — must not rewind t_ms.
                 "wall_t0_ms": 1_900,
                 "events": [
-                    {"kind": "content_delta", "payload": {"delta": "c"}, "t_ms": 0},
+                    {"type": "content_delta", "payload": {"delta": "c"}, "t_ms": 0},
                 ],
             },
         ],
@@ -469,7 +468,7 @@ def test_write_and_load_tape(tmp_path: Path):
                 {
                     "wall_t0_ms": 0,
                     "events": [
-                        {"kind": "content_delta", "payload": {"delta": "hi"}, "t_ms": 0}
+                        {"type": "content_delta", "payload": {"delta": "hi"}, "t_ms": 0}
                     ],
                 }
             ],
@@ -487,33 +486,30 @@ def test_write_and_load_tape(tmp_path: Path):
     assert "kind" not in loaded["events"][0]
 
 
-# ── field dialect: contract type/timestamp + legacy kind/ts alias ─────────
+# ── field dialect: contract type/timestamp（kind/ts 不再别名）─────────
 
 
-def test_normalize_tape_event_aliases_legacy_kind_ts():
-    legacy = {
+def test_normalize_tape_event_does_not_alias_kind_ts():
+    leftover = {
         "kind": "content_delta",
         "payload": {"delta": "x"},
         "ts": "2026-07-16T00:00:00.000Z",
         "t_ms": 10,
     }
-    norm = normalize_tape_event(legacy)
-    assert norm == {
-        "type": "content_delta",
-        "payload": {"delta": "x"},
-        "timestamp": "2026-07-16T00:00:00.000Z",
-        "t_ms": 10,
-    }
-    assert event_type(legacy) == "content_delta"
-    assert event_timestamp(legacy) == "2026-07-16T00:00:00.000Z"
-    # Contract fields win when both dialects are present.
+    norm = normalize_tape_event(leftover)
+    assert norm["type"] == ""
+    assert norm["timestamp"] is None
+    assert "kind" not in norm
+    assert "ts" not in norm
+    assert event_type(leftover) == ""
+    assert event_timestamp(leftover) is None
     mixed = {"type": "run_started", "kind": "content_delta", "timestamp": "a", "ts": "b"}
     assert event_type(mixed) == "run_started"
     assert event_timestamp(mixed) == "a"
 
 
-def test_load_tape_alias_compat_legacy_kind_ts_without_rewriting_disk(tmp_path: Path):
-    """Stock v1 tapes (kind/ts) load/play via alias; on-disk file is not rewritten."""
+def test_load_tape_kind_ts_does_not_alias(tmp_path: Path):
+    """v1 kind/ts 方言硬切：读出 type 空，磁盘不改写。"""
     path = tmp_path / "legacy.json"
     on_disk = {
         "version": 1,
@@ -525,76 +521,17 @@ def test_load_tape_alias_compat_legacy_kind_ts_without_rewriting_disk(tmp_path: 
                 "ts": "2026-07-16T01:00:00.000Z",
                 "t_ms": 0,
             },
-            {
-                "kind": "content_delta",
-                "payload": {"delta": "hi"},
-                "ts": None,
-                "t_ms": 50,
-            },
         ],
     }
     path.write_text(json.dumps(on_disk, ensure_ascii=False), encoding="utf-8")
     loaded = load_tape(path)
-    assert loaded["version"] == 1  # disk version preserved in memory
-    assert [e["type"] for e in loaded["events"]] == ["run_started", "content_delta"]
-    assert loaded["events"][0]["timestamp"] == "2026-07-16T01:00:00.000Z"
-    assert loaded["events"][1]["timestamp"] is None
-    assert all("kind" not in e and "ts" not in e for e in loaded["events"])
-    # Stock file untouched (read-time compat only — no migration rewrite).
+    assert loaded["version"] == 1
+    assert loaded["events"][0]["type"] == ""
+    assert loaded["events"][0]["timestamp"] is None
+    assert "kind" not in loaded["events"][0]
     raw = json.loads(path.read_text(encoding="utf-8"))
     assert raw["events"][0]["kind"] == "run_started"
     assert "type" not in raw["events"][0]
-
-
-@pytest.mark.asyncio
-async def test_player_plays_legacy_kind_ts_events(monkeypatch):
-    """Player accepts raw legacy dialect without going through load_tape."""
-    from agentcore.demo_tape import player as player_mod
-    from agentcore.demo_tape.binding import TapeBinding
-    from agentcore.demo_tape.player import play_tape_events
-    from agentcore.runtime.journal.writer import TurnJournalWriter
-
-    async def fake_sleep(_seconds: float) -> None:
-        return None
-
-    monkeypatch.setattr(player_mod, "pacing_sleep", fake_sleep)
-
-    async def noop_flush(self):
-        return None
-
-    monkeypatch.setattr(TurnJournalWriter, "flush", noop_flush)
-
-    events = [
-        {
-            "kind": "run_started",
-            "payload": {"run_id": "c1", "kind": "captain"},
-            "ts": "2026-07-16T02:00:00.000Z",
-            "t_ms": 0,
-        },
-        {"kind": "content_delta", "payload": {"delta": "正文"}, "ts": None, "t_ms": 10},
-    ]
-    binding = TapeBinding(
-        conversation_id="c", tape_path=Path("unused.json"), speed=1.0, max_gap_ms=50
-    )
-    # Unbound sink: offline replay must not arm StreamCheckpointer (non-UUID ids).
-    sink = EventSink()
-    writer = TurnJournalWriter(turn_id="m", conversation_id="c", trace_id="t" * 32)
-    result = await play_tape_events(
-        sink=sink,
-        events=events,
-        start_index=0,
-        binding=binding,
-        message_id="m",
-        conversation_id="c",
-        user_id="u",
-        user_message="go",
-        folder_id=None,
-        journal_writer=writer,
-    )
-    assert result["finish_reason"] is FinishReason.END_TURN
-    assert result["content"] == "正文"
-    assert EventType.RUN_STARTED in [e.type for e in sink._history]
-    assert EventType.CONTENT_DELTA in [e.type for e in sink._history]
 
 
 @pytest.mark.asyncio
@@ -676,8 +613,8 @@ async def test_player_result_carries_evidence_ledger_and_cited_citations(monkeyp
     assert all(c["url"] for c in cites)
 
 
-def test_build_tape_from_legacy_recording_emits_contract_fields():
-    """Cutting a v1 kind/ts recording yields a v2 type/timestamp tape."""
+def test_build_tape_from_kind_ts_recording_drops_untyped_events():
+    """v1 kind/ts 方言硬切：没有 type 的事件进不了磁带。"""
     recording = {
         "version": 1,
         "kind": "demo_tape_recording",
@@ -692,26 +629,13 @@ def test_build_tape_from_legacy_recording_emits_contract_fields():
                         "ts": "2026-07-16T03:00:00.000Z",
                         "t_ms": 0,
                     },
-                    {
-                        "kind": "message_end",
-                        "payload": {"finish_reason": "end_turn"},
-                        "ts": None,
-                        "t_ms": 1,
-                    },
                 ],
             }
         ],
     }
     doc = build_tape_from_recording(recording, user_prompt="p")
     assert doc["version"] == TAPE_FORMAT_VERSION
-    assert doc["events"] == [
-        {
-            "type": "content_delta",
-            "payload": {"delta": "a"},
-            "timestamp": "2026-07-16T03:00:00.000Z",
-            "t_ms": 0,
-        }
-    ]
+    assert doc["events"] == []
 
 
 # ── recorder tap ─────────────────────────────────────────────────────────
@@ -802,8 +726,8 @@ def test_recorder_hydrates_flushed_segments_after_restart(monkeypatch, tmp_path)
         recorder.uninstall_recorder()
 
 
-def test_recorder_hydrates_legacy_kind_ts_segments_after_restart(monkeypatch, tmp_path):
-    """Prior flushed v1 recording (kind/ts) still appends cleanly on resume."""
+def test_recorder_hydrates_prior_segments_after_restart(monkeypatch, tmp_path):
+    """先前刷盘的契约字段片段，resume 后仍能接上新段。"""
     from agentcore.runtime.events import message_end
 
     recorder = _install_recorder_at(monkeypatch, tmp_path)
@@ -813,7 +737,7 @@ def test_recorder_hydrates_legacy_kind_ts_segments_after_restart(monkeypatch, tm
         path.write_text(
             json.dumps(
                 {
-                    "version": 1,
+                    "version": 2,
                     "kind": "demo_tape_recording",
                     "meta": {
                         "conversation_id": "conv-l",
@@ -824,15 +748,15 @@ def test_recorder_hydrates_legacy_kind_ts_segments_after_restart(monkeypatch, tm
                             "wall_t0_ms": 1_000,
                             "events": [
                                 {
-                                    "kind": "content_delta",
+                                    "type": "content_delta",
                                     "payload": {"delta": "旧段"},
-                                    "ts": None,
+                                    "timestamp": None,
                                     "t_ms": 0,
                                 },
                                 {
-                                    "kind": "message_end",
+                                    "type": "message_end",
                                     "payload": {"finish_reason": "paused"},
-                                    "ts": None,
+                                    "timestamp": None,
                                     "t_ms": 1,
                                 },
                             ],
@@ -858,7 +782,6 @@ def test_recorder_hydrates_legacy_kind_ts_segments_after_restart(monkeypatch, tm
             if e["type"] == "content_delta"
         ]
         assert deltas == ["旧段", "新段"]
-        # Hydrated prior segment normalized in memory; new segment written as type/.
         raw = json.loads(path.read_text(encoding="utf-8"))
         assert raw["version"] == RECORDING_FORMAT_VERSION
         assert raw["segments"][0]["events"][0]["type"] == "content_delta"
@@ -1238,12 +1161,12 @@ async def test_player_pathological_gaps_do_not_double_sleep(monkeypatch):
     monkeypatch.setattr(TurnJournalWriter, "flush", noop_flush)
 
     events = [
-        {"kind": "run_started", "payload": {"run_id": "c1"}, "t_ms": 0},
-        {"kind": "run_output_delta", "payload": {"run_id": "w1", "delta": "a"}, "t_ms": 1000},
-        {"kind": "run_output_delta", "payload": {"run_id": "w1", "delta": "b"}, "t_ms": 5000},
+        {"type": "run_started", "payload": {"run_id": "c1"}, "t_ms": 0},
+        {"type": "run_output_delta", "payload": {"run_id": "w1", "delta": "a"}, "t_ms": 1000},
+        {"type": "run_output_delta", "payload": {"run_id": "w1", "delta": "b"}, "t_ms": 5000},
         # jump back (chunk overshoot artifact)
-        {"kind": "run_completed", "payload": {"run_id": "w1"}, "t_ms": 2000},
-        {"kind": "run_started", "payload": {"run_id": "c2"}, "t_ms": 8000},
+        {"type": "run_completed", "payload": {"run_id": "w1"}, "t_ms": 2000},
+        {"type": "run_started", "payload": {"run_id": "c2"}, "t_ms": 8000},
     ]
     binding = TapeBinding(
         conversation_id="conv",
@@ -1301,20 +1224,20 @@ async def test_player_skips_leftover_unknown_pause_kinds(
     monkeypatch.setattr(TurnJournalWriter, "flush", noop_flush)
 
     events = [
-        {"kind": "run_started", "payload": {"run_id": "c1", "kind": "captain"}, "t_ms": 0},
-        {"kind": "content_delta", "payload": {"delta": "开场"}, "t_ms": 50},
+        {"type": "run_started", "payload": {"run_id": "c1", "kind": "captain"}, "t_ms": 0},
+        {"type": "content_delta", "payload": {"delta": "开场"}, "t_ms": 50},
         {
-            "kind": required_kind,
+            "type": required_kind,
             "payload": {"checkpoint_id": "cp-tape"},
             "t_ms": 100,
         },
-        {"kind": resolved_kind, "payload": {"decision": "continue"}, "t_ms": 200},
+        {"type": resolved_kind, "payload": {"decision": "continue"}, "t_ms": 200},
         {
-            "kind": "run_output_delta",
+            "type": "run_output_delta",
             "payload": {"run_id": "w1", "agent_id": "w1", "delta": "hello"},
             "t_ms": 300,
         },
-        {"kind": "content_delta", "payload": {"delta": "汇总"}, "t_ms": 400},
+        {"type": "content_delta", "payload": {"delta": "汇总"}, "t_ms": 400},
     ]
     tape_path = tmp_path / "mini.json"
     tape_path.write_text(
@@ -1383,16 +1306,16 @@ async def test_resume_keeps_pre_pause_content_visible_across_collab_graph(
 
     pre_pause_body = "案情简介已讲清，启动模拟庭审。"
     events = [
-        {"kind": "run_started", "payload": {"run_id": "c1", "kind": "captain"}, "t_ms": 0},
-        {"kind": "content_delta", "payload": {"delta": pre_pause_body}, "t_ms": 50},
+        {"type": "run_started", "payload": {"run_id": "c1", "kind": "captain"}, "t_ms": 0},
+        {"type": "content_delta", "payload": {"delta": pre_pause_body}, "t_ms": 50},
         {
-            "kind": "checkpoint_required",
+            "type": "checkpoint_required",
             "payload": {"checkpoint_id": "cp-vis", "question": "继续？"},
             "t_ms": 100,
         },
-        {"kind": "checkpoint_resolved", "payload": {"decision": "continue"}, "t_ms": 150},
+        {"type": "checkpoint_resolved", "payload": {"decision": "continue"}, "t_ms": 150},
         {
-            "kind": "run_plan",
+            "type": "run_plan",
             "payload": {
                 "execution_id": "ex1",
                 "plan_type": "debate",
@@ -1402,16 +1325,16 @@ async def test_resume_keeps_pre_pause_content_visible_across_collab_graph(
             "t_ms": 200,
         },
         {
-            "kind": "run_started",
+            "type": "run_started",
             "payload": {"run_id": "w1", "agent_id": "w1", "kind": "agent"},
             "t_ms": 250,
         },
         {
-            "kind": "run_output_delta",
+            "type": "run_output_delta",
             "payload": {"run_id": "w1", "agent_id": "w1", "delta": "辩方观点。"},
             "t_ms": 300,
         },
-        {"kind": "content_delta", "payload": {"delta": "庭审汇总。"}, "t_ms": 400},
+        {"type": "content_delta", "payload": {"delta": "庭审汇总。"}, "t_ms": 400},
     ]
     tape_path = tmp_path / "vis.json"
     tape_path.write_text(
@@ -1535,15 +1458,15 @@ async def test_player_result_content_joins_at_pause_seam(monkeypatch, tmp_path: 
     pre = "展开正反对决。"
     post = "---\n\n## 模拟庭审辩论结果"
     events = [
-        {"kind": "run_started", "payload": {"run_id": "c1", "kind": "captain"}, "t_ms": 0},
-        {"kind": "content_delta", "payload": {"delta": pre}, "t_ms": 50},
+        {"type": "run_started", "payload": {"run_id": "c1", "kind": "captain"}, "t_ms": 0},
+        {"type": "content_delta", "payload": {"delta": pre}, "t_ms": 50},
         {
-            "kind": "checkpoint_required",
+            "type": "checkpoint_required",
             "payload": {"checkpoint_id": "cp-seam", "question": "继续？"},
             "t_ms": 100,
         },
-        {"kind": "checkpoint_resolved", "payload": {"decision": "continue"}, "t_ms": 150},
-        {"kind": "content_delta", "payload": {"delta": post}, "t_ms": 400},
+        {"type": "checkpoint_resolved", "payload": {"decision": "continue"}, "t_ms": 150},
+        {"type": "content_delta", "payload": {"delta": post}, "t_ms": 400},
     ]
     tape_path = tmp_path / "seam.json"
     tape_path.write_text(
@@ -1601,6 +1524,7 @@ async def test_tape_cancel_salvages_incomplete_turn(monkeypatch):
 
     from agentcore.conversation import turn_runner
     from agentcore.demo_tape import hooks as tape_hooks
+    from agentcore.runtime.turn.snapshot import ConversationSnapshot
 
     salvaged: list[dict] = []
 
@@ -1626,7 +1550,7 @@ async def test_tape_cancel_salvages_incomplete_turn(monkeypatch):
             conversation_id="conv-x",
             user_message="go",
             user_id="u1",
-            folder_id=None,
+            conversation=ConversationSnapshot.default(),
             sink=sink,
             history=[],
             attachments=None,
@@ -1646,6 +1570,7 @@ async def test_demo_tape_import_failure_does_not_block_live_turn(monkeypatch):
 
     from agentcore.conversation import turn_runner
     from agentcore.runtime.events import FinishReason
+    from agentcore.runtime.turn.snapshot import ConversationSnapshot
 
     pipeline_calls: list[dict] = []
 
@@ -1678,7 +1603,7 @@ async def test_demo_tape_import_failure_does_not_block_live_turn(monkeypatch):
         conversation_id="conv-live",
         user_message="go",
         user_id="u1",
-        folder_id=None,
+        conversation=ConversationSnapshot.default(),
         sink=sink,
         history=[],
         attachments=None,
@@ -1695,39 +1620,9 @@ def test_tape_frame_meta_importable():
     assert callable(tape_frame_meta)
 
 
-def test_captain_run_id_finds_first_captain_run():
-    from agentcore.replay.legacy import captain_run_id_from_events
-
-    assert (
-        captain_run_id_from_events(
-            [
-                {"type": "message_start", "payload": {}},
-                {"type": "run_started", "payload": {"run_id": "cap1", "kind": "captain"}},
-                {"type": "run_started", "payload": {"run_id": "w1", "kind": "agent"}},
-            ]
-        )
-        == "cap1"
-    )
-    # Legacy dialect still resolves.
-    assert (
-        captain_run_id_from_events(
-            [{"kind": "run_started", "payload": {"run_id": "cap1", "kind": "captain"}}]
-        )
-        == "cap1"
-    )
-    # No captain run → empty (nothing to normalize).
-    assert (
-        captain_run_id_from_events(
-            [{"type": "run_started", "payload": {"run_id": "w1"}}]
-        )
-        == ""
-    )
-
-
 @pytest.mark.asyncio
-async def test_player_inlines_captain_tools_by_stripping_run_id(monkeypatch):
-    """CEO self-tools (run_id == captain run) replay inline (run_id dropped) so the
-    search phase renders instead of a silent「正在思考」; worker tools keep run_id."""
+async def test_player_inlines_captain_tools_without_run_id(monkeypatch):
+    """CEO self-tools (no run_id, live contract) replay inline; worker tools keep run_id."""
     from agentcore.demo_tape import player as player_mod
     from agentcore.demo_tape.binding import TapeBinding
     from agentcore.demo_tape.player import play_tape_events
@@ -1744,24 +1639,24 @@ async def test_player_inlines_captain_tools_by_stripping_run_id(monkeypatch):
     monkeypatch.setattr(TurnJournalWriter, "flush", noop_flush)
 
     events = [
-        {"kind": "run_started", "payload": {"run_id": "cap1", "kind": "captain"}, "t_ms": 0},
+        {"type": "run_started", "payload": {"run_id": "cap1", "kind": "captain"}, "t_ms": 0},
         {
-            "kind": "tool_use_start",
-            "payload": {"tool_call_id": "t1", "tool_name": "web_search", "arguments": {}, "run_id": "cap1"},
+            "type": "tool_use_start",
+            "payload": {"tool_call_id": "t1", "tool_name": "web_search", "arguments": {}},
             "t_ms": 100,
         },
         {
-            "kind": "tool_use_end",
-            "payload": {"tool_call_id": "t1", "tool_name": "web_search", "run_id": "cap1"},
+            "type": "tool_use_end",
+            "payload": {"tool_call_id": "t1", "tool_name": "web_search"},
             "t_ms": 200,
         },
-        {"kind": "run_started", "payload": {"run_id": "w1", "kind": "agent"}, "t_ms": 300},
+        {"type": "run_started", "payload": {"run_id": "w1", "kind": "agent"}, "t_ms": 300},
         {
-            "kind": "tool_use_start",
+            "type": "tool_use_start",
             "payload": {"tool_call_id": "t2", "tool_name": "web_fetch", "arguments": {}, "run_id": "w1"},
             "t_ms": 400,
         },
-        {"kind": "content_delta", "payload": {"delta": "done"}, "t_ms": 500},
+        {"type": "content_delta", "payload": {"delta": "done"}, "t_ms": 500},
     ]
     binding = TapeBinding(
         conversation_id="c", tape_path=Path("unused.json"), speed=1.0, max_gap_ms=50
@@ -1785,7 +1680,7 @@ async def test_player_inlines_captain_tools_by_stripping_run_id(monkeypatch):
         for e in sink._history
         if e.type is EventType.TOOL_USE_START
     }
-    # CEO's own web_search: run_id stripped → turn-level inline step.
+    # CEO's own web_search: no run_id → turn-level inline step.
     assert "run_id" not in starts["web_search"]
     # Worker's web_fetch: run_id preserved → its own run node in the graph.
     assert starts["web_fetch"].get("run_id") == "w1"
@@ -1820,24 +1715,24 @@ async def test_player_skip_kinds_do_not_advance_pacing_clock(monkeypatch):
     # Simulate post-pause resume: skip events carry the recorder's hesitation gap,
     # then the first real event is 11s later on the tape clock.
     events = [
-        {"kind": "turn_paused", "payload": {"checkpoint_id": "cp"}, "t_ms": 34_000},
+        {"type": "turn_paused", "payload": {"checkpoint_id": "cp"}, "t_ms": 34_000},
         {
-            "kind": "team_preview_required",
+            "type": "team_preview_required",
             "payload": {"checkpoint_id": "cp", "primitive": "debate"},
             "t_ms": 34_000,
         },
         {
-            "kind": "team_preview_resolved",
+            "type": "team_preview_resolved",
             "payload": {"decision": "continue"},
             "t_ms": 34_000,
         },
         {
-            "kind": "run_started",
+            "type": "run_started",
             "payload": {"run_id": "w1", "kind": "agent"},
             "t_ms": 45_000,
         },
         {
-            "kind": "run_output_delta",
+            "type": "run_output_delta",
             "payload": {"run_id": "w1", "agent_id": "w1", "delta": "hi"},
             "t_ms": 45_100,
         },
@@ -1899,15 +1794,15 @@ async def test_resume_folds_checkpoint_into_resolved(monkeypatch, tmp_path: Path
     monkeypatch.setattr(TurnJournalWriter, "flush", noop_flush)
 
     events = [
-        {"kind": "run_started", "payload": {"run_id": "c1", "kind": "captain"}, "t_ms": 0},
+        {"type": "run_started", "payload": {"run_id": "c1", "kind": "captain"}, "t_ms": 0},
         {
-            "kind": "checkpoint_required",
+            "type": "checkpoint_required",
             "payload": {"checkpoint_id": "cp-tape", "question": "继续？"},
             "t_ms": 100,
         },
-        {"kind": "checkpoint_resolved", "payload": {"decision": "continue"}, "t_ms": 200},
+        {"type": "checkpoint_resolved", "payload": {"decision": "continue"}, "t_ms": 200},
         {
-            "kind": "run_plan",
+            "type": "run_plan",
             "payload": {
                 "execution_id": "ex1",
                 "plan_type": "debate",
@@ -1917,16 +1812,16 @@ async def test_resume_folds_checkpoint_into_resolved(monkeypatch, tmp_path: Path
             "t_ms": 250,
         },
         {
-            "kind": "run_started",
+            "type": "run_started",
             "payload": {"run_id": "w1", "agent_id": "w1", "kind": "agent"},
             "t_ms": 260,
         },
         {
-            "kind": "run_output_delta",
+            "type": "run_output_delta",
             "payload": {"run_id": "w1", "agent_id": "w1", "delta": "观点"},
             "t_ms": 300,
         },
-        {"kind": "content_delta", "payload": {"delta": "汇总"}, "t_ms": 400},
+        {"type": "content_delta", "payload": {"delta": "汇总"}, "t_ms": 400},
     ]
     tape_path = tmp_path / "cp_resolve.json"
     tape_path.write_text(
@@ -2270,10 +2165,10 @@ async def test_player_pauses_and_continues_cold_path_kinds(
     monkeypatch.setattr(TurnJournalWriter, "flush", noop_flush)
 
     events = [
-        {"kind": "run_started", "payload": {"run_id": "c1", "kind": "captain"}, "t_ms": 0},
-        {"kind": required_kind, "payload": payload, "t_ms": 100},
-        {"kind": resolved_kind, "payload": {"decision": "continue"}, "t_ms": 200},
-        {"kind": "content_delta", "payload": {"delta": "after"}, "t_ms": 300},
+        {"type": "run_started", "payload": {"run_id": "c1", "kind": "captain"}, "t_ms": 0},
+        {"type": required_kind, "payload": payload, "t_ms": 100},
+        {"type": resolved_kind, "payload": {"decision": "continue"}, "t_ms": 200},
+        {"type": "content_delta", "payload": {"delta": "after"}, "t_ms": 300},
     ]
     tape_path = tmp_path / f"{required_kind}.json"
     tape_path.write_text(
@@ -2355,7 +2250,7 @@ async def test_cold_path_kinds_remint_distinct_across_replays(monkeypatch, tmp_p
 
     events = [
         {
-            "kind": "checkpoint_required",
+            "type": "checkpoint_required",
             "payload": {"checkpoint_id": "cp-recorded", "question": "q"},
             "t_ms": 0,
         },
@@ -2421,9 +2316,9 @@ async def test_player_hot_approval_awaits_resolve_and_continues(monkeypatch, tmp
     monkeypatch.setattr(TurnJournalWriter, "flush", noop_flush)
 
     events = [
-        {"kind": "content_delta", "payload": {"delta": "before"}, "t_ms": 0},
+        {"type": "content_delta", "payload": {"delta": "before"}, "t_ms": 0},
         {
-            "kind": "approval_required",
+            "type": "approval_required",
             "payload": {
                 "approval_id": "ap-src",
                 "tool_call_id": "tc-src",
@@ -2433,7 +2328,7 @@ async def test_player_hot_approval_awaits_resolve_and_continues(monkeypatch, tmp
             "t_ms": 100,
         },
         {
-            "kind": "approval_resolved",
+            "type": "approval_resolved",
             "payload": {
                 "approval_id": "ap-src",
                 "tool_call_id": "tc-src",
@@ -2441,7 +2336,7 @@ async def test_player_hot_approval_awaits_resolve_and_continues(monkeypatch, tmp
             },
             "t_ms": 5000,
         },
-        {"kind": "content_delta", "payload": {"delta": "after"}, "t_ms": 5100},
+        {"type": "content_delta", "payload": {"delta": "after"}, "t_ms": 5100},
     ]
     tape_path = tmp_path / "hot-approval.json"
     tape_path.write_text(
@@ -2536,7 +2431,7 @@ async def test_hot_approval_remint_distinct_across_replays(monkeypatch, tmp_path
 
     events = [
         {
-            "kind": "approval_required",
+            "type": "approval_required",
             "payload": {
                 "approval_id": "ap-recorded",
                 "tool_call_id": "tc-recorded",
@@ -2545,7 +2440,7 @@ async def test_hot_approval_remint_distinct_across_replays(monkeypatch, tmp_path
             },
             "t_ms": 0,
         },
-        {"kind": "content_delta", "payload": {"delta": "x"}, "t_ms": 10},
+        {"type": "content_delta", "payload": {"delta": "x"}, "t_ms": 10},
     ]
     tape_path = tmp_path / "remint-hot.json"
     tape_path.write_text(
@@ -2642,9 +2537,9 @@ async def test_hot_approval_wait_does_not_drift_pacing(monkeypatch, tmp_path: Pa
 
     # Large recorded gap between approval and next event (= human decision window).
     events = [
-        {"kind": "content_delta", "payload": {"delta": "a"}, "t_ms": 0},
+        {"type": "content_delta", "payload": {"delta": "a"}, "t_ms": 0},
         {
-            "kind": "approval_required",
+            "type": "approval_required",
             "payload": {
                 "approval_id": "ap1",
                 "tool_call_id": "tc1",
@@ -2653,8 +2548,8 @@ async def test_hot_approval_wait_does_not_drift_pacing(monkeypatch, tmp_path: Pa
             },
             "t_ms": 100,
         },
-        {"kind": "content_delta", "payload": {"delta": "b"}, "t_ms": 50_100},
-        {"kind": "content_delta", "payload": {"delta": "c"}, "t_ms": 50_200},
+        {"type": "content_delta", "payload": {"delta": "b"}, "t_ms": 50_100},
+        {"type": "content_delta", "payload": {"delta": "c"}, "t_ms": 50_200},
     ]
     tape_path = tmp_path / "pacing-hot.json"
     tape_path.write_text(
@@ -2729,7 +2624,7 @@ async def test_hot_approval_cancel_clears_registry(monkeypatch, tmp_path: Path):
 
     events = [
         {
-            "kind": "approval_required",
+            "type": "approval_required",
             "payload": {
                 "approval_id": "ap-cancel",
                 "tool_call_id": "tc-cancel",
@@ -2738,7 +2633,7 @@ async def test_hot_approval_cancel_clears_registry(monkeypatch, tmp_path: Path):
             },
             "t_ms": 0,
         },
-        {"kind": "content_delta", "payload": {"delta": "never"}, "t_ms": 10},
+        {"type": "content_delta", "payload": {"delta": "never"}, "t_ms": 10},
     ]
     tape_path = tmp_path / "cancel-hot.json"
     tape_path.write_text(

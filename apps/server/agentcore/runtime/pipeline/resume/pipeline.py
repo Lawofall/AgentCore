@@ -8,7 +8,7 @@ import json
 import agentcore.runtime.pipeline as pipeline_pkg
 from agentcore.attention import bind_attention_scope, reset_attention_scope
 from agentcore.core.logging import get_logger
-from agentcore.core.types import DEFAULT_PERMISSION_AXES, ToolEffect, WorkspaceBoundary, new_id
+from agentcore.core.types import ToolEffect, new_id
 from agentcore.llm.credentials import LLMCredentials
 from agentcore.llm.profiles import TurnProfiles as ProfileSet
 from agentcore.llm.profiles import turn_profiles_for_turn
@@ -52,6 +52,7 @@ from agentcore.runtime.suspension import (
     turn_evidence_ledger,
     turn_history,
 )
+from agentcore.runtime.turn.snapshot import ConversationSnapshot
 from agentcore.tools.ceo_toolset import _assemble_ceo_toolset  # noqa: F401 — wire seam
 from agentcore.workspace.protocol import WorkspaceBackend
 
@@ -70,7 +71,6 @@ async def resume_chat_pipeline(
     sink: EventSink,
     backend: WorkspaceBackend,
     history: list[dict] | None = None,
-    table_id: str | None = None,
     llm_credentials: LLMCredentials | None = None,
     profile_set: ProfileSet | None = None,
     session_saver: SessionSaver | None = None,
@@ -78,7 +78,7 @@ async def resume_chat_pipeline(
     suspension_saver: SuspensionSaver | None = None,
     suspension_deleter: SuspensionDeleter | None = None,
     llm_supports_tools: bool | None = None,
-    permission_axes: WorkspaceBoundary | None = None,
+    conversation: ConversationSnapshot,
     x_client_platform: str | None = None,
 ) -> dict:
     """Continue a turn paused at a leftover plan_review / live ask_user checkpoint (结构化挂起 2b resume).
@@ -102,12 +102,11 @@ async def resume_chat_pipeline(
     (ask_user only).
     Returns the same result shape as :func:`run_chat_pipeline`.
 
-    ``permission_axes`` mirrors :func:`run_chat_pipeline`: the conversation's CURRENT
-    three-axis permission mode, resolved by the caller at resume time — not frozen
-    into the frame. ``None`` falls back to less_interrupt defaults.
+    ``conversation`` mirrors :func:`run_chat_pipeline`: current session snapshot,
+    not frozen into the pause frame.
     """
-    if permission_axes is None:
-        permission_axes = DEFAULT_PERMISSION_AXES
+    permission_axes = conversation.permission_axes
+    prefer_delegate = conversation.prefer_delegate
     # Card already answered this resume — join uses this bit, not extra confirm-word regex.
     ask_settled = suspension.kind == SuspensionKind.ASK_USER
     profiles = turn_profiles_for_turn(profile_set, llm_credentials)
@@ -231,12 +230,12 @@ async def resume_chat_pipeline(
             llm=llm,
             sink=sink,
             backend=backend,
-            table_id=table_id,
             conversation_id=conversation_id,
             message_id=message_id,
             captain_run_id=captain_run_id,
             profiles=profiles,
             permission_axes=permission_axes,
+            prefer_delegate=prefer_delegate,
             session_saver=session_saver,
             session_loader=session_loader,
             suspension_saver=suspension_saver,
@@ -412,7 +411,6 @@ async def resume_chat_pipeline(
                 message_id=message_id,
                 captain_run_id=captain_run_id,
                 captain_state=captain_state,
-                vision_cost_sink=wired.vision_cost_sink,
                 sink=sink,
                 audit_recorder=audit_recorder,
                 roster_writer=roster_writer,
@@ -438,7 +436,6 @@ async def resume_chat_pipeline(
             audit_recorder=audit_recorder,
             roster_writer=roster_writer,
             journal_writer=journal_writer,
-            vision_cost_runs=wired.vision_cost_sink,
             pre_pause_reasoning=pre_pause_reasoning,
             ask_settled=ask_settled,
         )

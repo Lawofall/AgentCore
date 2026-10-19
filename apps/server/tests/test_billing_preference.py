@@ -738,10 +738,6 @@ async def test_resolve_and_gate_compaction_follows_conversation_byok():
     selection = SimpleNamespace(origin="byok", provider_id="p1", model="flash")
     with (
         patch(
-            "agentcore.billing.gate.resolve_explicit_background_byok",
-            AsyncMock(return_value=None),
-        ),
-        patch(
             "agentcore.billing.gate.ConversationRepository",
             lambda _s: SimpleNamespace(
                 get_by_id_unscoped=AsyncMock(
@@ -776,10 +772,6 @@ async def test_resolve_and_gate_compaction_platform_quota_skips():
 
     selection = SimpleNamespace(origin="platform", provider_id=None, model="flash")
     with (
-        patch(
-            "agentcore.billing.gate.resolve_explicit_background_byok",
-            AsyncMock(return_value=None),
-        ),
         patch(
             "agentcore.billing.gate.ConversationRepository",
             lambda _s: SimpleNamespace(

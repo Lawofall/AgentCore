@@ -48,12 +48,6 @@ def test_event_maps_to_extra_or_nothing() -> None:
     )
     assert layer_for_event({"event": "llm.empty_response"}) is None
     assert count_key_for_event({"event": "llm.empty_response"}) == "empty_response"
-    assert count_key_for_event({"event": "tool.web_search_cloud_fallback"}) == (
-        "web_search_cloud_fallback"
-    )
-    assert count_key_for_event({"event": "tool.web_search_cloud_fallback_failed"}) == (
-        "web_search_cloud_fallback_failed"
-    )
     assert count_key_for_event({"event": "llm.call"}) is None
     assert layer_for_event({"event": "chat.turn_start"}) is None
 
@@ -78,8 +72,6 @@ def test_degradation_counts_from_events() -> None:
             {"event": "llm.empty_response"},
             {"event": "llm.stream_stalled", "committed": False},
             {"event": "llm.stream_stalled", "committed": True},
-            {"event": "tool.web_search_cloud_fallback"},
-            {"event": "tool.web_search_cloud_fallback_failed"},
         ]
     )
     assert block is not None
@@ -93,11 +85,8 @@ def test_degradation_counts_from_events() -> None:
     assert counts["stream_stall_precommit"] == 2  # retried(reason=stall) + stalled(pre)
     assert counts["stream_stall_salvage"] == 1
     assert counts["empty_response"] == 1
-    assert counts["web_search_cloud_fallback"] == 1
-    assert counts["web_search_cloud_fallback_failed"] == 1
     assert "admission=" not in block["summary"]
     assert block["summary"] == (
         "credential_pool=1 cooldown=1 leaf_retry=1 stream_stall_precommit=2 "
-        "stream_stall_salvage=1 empty_response=1 web_search_cloud_fallback=1 "
-        "web_search_cloud_fallback_failed=1"
+        "stream_stall_salvage=1 empty_response=1"
     )

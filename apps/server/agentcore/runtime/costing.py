@@ -76,7 +76,6 @@ __all__ = [
     "run_cost_from_calls",
     "split_cost",
     "usage_metadata",
-    "vision_run_cost",
 ]
 
 
@@ -261,40 +260,6 @@ def priced_call_cost(
         currency=currency,
         duration_ms=duration_ms,
         platform_credential_id=cid,
-    )
-
-
-def vision_run_cost(
-    model: str,
-    usage: TokenUsage,
-    *,
-    parent_run_id: str | None,
-    duration_ms: int = 0,
-    credential_source: CredentialSource | None = None,
-) -> RunCost:
-    """Historical ledger row for a sidecar vision sub-call (``role=vision``).
-
-    Live turns no longer mint this path: images ride the current main model.
-    Rows already in ``cost_events`` still fold at settle. A unique ``vis_`` run
-    id keeps the ledger's idempotent upsert-by-run_id honest.
-    """
-    body, billed, estimated, currency = _split_cost(
-        asdict(calculate_cost(model, usage, credential_source=credential_source))
-    )
-    return RunCost(
-        run_id=f"vis_{new_id()}",
-        parent_run_id=parent_run_id,
-        agent_id=None,
-        role=ROLE_VISION,
-        persona=None,
-        model=model,
-        tokens=usage.as_dict(),
-        cost=body,
-        cost_total_nano=billed,
-        cost_estimated_nano=estimated,
-        currency=currency,
-        rounds=1,
-        duration_ms=duration_ms,
     )
 
 

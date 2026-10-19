@@ -417,7 +417,7 @@ def test_execution_sourced_single_agent_tool_turn_drops_captain_events_keeps_pro
     }
 
 
-def test_legacy_channel_redirect_process_tool_normalizes_to_redirect():
+def test_channel_redirect_process_tool_error_status_is_not_remapped():
     entries = [
         {
             "kind": "process_tool",
@@ -439,7 +439,7 @@ def test_legacy_channel_redirect_process_tool_normalizes_to_redirect():
     runs = runs_from_entries(entries)
     assert runs is not None
     tool = runs["process"][0]
-    assert tool["status"] == "redirect"
+    assert tool["status"] == "error"
     assert tool["failure"]["code"] == "source_grep_redirect"
 
 

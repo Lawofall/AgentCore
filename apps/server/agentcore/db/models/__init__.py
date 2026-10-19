@@ -31,10 +31,10 @@ from .conversations import (
     Message,
 )
 from .devices import PushDeviceRow
-from .docs import Doc, DocShare
 from .documents import DisputedLine, Document
 from .email_auth import EmailChallenge, PendingRegistration
 from .llm_profiles import AssemblySkill, LlmModelProfile
+from .mcp import UserMcpOauthPending, UserMcpServer
 from .notices import ProductNoticeDismissalRow, ProductNoticeRow
 from .platform import PlatformCredential
 from .runs import (
@@ -52,13 +52,13 @@ from .runs import (
     TurnStreamStateRow,
 )
 from .search import PlatformSearchUse, UserSearchProvider
+from .seats import RedemptionCode
 from .skill_store import (
     SkillStoreInstall,
     SkillStoreListing,
     SkillStoreReport,
     SkillStoreVersion,
 )
-from .tables import Table, TableRow, TableView
 from .turn_queue import TurnQueueItem
 from .users import (
     FriendRequest,
@@ -85,8 +85,6 @@ __all__ = [
     "CostLedgerOutbox",
     "Credentials",
     "DisputedLine",
-    "Doc",
-    "DocShare",
     "Document",
     "EmailChallenge",
     "Folder",
@@ -107,11 +105,9 @@ __all__ = [
     "ProductNoticeDismissalRow",
     "ProductNoticeRow",
     "PushDeviceRow",
+    "RedemptionCode",
     "RefreshToken",
     "RunSessionRow",
-    "Table",
-    "TableRow",
-    "TableView",
     "SkillStoreInstall",
     "SkillStoreListing",
     "SkillStoreReport",
@@ -128,6 +124,8 @@ __all__ = [
     "FriendRequest",
     "UserGitCredential",
     "UserLlmProvider",
+    "UserMcpOauthPending",
+    "UserMcpServer",
     "UserSearchProvider",
     "_new_uuid",
 ]

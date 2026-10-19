@@ -1,6 +1,6 @@
 import type { CapabilityTool } from "@/services/capabilities";
 // @vitest-environment jsdom
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { ToolInspector } from "../ToolInspector";
 
@@ -12,6 +12,7 @@ const tool: CapabilityTool = {
   resident: true,
   summary: "联网检索",
   blurb: "按关键词在网上找资料和链接",
+  description_prefer: "",
   description:
     "联网检索：给出查询词，返回带出处的结果摘要。一次只搜 2–3 个核心词。",
   parameters: {
@@ -65,5 +66,53 @@ describe("ToolInspector", () => {
   it("shows a capability hint", () => {
     render(<ToolInspector tool={tool} capabilityHint="未确认工具调用" />);
     expect(screen.getByText("未确认工具调用")).toBeTruthy();
+  });
+
+  it("无 prefer 文案不切档", () => {
+    render(<ToolInspector tool={tool} hideChrome />);
+    expect(screen.queryByRole("tab", { name: "注意力尺" })).toBeNull();
+    expect(screen.queryByRole("tab", { name: "优先派" })).toBeNull();
+  });
+
+  it("派人说明书切注意力尺 / 优先派，默认注意力尺，参数只写一份", () => {
+    const attention = "把任务交给队员；自己做：答复即结果。";
+    const prefer = "优先把任务交给队员；必须派：窗外读写。";
+    render(
+      <ToolInspector
+        hideChrome
+        tool={{
+          ...tool,
+          name: "delegate",
+          face: "orchestration",
+          summary: "把任务派给队员",
+          blurb: "指定角色和任务，让队员平行开工",
+          description: attention,
+          description_prefer: prefer,
+          parameters: {
+            type: "object",
+            properties: {
+              tasks: { type: "array", description: "队员任务" },
+            },
+            required: ["tasks"],
+          },
+        }}
+      />,
+    );
+    const attentionTab = screen.getByRole("tab", { name: "注意力尺" });
+    const preferTab = screen.getByRole("tab", { name: "优先派" });
+    expect(attentionTab.getAttribute("aria-selected")).toBe("true");
+    expect(preferTab.getAttribute("aria-selected")).toBe("false");
+    expect(screen.getByTestId("tool-face-guide-body").textContent).toBe(
+      attention,
+    );
+    expect(screen.getByText("tasks")).toBeTruthy();
+    expect(screen.getByText("队员任务")).toBeTruthy();
+
+    fireEvent.click(preferTab);
+    expect(preferTab.getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByTestId("tool-face-guide-body").textContent).toBe(prefer);
+    expect(screen.queryByText(attention)).toBeNull();
+    expect(screen.getAllByText("tasks")).toHaveLength(1);
+    expect(screen.getByText("队员任务")).toBeTruthy();
   });
 });

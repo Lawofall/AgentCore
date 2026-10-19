@@ -52,7 +52,11 @@ export function ComposerGitStatusChip({
   return (
     <button
       type="button"
-      className="inline-flex h-7 max-w-[168px] shrink items-center gap-1 rounded-lg px-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
+      className={
+        plusHost
+          ? "inline-flex h-8 w-full max-w-none items-center justify-start gap-1 rounded-lg px-2 text-sm text-muted-foreground hover:bg-accent/60 hover:text-foreground"
+          : "inline-flex h-8 max-w-[168px] shrink items-center gap-1 rounded-lg px-1.5 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
+      }
       title={title}
       aria-label={title}
       data-testid="composer-git-status-chip"

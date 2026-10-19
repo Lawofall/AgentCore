@@ -673,12 +673,20 @@ def test_ceo_deliverable_schema_is_artifacts_only():
 
 
 def test_nested_delegate_description_switches_at_depth():
+    from agentcore.tools.builtin.delegate.nesting import make_child
     from agentcore.tools.builtin.delegate.schema import (
         DELEGATE_DESCRIPTION,
+        DELEGATE_DESCRIPTION_PREFER,
         NESTED_DELEGATE_DESCRIPTION,
+        NESTED_DELEGATE_DESCRIPTION_PREFER,
     )
 
     t = tool(Provider([]))
     assert t.schema.description == DELEGATE_DESCRIPTION
     t._depth = 1
     assert t.schema.description == NESTED_DELEGATE_DESCRIPTION
+    t._depth = 0
+    t._prefer_delegate = True
+    assert t.schema.description == DELEGATE_DESCRIPTION_PREFER
+    child = make_child(t, "cap", 1)
+    assert child.schema.description == NESTED_DELEGATE_DESCRIPTION_PREFER

@@ -11,10 +11,11 @@ import { findCatalogItem } from "@/services/models";
  * 模型组合槽位选择器的纯逻辑（设置·模型配置 · 编辑组合）。
  *
  * 槽位解析后仍是 `(model, origin, provider_id)`；选择器的值是目录身份
- * `@platform/{id}` / `@byok/{provider_id}/{id}`。拣选器只按服务商分组呈现
- * BYOK 候选（不列出平台目录）。每个服务商的候选 = 模型目录里该服务商带出的
- * 模型；再把**当前编辑组合**的槽位并入（查目录补显示名），保证现值始终可见。
- * 遗留 `origin=platform` 槽折成孤儿组，标需改选。已删服务商的孤儿槽同样单独成组。
+ * `@platform/{id}` / `@byok/{provider_id}/{id}`。设置页按渠道分段：有补贴时
+ * 先「平台」（目录 `origin=platform` 行），再按服务商列 BYOK。弹层把这些行平铺。
+ * 每个服务商的候选 = 模型目录里该服务商带出的模型；再把**当前编辑组合**的槽位
+ * 并入（查目录补显示名），保证现值始终可见。无补贴时平台组不出现；已下架的平台
+ * 槽折成孤儿组，标需改选。已删服务商的孤儿槽同样单独成组。
  */
 
 /** 目录项可选 curated 徽章（后端并行加字段；本地窄扩展读取）。 */
@@ -24,9 +25,10 @@ export type CatalogItemWithBadge = ModelCatalogItem & {
 
 export type DefaultModelOption = {
   model: string;
-  /** 品牌显示名；查不到目录时回落裸 id。 */
+  /** 品牌显示名。查不到目录时回落裸 id。接入行可被账号改名。 */
   label: string;
-  /** curated 展示徽章，如「免费额度」。 */
+  origin?: "platform" | "byok";
+  /** curated SKU 徽章（如「免费额度」）。平台 origin 不另标「平台」。 */
   badge?: string | null;
   vendor?: string | null;
   contextLength?: number | null;
@@ -34,6 +36,8 @@ export type DefaultModelOption = {
   price?: ModelPriceCard | null;
   /** 不在目录中的手填 / 孤儿 id。 */
   custom?: boolean;
+  /** 已写入 enabled_refs、但不是 seed ∪ GET /models 的行。 */
+  handFilled?: boolean;
   /** False = listed but not selectable (grey + reason). Default true. */
   available?: boolean;
   unavailableReason?: ModelCatalogItem["unavailable_reason"];
@@ -69,6 +73,18 @@ const SEP = "::";
  * Select-value / optgroup id for platform-catalog pointers (not a real provider UUID).
  */
 export const PLATFORM_POINTER_ID = "__platform__";
+/** Settings-page section title for catalog `origin=platform` rows. */
+export const PLATFORM_GROUP_LABEL = "平台";
+/** Leftover chip/row mark; new catalog rows no longer stamp this. */
+export const PLATFORM_ORIGIN_BADGE = PLATFORM_GROUP_LABEL;
+
+/** Curated SKU badge only. Platform origin is unmarked. */
+export function originBadge(
+  _origin: string | undefined | null,
+  curated?: string | null,
+): string | null {
+  return curated?.trim() || null;
+}
 
 const PLATFORM_REF_PREFIX = "@platform/";
 const BYOK_REF_PREFIX = "@byok/";
@@ -157,16 +173,25 @@ export function catalogItemBadge(
   return typeof badge === "string" && badge.trim() ? badge.trim() : null;
 }
 
+export function catalogItemHandFilled(
+  item: ModelCatalogItem | CatalogItemWithBadge | undefined,
+): boolean {
+  return item?.custom === true;
+}
+
 function optionFromCatalogItem(item: ModelCatalogItem): DefaultModelOption {
+  const origin = item.origin === "platform" ? "platform" : "byok";
   return {
     model: item.id.trim(),
+    origin,
     label: item.display_name?.trim() || item.id.trim(),
-    badge: catalogItemBadge(item),
+    badge: originBadge(origin, catalogItemBadge(item)),
     vendor: item.vendor?.trim() || null,
     contextLength: item.context_length ?? null,
     capabilities: item.capabilities ?? [],
     price: item.price ?? null,
     custom: false,
+    handFilled: catalogItemHandFilled(item),
     available: item.available !== false,
     unavailableReason: item.unavailable_reason ?? null,
   };
@@ -184,17 +209,21 @@ function resolveSlotOption(
   if (item) {
     return optionFromCatalogItem(item);
   }
+  const origin = slot.origin === "platform" ? "platform" : "byok";
   return {
     model: slot.model,
+    origin,
     label: slot.model,
+    badge: originBadge(origin),
     custom: true,
   };
 }
 
 /**
  * Build the per-provider option groups for slot selectors.
- * Catalog `origin=platform` rows are not selectable. A live platform slot
- * still folds in as an orphan so the trigger keeps its label.
+ * Catalog `origin=platform` rows become a live「平台」channel when present.
+ * A live platform slot with no catalog (allowlist empty / BYOK deploy) still
+ * folds in as an orphan so the trigger keeps its label.
  * `slots` are **current-edit** pointers only — folded in with catalog labels when possible.
  */
 export function buildDefaultProviderGroups(
@@ -222,6 +251,24 @@ export function buildDefaultProviderGroups(
       models,
     };
   });
+
+  const platformModels: DefaultModelOption[] = [];
+  const seenPlatform = new Set<string>();
+  for (const item of catalog?.models ?? []) {
+    if (item.origin !== "platform") continue;
+    const opt = optionFromCatalogItem(item);
+    const m = opt.model.trim();
+    if (!m || seenPlatform.has(m)) continue;
+    seenPlatform.add(m);
+    platformModels.push({ ...opt, model: m });
+  }
+  if (platformModels.length > 0) {
+    groups.unshift({
+      providerId: PLATFORM_POINTER_ID,
+      providerLabel: PLATFORM_GROUP_LABEL,
+      models: platformModels,
+    });
+  }
 
   const knownProviderIds = new Set(providers.map((p) => p.id));
 
@@ -273,5 +320,5 @@ export function modelInChannelCatalog(
 ): boolean {
   if (!group || !model.trim()) return false;
   const hit = group.models.find((m) => m.model === model.trim());
-  return Boolean(hit && !hit.custom);
+  return Boolean(hit && !hit.custom && !hit.handFilled);
 }

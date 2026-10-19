@@ -41,6 +41,7 @@ def make_child(tool: DelegateTool, captain_run_id: str, captain_depth: int) -> D
         permission_axes=tool._permission_axes,
         folder_id=tool._folder_id,
         worker_envelope=getattr(tool, "_worker_envelope", "") or "",
+        prefer_delegate=bool(getattr(tool, "_prefer_delegate", False)),
     )
     # Nested default desk: prepare_agent_node may overwrite with parent target.
     child._default_target_folder_id = getattr(tool, "_default_target_folder_id", None)

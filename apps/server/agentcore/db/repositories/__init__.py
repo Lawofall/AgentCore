@@ -38,8 +38,6 @@ from .chat import ChatRepository
 from .conversation_shares import ConversationShareRepository
 from .conversations import ConversationRepository
 from .devices import PushDeviceRepository
-from .doc_shares import DocShareRepository
-from .docs import DocRepository
 from .documents import DocumentRepository
 from .email_auth import EmailChallengeRepository, PendingRegistrationRepository
 from .external_grants import ExternalGrantRepository
@@ -47,10 +45,12 @@ from .folder_members import FolderMemberRepository
 from .folders import FolderRepository
 from .friends import FriendRepository
 from .llm_profiles import LlmModelProfileRepository
+from .mcp_servers import UserMcpOauthPendingRepository, UserMcpServerRepository
 from .memory_updates import MemoryUpdateRepository
 from .messages import MessageRepository
 from .notices import ProductNoticeRepository
 from .platform_credentials import PlatformCredentialRepository
+from .redemption_codes import RedemptionCodeRepository
 from .runs import (
     HandoffJobRepository,
     PausedTurnRepository,
@@ -60,7 +60,6 @@ from .runs import (
 )
 from .skill_store import SkillStoreRepository
 from .stream_state import TurnStreamStateRepository
-from .tables import TableRepository
 from .users import (
     UserBlockRepository,
     UserDirectoryRepository,
@@ -77,8 +76,6 @@ __all__ = [
     "ConversationRepository",
     "ConversationShareRepository",
     "CostEventRepository",
-    "DocRepository",
-    "DocShareRepository",
     "DocumentRepository",
     "EmailChallengeRepository",
     "CredentialsRepository",
@@ -94,10 +91,10 @@ __all__ = [
     "PlatformCredentialRepository",
     "ProductNoticeRepository",
     "PushDeviceRepository",
+    "RedemptionCodeRepository",
     "RefreshTokenRepository",
     "RunSessionRepository",
     "SkillStoreRepository",
-    "TableRepository",
     "TurnJournalRepository",
     "TurnMetricsRepository",
     "TurnStreamStateRepository",
@@ -105,5 +102,7 @@ __all__ = [
     "UserDirectoryRepository",
     "FriendRepository",
     "UserLlmProviderRepository",
+    "UserMcpOauthPendingRepository",
+    "UserMcpServerRepository",
     "UserRepository",
 ]

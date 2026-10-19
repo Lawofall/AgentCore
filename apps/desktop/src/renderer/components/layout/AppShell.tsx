@@ -16,6 +16,7 @@ import {
   shouldRunGlobalShortcut,
 } from "@/lib/shortcuts";
 import { useApplyTheme } from "@/lib/theme";
+import { useApplyAppearance } from "@/lib/useApplyAppearance";
 import { primeDeviceId } from "@/services/deviceIdentity";
 import {
   startFulfillStream,
@@ -40,6 +41,7 @@ import { ConnectGitDialogHost } from "../files/CloneRepoDialog";
 import { Sidebar } from "../sidebar/Sidebar";
 import { MergeLandingReviewHost } from "../workspace/MergeLandingReview";
 import { CommandPalette } from "./CommandPalette";
+import { DevSchemeGate } from "./DevSchemeGate";
 import { ForceUpdateGate } from "./ForceUpdateGate";
 import { NarrowTopBar } from "./NarrowTopBar";
 import { OutdatedAndroidBanner } from "./OutdatedAndroidBanner";
@@ -67,6 +69,7 @@ function AppShellFrame() {
   // set to 跟随系统 (the store only holds the value; this is its sole applier).
   // 窄屏 / Capacitor 仅浅色（前端技术 §五）。
   useApplyTheme(floatsDisabled);
+  useApplyAppearance(floatsDisabled);
 
   useEffect(() => {
     if (!floatsDisabled) return;
@@ -232,6 +235,7 @@ function AppShellFrame() {
       <ProductNoticeModal />
       <UpdateAvailableDialog />
       <ForceUpdateGate />
+      <DevSchemeGate />
       <CommandPalette />
       <ShareConversationDialog />
       <ConnectGitDialogHost />

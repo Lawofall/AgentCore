@@ -143,7 +143,7 @@ export const collaborationChapter: ManualChapterContent = {
       blocks: [
         {
           type: "lead",
-          text: "只有猜错会把活做错时，团队才会停下来问你。能假设的小事会直接做，并在回复里写明假设。",
+          text: "要什么、给谁、做到哪一档还没钉住时，团队会停下来问你。能查到的自己查；语气、次要样式会按一个假设继续，并在回复里写明。",
         },
         {
           type: "paragraph",
@@ -155,7 +155,7 @@ export const collaborationChapter: ManualChapterContent = {
           items: [
             {
               title: "开场澄清",
-              desc: "猜错会把活做错时，先短问再开工。语气、次要样式会按一个假设继续，并写明。",
+              desc: "方向没钉时，先短问再开工。语气、次要样式会按一个假设继续，并写明。",
             },
             {
               title: "关键岔路",
@@ -214,7 +214,7 @@ export const collaborationChapter: ManualChapterContent = {
         },
         {
           type: "paragraph",
-          text: "三档怎么选",
+          text: "四档怎么选",
           emphasis: true,
         },
         {
@@ -226,19 +226,23 @@ export const collaborationChapter: ManualChapterContent = {
               desc: "只能看和搜索。不能改文件、跑命令、用浏览器。",
             },
             {
-              title: "这个文件夹（推荐）",
-              desc: "这个文件夹里可以改文件、跑命令、装依赖、用浏览器。装软件、推远程、毁灭形删除、读私钥仍会单独拦住。",
+              title: "本文件夹（网页推荐）",
+              desc: "本文件夹里可以改文件、跑命令、装依赖、用浏览器。装软件、推远程、毁灭形删除、读私钥仍会单独拦住。",
             },
             {
-              title: "这台电脑",
-              desc: "仅桌面。在这个文件夹之外，还能做本机操作。装软件、推远程、毁灭形删除、读私钥仍会单独拦住。",
+              title: "这台电脑（桌面推荐）",
+              desc: "仅桌面。这台电脑上的文件和本机操作。整盘、私钥、毁灭形删除、装软件、推远程仍会单独拦住。",
+            },
+            {
+              title: "完全权限",
+              desc: "推远程、装软件、附着窗口和 MCP 不再询问。毁灭形删除、force push、私钥、密码框仍会拦住。本机引擎上还能做本机操作；云端和网页没有 Host。",
             },
           ],
         },
         {
           type: "callout",
           variant: "tip",
-          text: "对话输入区权限徽章里选，点「设为新会话默认」只影响之后新建的对话。已有会话在徽章里改，下一回合生效。升到这台电脑时会再确认一次。云端和网页没有「这台电脑」。",
+          text: "对话输入区权限徽章里选。人选的那档会记住，下次新建对话还用这一档。已有会话在徽章里改，下一回合生效。升到这台电脑或完全权限时会再确认一次。云端和网页没有「这台电脑」，可以选「完全权限」。",
         },
         {
           type: "callout",

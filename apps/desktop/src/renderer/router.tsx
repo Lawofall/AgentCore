@@ -19,11 +19,13 @@ import { GeneralSettings } from "@/pages/more/GeneralSettings";
 import { GitCredentialSettings } from "@/pages/more/GitCredentialSettings";
 import { ImPrivacySettings } from "@/pages/more/ImPrivacySettings";
 import { ModelSettingsRoute } from "@/pages/more/ModelSettings";
+import { ModelsSettings } from "@/pages/more/ModelsSettings";
 import { MoreIndexRedirect } from "@/pages/more/MoreIndexRedirect";
 import { ProviderSettings } from "@/pages/more/ProviderSettings";
 import { RedirectToOfficialChat } from "@/pages/more/RedirectToOfficialChat";
+import { SearchConnectionSettings } from "@/pages/more/SearchConnectionSettings";
 import { ShortcutsSettings } from "@/pages/more/ShortcutsSettings";
-import { SponsorSettings } from "@/pages/more/SponsorSettings";
+import { SubscriptionSettings } from "@/pages/more/SubscriptionSettings";
 import { UsageSettings } from "@/pages/more/UsageSettings";
 import { AssemblyShelfPage } from "@/pages/toolbox/AssemblyShelf";
 import { FactoryGuidePage } from "@/pages/toolbox/FactoryGuidePage";
@@ -100,7 +102,10 @@ export const router = createHashRouter([
             path: "overview",
             element: <AssemblySectionRedirect tab="overview" />,
           },
-          { path: "model", element: <AssemblySectionRedirect tab="model" /> },
+          {
+            path: "model",
+            element: <AssemblySectionRedirect tab="overview" />,
+          },
           { path: "tools", element: <AssemblySectionRedirect tab="tools" /> },
           {
             path: "envelope",
@@ -227,7 +232,7 @@ export const router = createHashRouter([
               },
               {
                 path: "model",
-                element: <AssemblySectionRedirect tab="model" />,
+                element: <AssemblySectionRedirect tab="overview" />,
               },
               {
                 path: "tools",
@@ -247,7 +252,9 @@ export const router = createHashRouter([
               },
             ],
           },
+          { path: "models", element: <ModelsSettings /> },
           { path: "providers", element: <ProviderSettings /> },
+          { path: "search", element: <SearchConnectionSettings /> },
           {
             path: "git",
             element: (
@@ -292,7 +299,11 @@ export const router = createHashRouter([
             element: <Navigate to={APP_PATHS.more.about} replace />,
           },
           { path: "about", element: <AboutSettings /> },
-          { path: "sponsor", element: <SponsorSettings /> },
+          { path: "subscription", element: <SubscriptionSettings /> },
+          {
+            path: "sponsor",
+            element: <Navigate to="/more/subscription" replace />,
+          },
           { path: "legal/:docId", element: <LegalSettingsPage /> },
         ],
       },

@@ -95,7 +95,7 @@ def execution_class_enabled_for(
 ) -> bool:
     """Environment can exec, and this conversation's boundary includes it.
 
-    ``read`` withholds the class. ``folder`` / ``computer`` follow
+    ``read`` withholds the class. ``folder`` / ``computer`` / ``full`` follow
     :func:`code_execution_enabled_for` (sandbox / local). Same bit the worker
     registry uses, so the workspace fact line does not claim a tool the table
     omitted.
@@ -290,14 +290,15 @@ def build_worker_registry(
     """The delegated worker's toolset: builtins PLUS worker-only declarations.
 
     ``read`` withholds writes and the execution class. ``folder`` includes
-    both. ``computer`` also includes Host. A missing desktop heartbeat does
-    not withhold Host — execute refuses without a channel.
+    both. ``computer`` also includes Host. ``full`` includes Host only on a
+    local engine. A missing desktop heartbeat does not withhold Host on
+    ``computer`` — execute refuses without a channel.
     """
     location = backend.location if backend is not None else None
     boundary = permission_axes if permission_axes is not None else WorkspaceBoundary.FOLDER
     include_execution = execution_class_enabled_for(backend, boundary)
     include_browser = boundary.allows_execution and browser_execution_enabled_for(backend)
-    include_host = boundary.allows_host
+    include_host = boundary.host_in_registry(location)
     del desktop_online  # heartbeat is execute-deny; signature kept for callers
     # Prefer explicit languages; else reuse a probe cached on the backend by
     # ``resolve_exec_languages`` (prepare / resume). Cloud stays untrimmed.
@@ -364,12 +365,12 @@ def build_ceo_tool_registry(
     table (execute refuses without a channel).
     """
     boundary = permission_axes if permission_axes is not None else WorkspaceBoundary.FOLDER
-    include_host = boundary.allows_host
     del desktop_online  # heartbeat is execute-deny; signature kept for callers
     location = cast(
         Literal["server", "local"] | None,
         backend_location if backend_location in ("local", "server") else None,
     )
+    include_host = boundary.host_in_registry(location)
     full = build_builtin_registry(
         include_execution_tools=include_execution_tools,
         include_host_tools=include_host,

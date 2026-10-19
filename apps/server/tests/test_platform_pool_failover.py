@@ -243,6 +243,52 @@ async def test_401_does_not_failover_to_the_next_key(monkeypatch):
         await provider.close()
 
 
+def _openai_quota() -> bytes:
+    return json.dumps(
+        {
+            "error": {
+                "message": "You exceeded your current quota",
+                "type": "insufficient_quota",
+                "code": "insufficient_quota",
+            }
+        }
+    ).encode()
+
+
+async def test_complete_pre_commit_openai_quota_failsover(monkeypatch):
+    _pool()
+    seen: list[str] = []
+    sleeps: list[float] = []
+
+    async def fake_sleep(sec: float) -> None:
+        sleeps.append(sec)
+
+    monkeypatch.setattr("agentcore.llm.provider.openai_compatible.asyncio.sleep", fake_sleep)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        auth = request.headers.get("authorization", "")
+        seen.append(auth)
+        if auth == "Bearer sk-a":
+            return httpx.Response(401, content=_openai_quota())
+        return httpx.Response(200, json=_ok_body())
+
+    _patch_client_factory(monkeypatch, handler)
+    provider = await _platform_leaf()
+    try:
+        result = await provider.complete(_req("title"))
+        assert result.content == "ok"
+        assert seen == ["Bearer sk-a", "Bearer sk-b"]
+        assert sleeps == []
+        exhausted = get_pool_state_store().get(_A)
+        assert exhausted is not None
+        assert exhausted.status == "exhausted"
+        picked = platform_llm_credentials()
+        assert picked is not None
+        assert picked.api_key == "sk-b"
+    finally:
+        await provider.close()
+
+
 async def test_complete_pre_commit_creditserror_failsover(monkeypatch):
     _pool()
     seen: list[str] = []

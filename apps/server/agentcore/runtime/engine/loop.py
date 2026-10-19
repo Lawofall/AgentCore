@@ -1,6 +1,6 @@
 """ReAct main loop: turn control, LLM rounds, tool execution.
 
-Wind-down / delivery-idle / timeout-grace live in ``loop_wind_down``; captain
+Wind-down / timeout-grace live in ``loop_wind_down``; captain
 live-mirror (G4) in ``loop_mirror``; structured-reply salvage in ``loop_salvage``.
 Public import path stays this module (``react_loop``, ``ReactLoopOut``,
 ``CaptainLoopMirror``, ``current_captain_loop``, ``sync_captain_loop_mirror``).
@@ -1028,13 +1028,6 @@ async def react_loop(
                         directive = tool_round.directive
                         final_content = tool_round.final_content
                         total_usage = tool_round.total_usage
-                        # Delivery-idle tool narrow is retired (inject no longer latches).
-                        if (
-                            role == "worker"
-                            and controller is not None
-                            and controller.take_delivery_idle_narrow_apply()
-                        ):
-                            wind_down.apply_delivery_idle_narrow()
 
             applied = await apply_loop_directive(
                 directive=directive,
@@ -1112,13 +1105,6 @@ async def react_loop(
                 _ensure_assistant_so_far(
                     messages, applied.final_content or final_content
                 )
-            # Delivery-idle tool narrow is retired (inject no longer latches).
-            if (
-                role == "worker"
-                and controller is not None
-                and controller.take_delivery_idle_narrow_apply()
-            ):
-                wind_down.apply_delivery_idle_narrow()
             # Close the post-TIMEOUT grace round so the next entry force-cancels.
             if role == "worker" and run_id:
                 from agentcore.runtime.runs.timeout_hard import (

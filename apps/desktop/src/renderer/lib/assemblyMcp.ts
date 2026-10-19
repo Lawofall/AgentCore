@@ -1,10 +1,15 @@
-import { useConversations } from "@/hooks/useConversations";
+import {
+  patchConversationCache,
+  useConversations,
+} from "@/hooks/useConversations";
 import { useLlmModelProfiles } from "@/hooks/useLlmModelProfiles";
 import { llmModelProfileKeys } from "@/lib/queryKeys";
 import { uiGet, uiSet } from "@/lib/uiStorage";
+import { setConversationModelProfile } from "@/services/conversations";
 import {
   type LlmModelProfileListResponse,
   type LlmModelProfileView,
+  rememberAssemblySelection,
   resolveDefaultProfile,
   setDefaultLlmModelProfile,
   updateLlmModelProfile,
@@ -108,7 +113,7 @@ export function AssemblyMcpBridge() {
   return null;
 }
 
-/** Conversation's assembly when it is a real row; otherwise the star. */
+/** Conversation's assembly when it is a real row; otherwise the silent fallback. */
 export function useAssemblyPlugController() {
   const profiles = useLlmModelProfiles();
   const conversationId = useConversationStore((s) => s.currentConversationId);
@@ -117,15 +122,18 @@ export function useAssemblyPlugController() {
 
   const targetId = useMemo(() => {
     const rows = profiles.data?.data ?? [];
-    const userRow = (id: string | null | undefined) =>
-      rows.find((row) => row.id === id && row.kind !== "system");
+    const liveRow = (id: string | null | undefined) =>
+      rows.find(
+        (row) =>
+          row.id === id && (row.kind === "user" || row.kind === "system"),
+      );
     const pinned = conversations.find(
       (row) => row.id === conversationId,
     )?.assemblyId;
     return (
-      userRow(pinned)?.id ??
-      userRow(resolveDefaultProfile(profiles.data)?.id)?.id ??
-      userRow(profiles.data?.default_assembly_id)?.id ??
+      liveRow(pinned)?.id ??
+      liveRow(resolveDefaultProfile(profiles.data)?.id)?.id ??
+      liveRow(profiles.data?.default_assembly_id)?.id ??
       null
     );
   }, [profiles.data, conversations, conversationId]);
@@ -138,12 +146,26 @@ export function useAssemblyPlugController() {
   const toggle = async (serverId: string, on: boolean) => {
     if (!targetId || !profiles.data) return;
     const row = profiles.data.data.find((item) => item.id === targetId);
+    if (row?.kind === "system") return;
     const next = new Set(row?.enabled_mcp_server_ids ?? []);
     if (on) next.add(serverId);
     else next.delete(serverId);
     const updated = await updateLlmModelProfile(targetId, {
       enabled_mcp_server_ids: [...next],
     });
+    if (updated.id !== targetId) {
+      if (conversationId) {
+        const saved = await setConversationModelProfile(
+          conversationId,
+          updated.id,
+        );
+        patchConversationCache(conversationId, {
+          assemblyId: saved.assemblyId ?? updated.id,
+        });
+      } else {
+        await rememberAssemblySelection(updated.id);
+      }
+    }
     const rows = profiles.data.data.map((item) =>
       item.id === updated.id ? updated : item,
     );
@@ -151,5 +173,8 @@ export function useAssemblyPlugController() {
     await queryClient.invalidateQueries({ queryKey: llmModelProfileKeys.list });
   };
 
-  return { targetId, enabledIds, toggle };
+  const locked =
+    profiles.data?.data.find((item) => item.id === targetId)?.kind === "system";
+
+  return { targetId, enabledIds, toggle, locked };
 }

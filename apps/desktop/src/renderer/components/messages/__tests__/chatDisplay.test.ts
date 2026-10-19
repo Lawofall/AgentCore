@@ -12,6 +12,7 @@ import {
   canOfferRecall,
   chatCircleAvatarUrl,
   chatDisplayName,
+  chatHeaderSubtitle,
   filterMentionsInContent,
   findImMentionDraft,
   findOfficialChatId,
@@ -85,6 +86,48 @@ describe("chatDisplayName", () => {
         }),
       ),
     ).toBe("Alice");
+  });
+});
+
+describe("chatHeaderSubtitle", () => {
+  const peer = {
+    id: "u1",
+    username: "alice",
+    display_name: "Alice",
+    online: true,
+    is_admin: false,
+    group_role: "member" as const,
+    muted_by_admin: false,
+  };
+
+  it("shows roster size for a group, not a live headcount", () => {
+    expect(
+      chatHeaderSubtitle(
+        chat({ id: "g1", type: "group", title: "内测群" }),
+        12,
+      ),
+    ).toBe("12 名成员");
+  });
+
+  it("hides the group line until the roster has loaded", () => {
+    expect(
+      chatHeaderSubtitle(chat({ id: "g1", type: "group", title: "内测群" }), 0),
+    ).toBeNull();
+  });
+
+  it("keeps dm presence and the official label", () => {
+    expect(chatHeaderSubtitle(chat({ id: "d1", type: "dm", peer }), 0)).toBe(
+      "在线",
+    );
+    expect(
+      chatHeaderSubtitle(
+        chat({ id: "d2", type: "dm", peer: { ...peer, online: false } }),
+        0,
+      ),
+    ).toBe("离线");
+    expect(chatHeaderSubtitle(chat({ id: "o1", type: "official" }), 0)).toBe(
+      "官方广播",
+    );
   });
 });
 

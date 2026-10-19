@@ -26,7 +26,6 @@ from agentcore.db.errors import is_schema_error
 from agentcore.db.models import Conversation
 from agentcore.db.repositories import (
     ConversationRepository,
-    DocShareRepository,
     FolderRepository,
     HandoffJobRepository,
 )
@@ -194,9 +193,6 @@ async def run_retention_sweep() -> dict[str, int]:
                     archived_by_folder_delete=False,
                     updated_at=Conversation.updated_at,
                 )
-            )
-            await DocShareRepository(session).revoke_all_for_folder_ids(
-                [folder.id], commit=False
             )
             await FolderRepository(session).hard_delete(folder.id)
         purged_folders += 1

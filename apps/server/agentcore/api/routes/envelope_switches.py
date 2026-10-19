@@ -83,11 +83,16 @@ async def put_account_envelope_switches(
     from agentcore.llm.model_profiles import LlmModelProfileService
 
     omitted = list(normalize_omitted_projections(body.omitted))
-    aid = await LlmModelProfileService(users._session).snapshot_default_profile_id(
-        user.user_id
-    )
+    svc = LlmModelProfileService(users._session)
+    aid = await svc.snapshot_default_profile_id(user.user_id)
     if not aid:
         raise ValidationError("还没有可写入的装配")
+    from agentcore.llm.model_profiles import is_system_profile_id
+
+    if is_system_profile_id(aid):
+        from agentcore.assembly.recipes import OFFICIAL_READONLY
+
+        raise ValidationError(OFFICIAL_READONLY)
     await users.set_omitted_projections(user.user_id, omitted)
     return _view(omitted)
 

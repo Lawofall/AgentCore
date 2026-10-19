@@ -1,5 +1,6 @@
 import type { HostOpInput, HostOpResult } from "@shared/host-contract";
 import { hostApps } from "./apps";
+import { hostGui } from "./gui";
 import { hostInfo, hostPing } from "./info";
 import { hostNetworkSummary } from "./network";
 import { hostPower } from "./power";
@@ -35,6 +36,11 @@ export async function runHostOp(input: HostOpInput): Promise<HostOpResult> {
         rootId: typeof args.root_id === "string" ? args.root_id : undefined,
       });
     }
+    case "host_gui_attach":
+    case "host_gui_snapshot":
+    case "host_gui_click":
+    case "host_gui_type":
+      return hostGui(op, args);
     default:
       return err(`unknown host op: ${op}`);
   }

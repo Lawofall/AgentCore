@@ -65,6 +65,7 @@ async def assemble_ceo_turn(
     folder_id: str | None,
     approvals_enabled: bool,
     permission_axes: WorkspaceBoundary | None,
+    prefer_delegate: bool | None = None,
     profiles: TurnProfiles,
     captain_run_id: str,
     message_id: str,
@@ -106,6 +107,7 @@ async def assemble_ceo_turn(
             folder_id=folder_id,
             approvals_enabled=approvals_enabled,
             permission_axes=permission_axes,
+            prefer_delegate=prefer_delegate,
             profiles=profiles,
             captain_run_id=captain_run_id,
             message_id=message_id,
@@ -135,6 +137,7 @@ async def _assemble_ceo_wired(
     folder_id: str | None,
     approvals_enabled: bool,
     permission_axes: WorkspaceBoundary | None,
+    prefer_delegate: bool | None,
     profiles: TurnProfiles,
     captain_run_id: str,
     message_id: str,
@@ -208,6 +211,7 @@ async def _assemble_ceo_wired(
 
     # ChannelProfile is orthogonal to workspace location (no local lift).
     channel = resolve_channel_profile(x_client_platform).for_turn(member_turn=prepared.member_turn)
+    prefer_delegate = bool(prefer_delegate)
     delegate_tool, debate_tool, chat_tools = run_mod._assemble_ceo_toolset(
         llm=prepared.llm,
         sink=sink,
@@ -235,6 +239,7 @@ async def _assemble_ceo_wired(
         advertise_bind_local_folder=checkpoint_enabled and channel.can_bind_folder,
         desktop_online=channel.desktop_online,
         worker_envelope=prepared.worker_envelope,
+        prefer_delegate=prefer_delegate,
     )
     from agentcore.runtime.resolve.prepare import _wire_conversation_log_tools
     from agentcore.tools.ceo_toolset import wire_ceo_consult
@@ -298,7 +303,6 @@ async def _assemble_ceo_wired(
             conversation_edits=conversation_edits,
             attachment_material=attachment_material_scene(prepared.attachment_context),
             attachment_context=prepared.attachment_context,
-            table_context=prepared.table_context,
         ),
         history,
     )

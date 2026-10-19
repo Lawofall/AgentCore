@@ -766,6 +766,50 @@ describe("streamConversationViaSidecar", () => {
     );
   });
 
+  it("forwards conversation delegateMode on startTurn", async () => {
+    getConversationsMock.mockReturnValue([
+      { id: "c1", delegateMode: true } as never,
+    ]);
+    seedOriginalUserBubble("c1", "u-opt", "你好");
+    startTurnMock.mockResolvedValue(turnResult());
+
+    await streamConversationViaSidecar({
+      conversationId: "c1",
+      rootId: "r1",
+      content: "你好",
+      optimisticUserId: "u-opt",
+      history: [],
+    });
+
+    expect(startTurnMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        session: expect.objectContaining({ delegateMode: true }),
+      }),
+    );
+  });
+
+  it("forwards delegateMode false when 统筹 is off", async () => {
+    getConversationsMock.mockReturnValue([
+      { id: "c1", delegateMode: false } as never,
+    ]);
+    seedOriginalUserBubble("c1", "u-opt", "你好");
+    startTurnMock.mockResolvedValue(turnResult());
+
+    await streamConversationViaSidecar({
+      conversationId: "c1",
+      rootId: "r1",
+      content: "你好",
+      optimisticUserId: "u-opt",
+      history: [],
+    });
+
+    expect(startTurnMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        session: expect.objectContaining({ delegateMode: false }),
+      }),
+    );
+  });
+
   it("forwards conversation.folderId on startTurn when the chat belongs to a project", async () => {
     getConversationsMock.mockReturnValue([
       { id: "c1", folderId: "fold-proj-1" } as never,
@@ -782,7 +826,9 @@ describe("streamConversationViaSidecar", () => {
     });
 
     expect(startTurnMock).toHaveBeenCalledWith(
-      expect.objectContaining({ folderId: "fold-proj-1" }),
+      expect.objectContaining({
+        session: expect.objectContaining({ folderId: "fold-proj-1" }),
+      }),
     );
   });
 
@@ -803,9 +849,11 @@ describe("streamConversationViaSidecar", () => {
 
     expect(startTurnMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        folderId: null,
-        localRootId: null,
-        localSubpath: null,
+        session: expect.objectContaining({
+          folderId: null,
+          localRootId: null,
+          localSubpath: null,
+        }),
       }),
     );
   });
@@ -837,9 +885,11 @@ describe("streamConversationViaSidecar", () => {
 
     expect(startTurnMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        folderId: "fold-local-1",
-        localRootId: "root-abc",
-        localSubpath: "apps/web",
+        session: expect.objectContaining({
+          folderId: "fold-local-1",
+          localRootId: "root-abc",
+          localSubpath: "apps/web",
+        }),
       }),
     );
   });
@@ -870,9 +920,11 @@ describe("streamConversationViaSidecar", () => {
 
     expect(startTurnMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        folderId: "fold-cloud-1",
-        localRootId: null,
-        localSubpath: null,
+        session: expect.objectContaining({
+          folderId: "fold-cloud-1",
+          localRootId: null,
+          localSubpath: null,
+        }),
       }),
     );
   });
@@ -1278,6 +1330,22 @@ describe("streamConversationViaSidecar", () => {
 });
 
 describe("resumeConversationViaSidecar", () => {
+  it("forwards conversation delegateMode on resume", async () => {
+    getConversationsMock.mockReturnValue([
+      { id: "c1", delegateMode: true } as never,
+    ]);
+    seedOriginalUserBubble("c1", "u-orig", "原始问题");
+    resumeMock.mockResolvedValue(turnResult());
+
+    await resumeConversationViaSidecar(baseRequest);
+
+    expect(resumeMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        session: expect.objectContaining({ delegateMode: true }),
+      }),
+    );
+  });
+
   it("mints inference with conversationId on resume", async () => {
     seedOriginalUserBubble("c1", "u-orig", "原始问题");
     resumeMock.mockResolvedValue(turnResult());
@@ -1462,9 +1530,11 @@ describe("resumeConversationViaSidecar", () => {
 
     expect(resumeMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        folderId: "fold-local-1",
-        localRootId: "root-abc",
-        localSubpath: "",
+        session: expect.objectContaining({
+          folderId: "fold-local-1",
+          localRootId: "root-abc",
+          localSubpath: "",
+        }),
       }),
     );
   });
@@ -1485,9 +1555,11 @@ describe("resumeConversationViaSidecar", () => {
 
     expect(resumeMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        folderId: null,
-        localRootId: null,
-        localSubpath: null,
+        session: expect.objectContaining({
+          folderId: null,
+          localRootId: null,
+          localSubpath: null,
+        }),
       }),
     );
   });

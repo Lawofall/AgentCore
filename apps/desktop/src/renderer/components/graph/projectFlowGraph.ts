@@ -5,9 +5,9 @@
 import type { InjectGraphOverlay } from "@/lib/causalInject";
 import {
   estimateTokens,
-  formatDisplayCost,
+  formatCostBill,
   headText,
-  pickCostMoney,
+  sumSplitCosts,
   tailText,
 } from "@/lib/format";
 import {
@@ -354,18 +354,8 @@ export function projectFlowNodes({
     const durationMs =
       overlay.length > 0 ? sumDurationMs(roundRuns) : run.durationMs;
     // 轮节点聚合口径与 durationMs 一致：成本 / token 计入折进的质询作答。
-    // BYOK：total 已是产品名义 ¥；遗留 USD 估算仍走 pickCostMoney 的 ≈$。face 不显钱。
-    // 无 FX：折进的 run 同凭据来源 → 同币种，按首个记名。
-    let costNano = 0;
-    let costEstimated = false;
-    let costCurrency: string | null = null;
-    for (const r of roundRuns) {
-      const m = pickCostMoney(r.cost);
-      if (!m || m.nano <= 0) continue;
-      costNano += m.nano;
-      if (m.estimated) costEstimated = true;
-      costCurrency ??= m.currency;
-    }
+    // 平台积分、BYOK ¥；遗留 USD 仍 ≈$。face 不显钱，peek 用 costText。
+    const roundCost = sumSplitCosts(roundRuns.map((r) => r.cost));
     const realTokens = roundRuns.reduce(
       (n, r) => n + (r.usage ? r.usage.input + r.usage.output : 0),
       0,
@@ -435,10 +425,7 @@ export function projectFlowNodes({
       // 进行中 live 计时锚点：取当前在跑的 beat（辩论折叠轮取 faceRun），回退轮根。
       startedAt: faceRun.startedAt ?? run.startedAt,
       realTokens,
-      costText:
-        costNano > 0
-          ? formatDisplayCost(costNano, costEstimated, costCurrency)
-          : undefined,
+      costText: formatCostBill(roundCost.billed, roundCost.extra) ?? undefined,
       handleDirection,
       isSubtask,
       isRevision: isContinuation,

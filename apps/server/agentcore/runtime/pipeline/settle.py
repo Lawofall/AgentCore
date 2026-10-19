@@ -91,7 +91,6 @@ async def settle_successful_turn(
     debate_tool: Any,
     profile: Any,
     citations: list[dict],
-    vision_cost_sink: list,
     sink: EventSink,
     fact_log: TurnFactLog,
     audit_recorder: Any,
@@ -157,9 +156,6 @@ async def settle_successful_turn(
         # 辩论：主持人一行 + 每个辩手每轮一行（含 continue_run 续写），各自 parented
         # 到上级（辩手→主持人、主持人→captain），与 delegate 同形折账。
         *(asdict(r) for r in debate_tool.run_ledger),
-        # Vision sub-calls (historical ``role=vision`` rows). Empty unless a
-        # retired eye billed; native images ride the main model.
-        *(asdict(r) for r in vision_cost_sink),
     ]
     turn_cost = aggregate_cost(cost_runs)
 
@@ -300,7 +296,6 @@ async def salvage_failed_captain(
     message_id: str,
     captain_run_id: str,
     captain_state: Any,
-    vision_cost_sink: list,
     sink: EventSink,
     audit_recorder: Any,
     roster_writer: Any,
@@ -359,16 +354,11 @@ async def salvage_failed_captain(
     # back even on error — _persist_turn_result writes cost_runs independently
     # of whether any assistant text landed. Skip when nothing metered (no
     # usage → no row), so a pre-LLM crash stays free.
-    cost_runs = [
-        *(
-            [asdict(captain_run_cost_from_state(captain_run_id, captain_state))]
-            if captain_state.usage
-            else []
-        ),
-        # A vision sub-call may have billed before the captain died:
-        # carry those vision rows so the spend isn't lost on error.
-        *(asdict(r) for r in vision_cost_sink),
-    ]
+    cost_runs = (
+        [asdict(captain_run_cost_from_state(captain_run_id, captain_state))]
+        if captain_state.usage
+        else []
+    )
     await audit_recorder.flush()
     if roster_writer is not None:
         await roster_writer.flush()

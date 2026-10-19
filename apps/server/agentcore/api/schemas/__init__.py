@@ -90,6 +90,7 @@ from .conversations import (
     AutoTitleResponse,
     ContextGapModel,
     ConversationListResponse,
+    ConversationModelOverride,
     ConversationSummary,
     CreateConversationRequest,
     CreateFolderRequest,
@@ -126,14 +127,6 @@ from .demo_tape import (
     DemoTapeSummary,
 )
 from .devices import DeviceListResponse, DeviceRegistration, DeviceSummary
-from .docs import (
-    CreateDocRequest,
-    DocBodyWriteRequest,
-    DocDetail,
-    DocSummary,
-    DocWriteResult,
-    UpdateDocRequest,
-)
 from .files import RewriteRequest, RewriteResponse
 from .git_credentials import (
     GitCredentialView,
@@ -161,6 +154,15 @@ from .llm_provider import (
     LlmProvidersResponse,
     LlmProviderView,
     UpdateLlmProviderRequest,
+)
+from .mcp_servers import (
+    CreateMcpServerRequest,
+    McpOAuthStartRequest,
+    McpOAuthStartResponse,
+    McpServerListResponse,
+    McpServerTestResponse,
+    McpServerView,
+    UpdateMcpServerRequest,
 )
 from .messages import (
     AbortLocalTurnRequest,
@@ -253,12 +255,19 @@ from .messaging import (
     UserSearchResult,
 )
 from .model_catalog import (
+    ComposerModelKnobs,
+    HiddenModelRefsUpdate,
+    HiddenModelRefsView,
     ModelCatalogCurrent,
     ModelCatalogItem,
     ModelCatalogResponse,
+    ModelDisplayNameUpdate,
+    ModelDisplayNameView,
     ModelPriceCard,
     ModelReasoningEffort,
     ModelUnavailableReason,
+    VisionAcceptUpdate,
+    VisionAcceptView,
 )
 from .notices import (
     ActiveNotice,
@@ -269,16 +278,15 @@ from .notices import (
     UpdateNoticeRequest,
 )
 from .search import SearchItem, SearchResponse, SearchSection
-from .sharing import CreateShareRequest, ShareListResponse, ShareSummary
-from .tables import (
-    CreateTableRequest,
-    TableConversationResponse,
-    TableDetail,
-    TableOpsRequest,
-    TableOpsResult,
-    TableSummary,
-    UpdateTableRequest,
+from .seats import (
+    CreateRedemptionCodesRequest,
+    CreateRedemptionCodesResponse,
+    RedeemSeatRequest,
+    RedemptionCodeLine,
+    RedemptionCodeListResponse,
+    SeatStatus,
 )
+from .sharing import CreateShareRequest, ShareListResponse, ShareSummary
 from .tools import (
     CapabilitiesResponse,
     CapabilityGuidelines,
@@ -292,7 +300,11 @@ from .usage import (
     DailyCost,
     ModelCostLine,
     QuotaStatus,
+    SearchQuotaStatus,
     TurnCost,
+    UsageActivityLine,
+    UsageActivityPage,
+    UsageActivityWindow,
     UsageBreakdown,
     UsageSummary,
     UsageWindow,
@@ -399,6 +411,7 @@ __all__ = [
     "CreateConversationRequest",
     "DuplicateConversationRequest",
     "ContextGapModel",
+    "ConversationModelOverride",
     "ConversationSummary",
     "conversation_summary_from_orm",
     "ConversationListResponse",
@@ -420,20 +433,6 @@ __all__ = [
     "DeletedFolderListResponse",
     "TrashEmptyResponse",
     "GroupedConversationsResponse",
-    "CreateTableRequest",
-    "UpdateTableRequest",
-    "TableSummary",
-    "TableDetail",
-    "TableOpsRequest",
-    "TableOpsResult",
-    "TableConversationResponse",
-    # docs (creation-tool 文档)
-    "CreateDocRequest",
-    "UpdateDocRequest",
-    "DocSummary",
-    "DocDetail",
-    "DocBodyWriteRequest",
-    "DocWriteResult",
     # 浏览器输入注入
     "MouseInputEvent",
     "KeyInputEvent",
@@ -455,6 +454,13 @@ __all__ = [
     # git credentials (G3 云私仓 PAT)
     "UpsertGitCredentialRequest",
     "GitCredentialView",
+    "CreateMcpServerRequest",
+    "UpdateMcpServerRequest",
+    "McpServerView",
+    "McpServerListResponse",
+    "McpServerTestResponse",
+    "McpOAuthStartRequest",
+    "McpOAuthStartResponse",
     # llm model profiles (模型组合)
     "ModelProfileSlot",
     "LlmModelProfileView",
@@ -468,7 +474,14 @@ __all__ = [
     "ModelReasoningEffort",
     "ModelCatalogCurrent",
     "ModelCatalogItem",
+    "ComposerModelKnobs",
     "ModelCatalogResponse",
+    "HiddenModelRefsUpdate",
+    "HiddenModelRefsView",
+    "ModelDisplayNameUpdate",
+    "ModelDisplayNameView",
+    "VisionAcceptUpdate",
+    "VisionAcceptView",
     # workspaces
     "BindLocalWorkspaceRequest",
     "WorkspaceBindingResponse",
@@ -595,9 +608,19 @@ __all__ = [
     "ConversationCost",
     "UsageWindow",
     "QuotaStatus",
+    "SearchQuotaStatus",
     "ModelCostLine",
     "DailyCost",
+    "UsageActivityLine",
+    "UsageActivityPage",
+    "UsageActivityWindow",
     "UsageSummary",
+    "SeatStatus",
+    "RedeemSeatRequest",
+    "CreateRedemptionCodesRequest",
+    "CreateRedemptionCodesResponse",
+    "RedemptionCodeLine",
+    "RedemptionCodeListResponse",
     # messaging (IM)
     "PersonPublic",
     "UserSearchResult",

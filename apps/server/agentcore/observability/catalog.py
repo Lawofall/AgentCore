@@ -85,10 +85,6 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='approval.turn_grant_refused'),
     EventSpec(name='ask_user.list_arg_rejected'),
     EventSpec(name='ask_user.not_exclusive'),
-    EventSpec(
-        name='ask_user.option_label_rejected',
-        description='历史兼容：曾拒选项名含「（推荐）」等倾向标记；现倾向写入名末，不再发此事件',
-    ),
     EventSpec(name='attach.cursor_replay'),
     EventSpec(name='attachment.binary_missing_workspace_path'),
     EventSpec(name='attachment.conversation_cloud_failed'),
@@ -107,10 +103,6 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='attachment.preparse_scan_note_write_failed'),
     EventSpec(name='attachment.preparse_scanned'),
     EventSpec(name='attachment.resident_missing'),
-    EventSpec(
-        name='attachment.vision_billing_failed',
-        description='历史兼容：曾为附件视觉计费失败；现并入 read 路径，不再发此事件',
-    ),
     EventSpec(name='attention.signal_failed'),
     EventSpec(
         name='attention.signalled',
@@ -211,40 +203,6 @@ EVENTS: list[EventSpec] = [
         },
     ),
     EventSpec(
-        name='board.op_timeout',
-        description='历史兼容：曾在白板 AI 操作超时发出；白板 AI 工具面已卸，不再发此事件',
-    ),
-    EventSpec(
-        name='board.ops_apply',
-        description='历史兼容：曾在白板 AI 应用操作时发出；白板 AI 工具面已卸，不再发此事件',
-    ),
-    EventSpec(
-        name='board.read',
-        description='历史兼容：曾在白板 AI 读盘时发出；白板 AI 工具面已卸，不再发此事件',
-    ),
-    EventSpec(
-        name='board.read_billing_failed',
-        description='历史兼容：曾在白板 AI 读盘计费失败时发出；白板 AI 工具面已卸，不再发此事件',
-    ),
-    EventSpec(
-        name='board.read_timeout',
-        description='历史兼容：曾在白板 AI 读盘超时发出；白板 AI 工具面已卸，不再发此事件',
-    ),
-    EventSpec(
-        name='board.read_vision_failed',
-        description='历史兼容：曾在白板 AI 视觉读失败时发出；白板 AI 工具面已卸，不再发此事件',
-    ),
-    EventSpec(
-        name='browser.cgroup_unwritable_ignore',
-        description=(
-            '历史兼容：曾在探测 subtree_control 只读后自动加 --ignore-cgroups；现形状 B 固定 ignore'
-            '-cgroups，不再发此事件'
-        ),
-        fields={
-            'reason': FieldType('str'),
-        },
-    ),
-    EventSpec(
         name='browser.close_all_timeout',
         description='停机 close_all 超过墙钟上限，放弃等待交重启/reaper',
         fields={
@@ -260,18 +218,6 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='browser.keyframe_write_failed'),
     EventSpec(name='browser.live_attached'),
     EventSpec(name='browser.live_detached'),
-    EventSpec(
-        name='browser.netns_health_failed',
-        description='历史兼容：曾为独立 browser netns 装配门失败；现跟 desk 健康，不再发此事件',
-    ),
-    EventSpec(
-        name='browser.netns_health_ok',
-        description='历史兼容：曾为独立 browser netns 装配门成功；现跟 desk 健康，不再发此事件',
-    ),
-    EventSpec(
-        name='browser.netns_setup',
-        description='历史兼容：曾为 family=browser 会话 netns；现 Chromium exec 进桌，不再发此事件',
-    ),
     EventSpec(name='browser.observer_gone_failed'),
     EventSpec(name='browser.observer_ready_failed'),
     EventSpec(name='browser.proxy_decision'),
@@ -307,18 +253,6 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='byok.decrypt_failed'),
     EventSpec(name='byok.key_malformed'),
     EventSpec(name='ceo.tool_surface.promoted'),
-    EventSpec(
-        name='ceo.unclosed_cue',
-        description=(
-            '历史兼容：曾在提示装了上轮交付缺口时记账；跨轮缺口易变尾已撤，不再发此事件。delegated '
-            '/ prior_gaps / recent_graph 字段保留兼容旧 JSONL'
-        ),
-        fields={
-            'delegated': FieldType('bool'),
-            'prior_gaps': FieldType('bool'),
-            'recent_graph': FieldType('bool'),
-        },
-    ),
     EventSpec(name='chat.active_meter_load_failed'),
     EventSpec(name='chat.admin_mute'),
     EventSpec(name='chat.announced'),
@@ -584,25 +518,9 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='consult.name_shadowed'),
     EventSpec(name='consult.reuse'),
     EventSpec(name='consult.rule_fetch_failed'),
-    EventSpec(
-        name='consult.skill_replacements_load_failed',
-        description='历史兼容：换用 overlay 已撤，不再 emit',
-    ),
-    EventSpec(
-        name='consult.skill_replacements_snapshot_failed',
-        description='历史兼容：换用 overlay 已撤，不再 emit',
-    ),
     EventSpec(name='context_cut.committed'),
     EventSpec(name='context_cut.previewed'),
     EventSpec(name='context_cut.undone'),
-    EventSpec(
-        name='contract.failed',
-        description='历史兼容：曾作 logger 事件名；现为 RunPhase.FAILED 的 error 字面，不再 emit',
-    ),
-    EventSpec(
-        name='contract.hard_gap_blocked_completion',
-        description='历史兼容：曾因空交/未落盘把节点打成 FAILED；已撤',
-    ),
     EventSpec(name='contract.retry'),
     EventSpec(name='contract.retry_skipped_budget'),
     EventSpec(name='contract.write_pass'),
@@ -682,10 +600,6 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='coordination.file_ownership_snapshot_failed'),
     EventSpec(name='coordination.idle_patrol_deferred'),
     EventSpec(name='coordination.idle_yield_held_inflight'),
-    EventSpec(
-        name='coordination.idle_yield_to_captain',
-        description='历史兼容：曾在有在飞工作时 idle-yield 回 CEO；现改为 held_inflight',
-    ),
     EventSpec(name='coordination.injected'),
     EventSpec(name='coordination.live_plan_restore_failed'),
     EventSpec(name='coordination.live_plan_snapshot_failed'),
@@ -714,10 +628,6 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='coordination.settle_stale_attach_forcing'),
     EventSpec(name='coordination.settled_via_replaced'),
     EventSpec(name='coordination.sibling_role_rejected'),
-    EventSpec(
-        name='coordination.synthesis_updated',
-        description='历史兼容：曾在 CEO 写队长节点过程稿时发出；两支写笔已收，不再发此事件',
-    ),
     EventSpec(name='coordination.team_done_shortcircuit'),
     EventSpec(name='coordination.terminal_posted'),
     EventSpec(name='coordination.terminal_unsettled'),
@@ -1011,19 +921,6 @@ EVENTS: list[EventSpec] = [
     ),
     EventSpec(name='delegate.delivery_status_failed'),
     EventSpec(name='delegate.empty_rejected'),
-    EventSpec(
-        name='delegate.force_unknown_gate',
-        description=(
-            '历史兼容：曾解析 delegate/replan force 闸名数组时忽略未知闸；force 跳闸已撤，不再发此'
-            '事件'
-        ),
-    ),
-    EventSpec(
-        name='delegate.force_unparsable',
-        description=(
-            '历史兼容：曾解析 delegate/replan force 入参失败时发出；force 跳闸已撤，不再发此事件'
-        ),
-    ),
     EventSpec(name='delegate.graph_append_latest'),
     EventSpec(name='delegate.graph_append_skip_node'),
     EventSpec(name='delegate.graph_prev'),
@@ -1071,10 +968,6 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='delegate.target_desktop_applied'),
     EventSpec(name='delegate.target_folder_cloud_failed'),
     EventSpec(name='delegate.target_folder_db_unreachable'),
-    EventSpec(
-        name='delegate.team_synthesis_preview_failed',
-        description='历史兼容：曾在引擎旁路拼团队进展预览失败时发出；预览通道已收，不再发此事件',
-    ),
     EventSpec(name='delegate.thrash_note_failed'),
     EventSpec(name='delegate.thrash_rebrand_rejected'),
     EventSpec(name='delegate.turn_auth_dead_rejected'),
@@ -1231,18 +1124,6 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='email.smtp_unconfigured_registration'),
     EventSpec(name='email.unconfigured'),
     EventSpec(
-        name='engine.audit_gate_hard_block',
-        description='历史兼容：曾因审计启发式硬拦收口；拦截已撤，不再发此事件',
-    ),
-    EventSpec(
-        name='engine.audit_gate_nudge',
-        description='历史兼容：曾因审计启发式软提醒；拦截已撤，不再发此事件',
-    ),
-    EventSpec(
-        name='engine.availability_status_nudge',
-        description='历史兼容：曾因可用性状态软提醒；拦截已撤，不再发此事件',
-    ),
-    EventSpec(
         name='engine.ceiling_finalize',
         description='收敛治理：硬顶强制收尾（reason=max_rounds 轮预算耗尽 / token_budget）',
         fields={
@@ -1257,12 +1138,11 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='engine.coord_inject'),
     EventSpec(name='engine.coordination_hold_end'),
     EventSpec(name='engine.coordination_listen'),
-    EventSpec(
-        name='engine.debate_gate_nudge',
-        description='历史兼容：曾因辩论收口软提醒；拦截已撤，不再发此事件',
-    ),
     EventSpec(name='engine.degraded'),
-    EventSpec(name='engine.delivery_idle_narrow_apply'),
+    EventSpec(
+        name='engine.delivery_idle_narrow_apply',
+        description='Retired delivery-idle tool-narrow apply; emit site removed.',
+    ),
     EventSpec(
         name='engine.finish_guard_honesty_shadow',
         description=(
@@ -1336,10 +1216,6 @@ EVENTS: list[EventSpec] = [
             'searches': FieldType('int'),
             'used': FieldType('int'),
         },
-    ),
-    EventSpec(
-        name='engine.retrieval_budget_critical',
-        description='历史兼容：曾在检索预算临界注入提示；提示已撤，不再发此事件',
     ),
     EventSpec(name='engine.retrieval_budget_wind_down'),
     EventSpec(name='engine.structured_reply_salvaged'),
@@ -1557,16 +1433,21 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='handoff.cost_ledger_failed'),
     EventSpec(name='handoff.degraded_synth'),
     EventSpec(name='handoff.dispatch_failed'),
-    EventSpec(
-        name='handoff.empty_body_blocked',
-        description='历史兼容：曾因空正文拒收 handoff；实测误伤已撤，不再发此事件',
-    ),
     EventSpec(name='handoff.failed'),
     EventSpec(name='handoff.host_soft_deleted'),
     EventSpec(name='handoff.job_failed'),
     EventSpec(name='handoff.job_succeeded'),
     EventSpec(name='handoff.reclaim_after_apply_failed'),
     EventSpec(name='handoff.snapshot_created'),
+    EventSpec(name='host.gui_empty_tree'),
+    EventSpec(name='host.gui_password_denied'),
+    EventSpec(name='host.gui_ref_stale'),
+    EventSpec(name='host.gui_unattached'),
+    EventSpec(name='host.gui_unsupported'),
+    EventSpec(name='host.gui_user_abort'),
+    EventSpec(name='host.keyframe_decode_failed'),
+    EventSpec(name='host.keyframe_skipped_too_large'),
+    EventSpec(name='host.keyframe_write_failed'),
     EventSpec(
         name='http.db_pool_exhausted',
         description='主库连接池耗尽（快失败 503，非 PG 宕机）',
@@ -1844,8 +1725,6 @@ EVENTS: list[EventSpec] = [
             'scenario': FieldType('str'),
         },
     ),
-    EventSpec(name='llm.sub2api_probe'),
-    EventSpec(name='llm.sub2api_probe_failed'),
     EventSpec(name='llm.temperature_omitted_retry'),
     EventSpec(
         name='llm.tool_surface.limit_exceeded',
@@ -1890,6 +1769,60 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='llm_provider.test.start'),
     EventSpec(name='llm_provider.test.unhandled'),
     EventSpec(name='llm_provider.tested'),
+    EventSpec(
+        name='mcp.oauth_completed',
+        fields={
+            'server_id': FieldType('str'),
+            'user_id': FieldType('str'),
+        },
+    ),
+    EventSpec(
+        name='mcp.oauth_started',
+        fields={
+            'server_id': FieldType('str'),
+            'user_id': FieldType('str'),
+        },
+    ),
+    EventSpec(
+        name='mcp.remote_call',
+        fields={
+            'server_id': FieldType('str'),
+            'tool': FieldType('str'),
+        },
+    ),
+    EventSpec(
+        name='mcp.remote_list_degraded',
+        fields={
+            'detail': FieldType('str'),
+            'duration_ms': FieldType('int'),
+            'failed_servers': FieldType('int'),
+            'server_id': FieldType('str'),
+            'tool_count': FieldType('int'),
+        },
+    ),
+    EventSpec(
+        name='mcp.remote_list_ok',
+        fields={
+            'duration_ms': FieldType('int'),
+            'failed_servers': FieldType('int'),
+            'ready_servers': FieldType('int'),
+            'tool_count': FieldType('int'),
+        },
+    ),
+    EventSpec(
+        name='mcp.server_deleted',
+        fields={
+            'server_id': FieldType('str'),
+            'user_id': FieldType('str'),
+        },
+    ),
+    EventSpec(
+        name='mcp.server_upserted',
+        fields={
+            'server_id': FieldType('str'),
+            'user_id': FieldType('str'),
+        },
+    ),
     EventSpec(name='md_export.exported'),
     EventSpec(name='memory.always_quota_card'),
     EventSpec(name='memory.always_quota_card_failed'),
@@ -1934,20 +1867,6 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='pipeline.resume_rehydrated'),
     EventSpec(name='pipeline.resume_settled'),
     EventSpec(name='pipeline.resume_start'),
-    EventSpec(
-        name='plan_review.ceo_review_done',
-        description='历史兼容：曾在计划复核暂停前跑 LLM 把关成功时发出；把关模块已卸，不再发此事件',
-    ),
-    EventSpec(
-        name='plan_review.ceo_review_failed',
-        description='历史兼容：曾在计划复核 LLM 把关失败时发出；把关模块已卸，不再发此事件',
-    ),
-    EventSpec(
-        name='plan_review.ceo_review_fallback',
-        description=(
-            '历史兼容：曾在计划复核 LLM 把关回落确定性摘要时发出；把关模块已卸，不再发此事件'
-        ),
-    ),
     EventSpec(name='platform.model_credentials_not_object'),
     EventSpec(name='platform.model_credentials_parse_failed'),
     EventSpec(name='platform_catalog.pricing_missing'),
@@ -2102,14 +2021,6 @@ EVENTS: list[EventSpec] = [
         },
     ),
     EventSpec(name='react_loop.missing_turn_model'),
-    EventSpec(
-        name='read_image.read',
-        description='历史兼容：曾为独立 read_image 工具读图；现并入 read，不再发此事件',
-    ),
-    EventSpec(
-        name='read_image.vision_failed',
-        description='历史兼容：曾为独立 read_image 视觉失败；现并入 read，不再发此事件',
-    ),
     EventSpec(name='recover.crash_delegate_ready'),
     EventSpec(name='recover.crash_delegate_rebuild_failed'),
     EventSpec(name='recover.crash_delegate_unwired'),
@@ -2265,10 +2176,6 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='sandbox.exec_env_probe_failed'),
     EventSpec(name='sandbox.health_check_failed'),
     EventSpec(name='sandbox.slot_busy'),
-    EventSpec(
-        name='sandbox.write_back',
-        description='历史兼容：曾为 copy-out 写回计数；云桌 bind 落盘后不再发此事件',
-    ),
     EventSpec(name='sandbox.written_scan_failed'),
     EventSpec(name='sandbox.written_scan_truncated'),
     EventSpec(
@@ -2390,6 +2297,82 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='searxng.canary_ok'),
     EventSpec(name='searxng.reachable'),
     EventSpec(name='searxng.unreachable'),
+    EventSpec(
+        name='seat.code_voided',
+        description='admin 作废一张未使用兑换码',
+        fields={
+            'code_id': FieldType('str'),
+            'sku': FieldType('str'),
+        },
+    ),
+    EventSpec(
+        name='seat.codes_issued',
+        description='admin 批量生成兑换码；明文只在该次响应返回',
+        fields={
+            'actor_id': FieldType('str'),
+            'batch_id': FieldType('str'),
+            'count': FieldType('int'),
+            'sku': FieldType('str'),
+        },
+    ),
+    EventSpec(
+        name='seat.mail_failed',
+        description='席位回执 / 提醒邮件发送失败；兑码本身已提交',
+        fields={
+            'error': FieldType('str'),
+            'purpose': FieldType('str'),
+        },
+    ),
+    EventSpec(
+        name='seat.redeemed',
+        description='付费席位兑码成功。kind = activate / renew / upgrade / defer_downgrade',
+        fields={
+            'code_id': FieldType('str'),
+            'kind': FieldType('str'),
+            'sku': FieldType('str'),
+            'user_id': FieldType('str'),
+        },
+    ),
+    EventSpec(
+        name='seat.reminded',
+        description='到期前 3 天已向登录邮箱发出提醒',
+        fields={
+            'user_id': FieldType('str'),
+        },
+    ),
+    EventSpec(
+        name='seat.sweep_failed',
+        description='本轮到期扫描整体失败，循环继续',
+        fields={
+            'error': FieldType('str'),
+        },
+    ),
+    EventSpec(
+        name='seat.sweep_user_failed',
+        description='到期扫描处理单账号失败，其余账号继续',
+        fields={
+            'error': FieldType('str'),
+            'user_id': FieldType('str'),
+        },
+    ),
+    EventSpec(
+        name='seat.swept',
+        description='本轮到期扫描有实际变更（expired / pending / reminded）',
+        fields={
+            'expired': FieldType('int'),
+            'pending': FieldType('int'),
+            'reminded': FieldType('int'),
+        },
+    ),
+    EventSpec(
+        name='seat.tick',
+        description='到期扫描对单账号执行 apply_pending 或 expire',
+        fields={
+            'kind': FieldType('str'),
+            'plan': FieldType('str'),
+            'user_id': FieldType('str'),
+        },
+    ),
     EventSpec(name='security.cookie_insecure'),
     EventSpec(name='security.cors_wildcard_credentials'),
     EventSpec(name='security.csrf_disabled'),
@@ -2567,46 +2550,6 @@ EVENTS: list[EventSpec] = [
         },
     ),
     EventSpec(
-        name='stage_card.consume_prepared',
-        description='历史兼容：曾在点卡开辩前消费推进卡；入口已下线，不再发此事件',
-    ),
-    EventSpec(
-        name='stage_card.debate_pipeline_failed',
-        description='历史兼容：曾在推进卡直起辩论管道失败时发出；直起管道已删，不再发此事件',
-    ),
-    EventSpec(
-        name='stage_card.emitted',
-        description='历史兼容：曾在调研收尾登记推进卡时发出；新调研不再发卡，不再发此事件',
-    ),
-    EventSpec(
-        name='stage_card.finalize_at_started_failed',
-        description='历史兼容：曾在开辩当时结算推进卡失败时发出；入口已下线，不再发此事件',
-    ),
-    EventSpec(
-        name='stage_card.host_attach_invalid',
-        description='历史兼容：曾在推进卡宿主三元组失效时发出；直起链已删，不再发此事件',
-    ),
-    EventSpec(
-        name='stage_card.host_triple_missing',
-        description='历史兼容：曾在发卡时打不上宿主三元组时发出；不再发卡，不再发此事件',
-    ),
-    EventSpec(
-        name='stage_card.journal_write_failed',
-        description='历史兼容：曾在推进卡落盘失败时发出；不再发卡，不再发此事件',
-    ),
-    EventSpec(
-        name='stage_card.orphaned',
-        description='历史兼容：曾在后续回合给遗留推进卡写 orphan 墓碑；不再盖章，不再发此事件',
-    ),
-    EventSpec(
-        name='stage_card.start_debate_exception_kept_pending',
-        description='历史兼容：曾在点卡开辩异常时保持 pending；入口已下线，不再发此事件',
-    ),
-    EventSpec(
-        name='stage_card.supersede_prior_failed',
-        description='历史兼容：曾在新卡 supersede 旧 pending 失败时发出；不再发卡，不再发此事件',
-    ),
-    EventSpec(
         name='stream_state.retention_failed',
         description='流式在飞快照 TTL 扫表整轮失败',
         fields={
@@ -2640,29 +2583,7 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='suspension.retention_swept'),
     EventSpec(name='suspension.saver_failed'),
     EventSpec(name='suspension.turn_paused_capture_failed'),
-    EventSpec(name='table.csv_ingest_failed'),
-    EventSpec(name='table.csv_ingest_read_failed'),
-    EventSpec(name='table.csv_ingest_skipped'),
-    EventSpec(name='table.csv_ingested'),
-    EventSpec(
-        name='team_preview.list_pending_failed',
-        description='历史兼容：曾在列出待处理开工卡失败时发出；开工卡产品位已拆，不再发此事件',
-    ),
-    EventSpec(
-        name='team_preview.orphaned',
-        description=(
-            '历史兼容：曾在发新开工卡前结算旧 pending 时发出；开工卡产品位已拆，不再发此事件'
-        ),
-    ),
-    EventSpec(
-        name='team_preview.research_first_rejected',
-        description='历史兼容：曾把已退役的先调研续跑选项降级为停止；契约已拒收，不再发此事件',
-    ),
     EventSpec(name='test_run.verify_shared'),
-    EventSpec(
-        name='title.empty_retry',
-        description='历史兼容：完成的空标题曾用同一份请求再采样一次；已撤，空结果交给调用方回退',
-    ),
     EventSpec(name='title.timeout'),
     EventSpec(
         name='tool.args_parse_failed',
@@ -2727,8 +2648,6 @@ EVENTS: list[EventSpec] = [
         },
     ),
     EventSpec(name='tool.web_search_cache_hit'),
-    EventSpec(name='tool.web_search_cloud_fallback'),
-    EventSpec(name='tool.web_search_cloud_fallback_failed'),
     EventSpec(name='tool.web_search_empty'),
     EventSpec(name='tool.web_search_error'),
     EventSpec(name='tool.web_search_negative_cache_hit'),
@@ -2818,10 +2737,6 @@ EVENTS: list[EventSpec] = [
             'evicted_conversation_id': FieldType('str'),
         },
     ),
-    EventSpec(name='vision.reader_built'),
-    EventSpec(name='vision.resolve_for_conversation_failed'),
-    EventSpec(name='vision.retry'),
-    EventSpec(name='vision.timeout_retry'),
     EventSpec(name='wave.bad_topology'),
     EventSpec(name='wave.cancel_cascade_skip'),
     EventSpec(name='wave.hold_inflight_hot_pending'),
@@ -2839,10 +2754,6 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='worker.escalate.coordination_route_failed'),
     EventSpec(name='worker.escalate.emit_failed'),
     EventSpec(name='worker.escalate.settled'),
-    EventSpec(
-        name='worker.escalate_option_label_rejected',
-        description='历史兼容：曾因同一选项名规则拒升级卡；现接受名末「（推荐）」，不再发此事件',
-    ),
     EventSpec(
         name='worker.handoff',
         description='worker 收尾（body_chars=同轮交付正文长）',

@@ -47,6 +47,13 @@ describe("shouldRunGlobalShortcut", () => {
     );
   });
 
+  it("allows zoom chords even in an editable", () => {
+    const input = document.createElement("input");
+    expect(shouldRunGlobalShortcut("zoom-in", input)).toBe(true);
+    expect(shouldRunGlobalShortcut("zoom-out", input)).toBe(true);
+    expect(shouldRunGlobalShortcut("zoom-reset", input)).toBe(true);
+  });
+
   it("blocks navigation / sidebar chords while editing", () => {
     const input = document.createElement("input");
     expect(shouldRunGlobalShortcut("new-conversation", input)).toBe(false);

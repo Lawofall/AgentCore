@@ -21,6 +21,7 @@ import {
 import { useConversationStore } from "@/stores/conversation";
 import { useInteractionStore } from "@/stores/interactions";
 import { type PendingResume, usePausedTurnStore } from "@/stores/pausedTurns";
+import { useUIStore } from "@/stores/ui";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/hooks/useConversations", () => ({
@@ -155,6 +156,7 @@ describe("startTeamActivityNotifications", () => {
       lastResolvedId: null,
     });
     useAiTurnActivityStore.getState().clear();
+    useUIStore.setState({ osNotifications: true });
     window.location.hash = `#/conversations/${OTHER}`;
     stop = startTeamActivityNotifications();
   });
@@ -649,6 +651,20 @@ describe("startTeamActivityNotifications", () => {
     expect(showNativeNotificationMock).toHaveBeenCalledWith("调研", "已完成", {
       conversationId: CID,
     });
+  });
+
+  it("壳不在场但系统通知已关：不走 OS、不叠 toast", () => {
+    isShellPresentMock.mockReturnValue(false);
+    hasNativeNotificationMock.mockReturnValue(true);
+    useUIStore.setState({ osNotifications: false });
+    seedTitle(CID, "调研");
+    applyAiTurnActivity({
+      conversation_id: CID,
+      state: "done",
+      reason: "completed",
+    });
+    expect(allToastMessages()).toEqual([]);
+    expect(showNativeNotificationMock).not.toHaveBeenCalled();
   });
 
   it("壳不在场：别的对话只走系统通知", () => {

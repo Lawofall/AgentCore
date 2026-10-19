@@ -294,7 +294,7 @@ async def user_detail(
     to one account — composed with the account's recent conversation roster (message
     counts batched, no N+1) and its recent turns (each carries ``conversation_id`` to
     drill into 会话复盘). Configured model names come from the account default
-    模型组合 (``main_model`` / ``background_model``; never the API key) + provider
+    模型组合 (``main_model``; never the API key) + provider
     count from ``user_llm_providers``. Per-model stats scan ``cost_calls`` (last 30
     days). Sessions reuse the owner ``AuthService.list_sessions`` shape (read-only).
     Admin cross-user; 404 for an unknown id.
@@ -310,7 +310,6 @@ async def user_detail(
 
     # Account default model slot (names only) + how many providers are configured.
     default_model: str | None = None
-    background_model: str | None = None
     assembly_id = getattr(user, "default_assembly_id", None)
     if assembly_id:
         from agentcore.db.repositories import LlmModelProfileRepository
@@ -320,7 +319,6 @@ async def user_detail(
         )
         if assembly is not None:
             default_model = assembly.main_model
-            background_model = assembly.background_model
     provider_count = await llm_providers.count_for_user(user_id)
 
     today = await cost_repo.aggregate_for_window(user_id=user_id, since=day_start)
@@ -373,7 +371,6 @@ async def user_detail(
     return AdminUserDetail(
         user=_admin_user_response(user),
         default_model=default_model,
-        background_model=background_model,
         provider_count=provider_count,
         today=UsageWindow(
             usage=usage_breakdown(today["usage"]),

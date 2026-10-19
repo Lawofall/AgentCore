@@ -186,6 +186,22 @@ describe("ProcessLane", () => {
     expect(screen.queryByText(/推进/)).toBeNull();
   });
 
+  it("does not render 4-space-padded content as a pre code block", () => {
+    render(
+      <ProcessLane
+        steps={[
+          {
+            kind: "content",
+            text: "    工作区是空的，我会做成单页博客。",
+          },
+        ]}
+      />,
+    );
+    expect(
+      screen.getByText("工作区是空的，我会做成单页博客。").closest("pre"),
+    ).toBeNull();
+  });
+
   it("keeps mid-content when hideContentSteps only omits the trailing answer", () => {
     render(
       <ProcessLane

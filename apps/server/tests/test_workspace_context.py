@@ -22,6 +22,7 @@ from agentcore.runtime.resolve.prompt import (
     render_worker_turn_envelope,
 )
 from agentcore.tools.builtin import build_ceo_tool_registry
+from agentcore.workspace.desk_empty import EMPTY_DESK_FACT
 
 
 def _gaps(ctx: str) -> set[str]:
@@ -136,7 +137,7 @@ def test_channel_profile_for_turn_drops_desktop_for_members():
 
 
 def test_folder_boundary_omits_host_until_computer():
-    """Web and desktop share the folder roster. Host appears only on 这台电脑."""
+    """Web and desktop share the folder roster. Host appears on 这台电脑 and local 完全权限."""
     from agentcore.core.types import WorkspaceBoundary
 
     web_names = {s.name for s in build_ceo_tool_registry(desktop_online=False).list_all()}
@@ -148,6 +149,24 @@ def test_folder_boundary_omits_host_until_computer():
         ).list_all()
     }
     assert "host" in computer
+    full_cloud = {
+        s.name
+        for s in build_ceo_tool_registry(
+            desktop_online=False,
+            permission_axes=WorkspaceBoundary.FULL,
+            backend_location="server",
+        ).list_all()
+    }
+    assert "host" not in full_cloud
+    full_local = {
+        s.name
+        for s in build_ceo_tool_registry(
+            desktop_online=True,
+            permission_axes=WorkspaceBoundary.FULL,
+            backend_location="local",
+        ).list_all()
+    }
+    assert "host" in full_local
 
 
 def test_birth_desk_facts_include_folder_id_without_tool_how():
@@ -264,7 +283,7 @@ def test_empty_desk_adds_operational_root_fact():
         run_enabled=False,
         desk_visibly_empty=True,
     )
-    assert "顶层空" in empty
+    assert EMPTY_DESK_FACT in empty
     assert "`package.json`" not in empty
     assert "mkdir" not in empty
     assert "create_folder" not in empty
@@ -277,7 +296,7 @@ def test_empty_desk_adds_operational_root_fact():
         run_enabled=False,
         desk_visibly_empty=False,
     )
-    assert "顶层空" not in full
+    assert EMPTY_DESK_FACT not in full
     assert "package.json" not in full
 
     unknown = build_workspace_context(
@@ -285,7 +304,7 @@ def test_empty_desk_adds_operational_root_fact():
         desktop_online=True,
         run_enabled=False,
     )
-    assert "可见顶层空" not in unknown
+    assert EMPTY_DESK_FACT not in unknown
 
 
 def test_cloud_folder_desk_identity_is_not_scratch():
@@ -330,7 +349,7 @@ def test_folder_does_not_list_host_as_a_gap():
         permission_axes=WorkspaceBoundary.FOLDER,
     )
     assert "host" not in _gaps(out)
-    assert "边界：这个文件夹" in out
+    assert "边界：本文件夹" in out
     assert "客户端：桌面已连接" in out
     assert "客户端：未连接" not in out
     computer = build_workspace_context(

@@ -17,6 +17,10 @@ vi.mock("@/services/externalGrants", () => ({
   invalidateExternalGrants: vi.fn(),
 }));
 
+vi.mock("@/services/permissionAxes", () => ({
+  peekConversationBoundary: vi.fn(async () => undefined),
+}));
+
 vi.mock("@/services/api", () => ({
   ApiError: class ApiError extends Error {
     status: number;

@@ -41,6 +41,7 @@ def _run(
 
 async def test_usage_endpoints_require_auth(client):
     assert (await client.get("/v1/usage/summary")).status_code == 401
+    assert (await client.get("/v1/usage/activity")).status_code == 401
     assert (await client.get(f"/v1/messages/{new_id()}/cost")).status_code == 401
     assert (await client.get(f"/v1/conversations/{new_id()}/cost")).status_code == 401
 
@@ -163,11 +164,14 @@ async def test_usage_summary_windows_and_quota(client, session_factory):
     assert body["month"]["cost"]["total"] == 2500
     assert body["today"]["requests"] == 1
     assert body["today"]["usage"]["input"] == 100
-    # The 7-day trend is a fixed-length series; today's spend is its last point.
+    # The 30-day trend is a fixed-length series; today's spend is its last point.
     trend = body["recent_daily_cost"]
-    assert len(trend) == 7
+    assert len(trend) == 30
     assert trend[-1]["cost_total"] == 2500
     assert sum(p["cost_total"] for p in trend) == 2500
+    assert body["month_by_model"] == []
+    assert body["search"]["daily_used"] == 0
+    assert "daily_limit" in body["search"]
     # Quota defaults (决策④ / F2) are surfaced. Read from settings so the
     # assertion tracks the config group instead of hard-coding numbers.
     from agentcore.config import settings
@@ -179,6 +183,8 @@ async def test_usage_summary_windows_and_quota(client, session_factory):
     assert body["quota"]["daily_cost_nano"] == int(settings.quota_daily_cost_cny * 1_000_000_000)
     assert "daily_requests" not in body["quota"]
     assert "cny_per_usd" not in body
+    assert body["seat"]["plan"] == "basic"
+    assert body["seat"]["until"] is None
 
 
 async def test_usage_summary_quota_shows_global_limits(client):
@@ -200,7 +206,7 @@ async def test_usage_summary_quota_shows_global_limits(client):
 async def test_usage_summary_recent_daily_cost_buckets_by_utc_day(
     client, session_factory
 ):
-    # 近 7 日趋势: spend is bucketed into UTC days and zero-filled to a 7-point,
+    # 近 30 日趋势: spend is bucketed into UTC days and zero-filled to a 30-point,
     # oldest-first series ending today; rows older than the window are excluded.
     user_id = await register_and_login(client, "trenduser")
 
@@ -208,14 +214,14 @@ async def test_usage_summary_recent_daily_cost_buckets_by_utc_day(
     today = now.replace(hour=12, minute=0, second=0, microsecond=0)
     three_ago = today - timedelta(days=3)
     six_ago = today - timedelta(days=6)
-    eight_ago = today - timedelta(days=8)  # outside the 7-day window
+    thirty_one_ago = today - timedelta(days=31)  # outside the 30-day window
 
     async with session_factory() as session:
         for created, total in [
             (today, 500),
             (three_ago, 300),
             (six_ago, 100),
-            (eight_ago, 9999),  # must be excluded
+            (thirty_one_ago, 9999),  # must be excluded
         ]:
             session.add(
                 CostEvent(
@@ -235,15 +241,15 @@ async def test_usage_summary_recent_daily_cost_buckets_by_utc_day(
     assert r.status_code == 200, r.text
     points = r.json()["recent_daily_cost"]
 
-    assert len(points) == 7
+    assert len(points) == 30
     # Oldest-first, ending today.
     assert points[-1]["date"] == today.date().isoformat()
-    assert points[0]["date"] == six_ago.date().isoformat()
+    assert points[0]["date"] == (today - timedelta(days=29)).date().isoformat()
     by_date = {p["date"]: p["cost_total"] for p in points}
     assert by_date[today.date().isoformat()] == 500
     assert by_date[three_ago.date().isoformat()] == 300
     assert by_date[six_ago.date().isoformat()] == 100
-    # The 8-days-ago row is outside the window, so the series total excludes it.
+    # The 31-days-ago row is outside the window, so the series total excludes it.
     assert sum(p["cost_total"] for p in points) == 900
 
 
@@ -256,5 +262,219 @@ async def test_usage_summary_empty_is_zero(client):
     assert body["today"]["cost"]["total"] == 0
     assert body["today"]["requests"] == 0
     assert body["month"]["usage"]["input"] == 0
-    # The trend is still a fixed 7-point series, all zero.
-    assert [p["cost_total"] for p in body["recent_daily_cost"]] == [0] * 7
+    # The trend is still a fixed 30-point series, all zero.
+    assert [p["cost_total"] for p in body["recent_daily_cost"]] == [0] * 30
+    assert body["month_by_model"] == []
+    assert body["search"]["daily_used"] == 0
+
+
+def _call(
+    call_id: str,
+    *,
+    run_id: str,
+    model: str,
+    total: int = 1000,
+    input_tokens: int = 100,
+    output_tokens: int = 50,
+) -> dict:
+    return {
+        "call_id": call_id,
+        "run_id": run_id,
+        "parent_run_id": None,
+        "agent_id": run_id,
+        "role": "captain",
+        "model": model,
+        "tokens": {
+            "input": input_tokens,
+            "output": output_tokens,
+            "reasoning": 0,
+            "cache_hit": 0,
+            "cache_miss": input_tokens,
+        },
+        "cost": {"input": total // 2, "cached": 0, "output": total // 2, "total": total},
+        "cost_total_nano": total,
+        "cost_estimated_nano": 0,
+        "currency": "CNY",
+        "duration_ms": 100,
+    }
+
+
+async def test_usage_summary_month_by_model_from_cost_calls(client, session_factory):
+    user_id = await register_and_login(client, "bymodeluser")
+    run_id = new_id()
+    async with session_factory() as session:
+        await CostEventRepository(session).record_calls(
+            user_id=user_id,
+            conversation_id=new_id(),
+            message_id=new_id(),
+            calls=[
+                _call(new_id(), run_id=run_id, model="deepseek-v4-pro", total=5000),
+                _call(
+                    new_id(),
+                    run_id=run_id,
+                    model="deepseek-v4-flash",
+                    total=1000,
+                    input_tokens=80,
+                    output_tokens=20,
+                ),
+            ],
+        )
+
+    body = (await client.get("/v1/usage/summary")).json()
+    rows = body["month_by_model"]
+    assert [r["model"] for r in rows] == ["deepseek-v4-pro", "deepseek-v4-flash"]
+    assert rows[0]["cost_total"] == 5000
+    assert rows[0]["calls"] == 1
+    assert rows[1]["cost_total"] == 1000
+
+
+async def test_usage_activity_groups_conversations_and_assist(
+    client, session_factory
+):
+    user_id = await register_and_login(client, "activityuser")
+    async with session_factory() as session:
+        repo = CostEventRepository(session)
+        conv_repo = ConversationRepository(session)
+        older = await conv_repo.create(user_id=user_id, title="旧对话", commit=False)
+        newer = await conv_repo.create(user_id=user_id, title="调研竞品", commit=False)
+        await repo.record_runs(
+            user_id=user_id,
+            conversation_id=older.id,
+            message_id=new_id(),
+            runs=[_run(new_id(), role="captain", model="deepseek-v4-flash", total=300)],
+        )
+        await repo.record_runs(
+            user_id=user_id,
+            conversation_id=newer.id,
+            message_id=new_id(),
+            runs=[_run(new_id(), role="captain", model="deepseek-v4-pro", total=900)],
+        )
+        await repo.record_runs(
+            user_id=user_id,
+            conversation_id=None,
+            message_id=None,
+            runs=[_run(new_id(), role="assist", model="deepseek-v4-flash", total=150)],
+        )
+        older_id, newer_id = older.id, newer.id
+
+    page = await client.get("/v1/usage/activity?window=month&page_size=1")
+    assert page.status_code == 200, page.text
+    page_body = page.json()
+    assert len(page_body["data"]) == 1
+    assert page_body["total"] == 3
+    assert page_body["cost"]["total"] == 1350
+    assert page_body["usage"]["input"] == 300
+
+    r = await client.get("/v1/usage/activity?window=month")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["total"] == 3
+    assert body["window"] == "month"
+    assert body["cost"]["total"] == 1350
+    assert body["usage"]["input"] == 300
+    assert body["usage"]["output"] == 150
+    titles = [row["title"] for row in body["data"]]
+    assert titles[0] == "AI 改写"
+    assert titles[1] == "调研竞品"
+    assert titles[2] == "旧对话"
+    by_title = {row["title"]: row for row in body["data"]}
+    assert by_title["调研竞品"]["conversation_id"] == newer_id
+    assert by_title["调研竞品"]["kind"] == "conversation"
+    assert by_title["调研竞品"]["cost"]["total"] == 900
+    assert by_title["调研竞品"]["deleted"] is False
+    assert by_title["AI 改写"]["conversation_id"] is None
+    assert by_title["AI 改写"]["kind"] == "assist"
+    assert by_title["AI 改写"]["cost"]["total"] == 150
+    assert by_title["旧对话"]["conversation_id"] == older_id
+
+
+async def test_usage_activity_model_filter_slices_calls(client, session_factory):
+    user_id = await register_and_login(client, "actmodeluser")
+    async with session_factory() as session:
+        conv = await ConversationRepository(session).create(
+            user_id=user_id, title="混用", commit=False
+        )
+        run_id = new_id()
+        await CostEventRepository(session).record_calls(
+            user_id=user_id,
+            conversation_id=conv.id,
+            message_id=new_id(),
+            calls=[
+                _call(new_id(), run_id=run_id, model="deepseek-v4-pro", total=4000),
+                _call(new_id(), run_id=run_id, model="deepseek-v4-flash", total=500),
+            ],
+        )
+        conv_id = conv.id
+
+    r = await client.get("/v1/usage/activity?window=month&model=deepseek-v4-pro")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["total"] == 1
+    assert body["model"] == "deepseek-v4-pro"
+    assert body["cost"]["total"] == 4000
+    row = body["data"][0]
+    assert row["conversation_id"] == conv_id
+    assert row["models"] == ["deepseek-v4-pro"]
+    assert row["cost"]["total"] == 4000
+
+
+async def test_usage_activity_is_user_scoped(client, session_factory, new_client):
+    owner_id = await register_and_login(client, "actowner")
+    async with session_factory() as session:
+        conv = await ConversationRepository(session).create(
+            user_id=owner_id, title="秘密", commit=False
+        )
+        await CostEventRepository(session).record_runs(
+            user_id=owner_id,
+            conversation_id=conv.id,
+            message_id=new_id(),
+            runs=[_run(new_id(), role="captain", total=800)],
+        )
+
+    async with new_client() as other:
+        await register_and_login(other, "actother")
+        r = await other.get("/v1/usage/activity")
+    assert r.status_code == 200, r.text
+    assert r.json()["data"] == []
+    assert r.json()["total"] == 0
+    assert r.json()["cost"]["total"] == 0
+    assert r.json()["usage"]["input"] == 0
+
+
+async def test_usage_activity_window_today_excludes_older(client, session_factory):
+    user_id = await register_and_login(client, "actwindow")
+    now = datetime.now(UTC)
+    yesterday = now.replace(hour=12, minute=0, second=0, microsecond=0) - timedelta(
+        days=1
+    )
+    async with session_factory() as session:
+        conv = await ConversationRepository(session).create(
+            user_id=user_id, title="今天", commit=False
+        )
+        await CostEventRepository(session).record_runs(
+            user_id=user_id,
+            conversation_id=conv.id,
+            message_id=new_id(),
+            runs=[_run(new_id(), role="captain", total=200)],
+        )
+        session.add(
+            CostEvent(
+                user_id=user_id,
+                conversation_id=new_id(),
+                message_id=new_id(),
+                run_id=new_id(),
+                role="captain",
+                model="deepseek-v4-pro",
+                cost_total_nano=999,
+                created_at=yesterday,
+            )
+        )
+        await session.commit()
+
+    r = await client.get("/v1/usage/activity?window=today")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["total"] == 1
+    assert body["data"][0]["title"] == "今天"
+    assert body["data"][0]["cost"]["total"] == 200
+    assert body["cost"]["total"] == 200

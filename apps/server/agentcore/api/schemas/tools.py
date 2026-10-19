@@ -16,6 +16,8 @@ class CapabilityTool(BaseModel):
     side of the team holds each tool.
     ``blurb`` is the toolbox shelf description only — not the consult directory
     or the tool schema ``description``.
+    ``description_prefer`` is the root-CEO prefer-delegate button text. Empty
+    except for ``delegate``. Nested captain descriptions are not catalogued.
     """
 
     name: str
@@ -24,6 +26,15 @@ class CapabilityTool(BaseModel):
     resident: bool
     summary: str
     blurb: str = ""
+    description_prefer: str = Field(
+        default="",
+        description=(
+            "Root-CEO prefer-delegate schema description. Empty except for "
+            "``delegate``. Toolbox inspector switches between ``description`` "
+            "(注意力尺) and this (优先派). Nested captain descriptions are "
+            "not catalogued."
+        ),
+    )
     approval: ToolApproval
     parameters: dict[str, Any]
     available_to: list[str]

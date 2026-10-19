@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 /**
- * TurnComposer variants: `card` 摊开左簇；`bar` 用「＋」收纳会话配置，常显输入与发送（收到的上下文有数据才绝对定位在整块输入框外侧右边，不占输入列宽）。
+ * TurnComposer：空草稿卡片上方常显工作区 · 权限 · 能力 · 统筹，＋打开引用目录。
+ * 有会话后世界行与＋收进「更多」。`bar` 输入与按钮同一行。
+ * 收到的上下文贴在整块输入框外侧右边。
  */
 
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -26,6 +28,7 @@ vi.mock("@/hooks/useLlmProviders", () => ({
           id: "p1",
           label: "DeepSeek",
           base_url: "https://api.deepseek.com/v1",
+          vendor_id: "deepseek",
           status: "active",
           supports_tools: true,
         },
@@ -38,25 +41,36 @@ vi.mock("@/hooks/useLlmProviders", () => ({
     isLoading: false,
   }),
 }));
+const profileRows = vi.hoisted(() => ({
+  data: [
+    {
+      id: "sys-52",
+      name: "GLM-5.2",
+      kind: "system",
+      recipe: "full",
+      is_default: true,
+      main: {
+        origin: "byok",
+        provider_id: "p1",
+        model: "deepseek-test",
+      },
+      worker: null,
+    },
+  ] as Array<Record<string, unknown>>,
+}));
+const PROFILE_FULL = profileRows.data[0];
+const PROFILE_CHAT = {
+  ...PROFILE_FULL,
+  id: "sys-chat",
+  name: "极简",
+  recipe: "chat",
+  is_default: false,
+};
 vi.mock("@/hooks/useLlmModelProfiles", () => ({
   useLlmModelProfiles: () => ({
     data: {
       default_assembly_id: "sys-52",
-      data: [
-        {
-          id: "sys-52",
-          name: "GLM-5.2",
-          kind: "system",
-          is_default: true,
-          main: {
-            origin: "byok",
-            provider_id: "p1",
-            model: "deepseek-test",
-          },
-          worker: null,
-          background: null,
-        },
-      ],
+      data: profileRows.data,
     },
     isLoading: false,
     isError: false,
@@ -87,6 +101,7 @@ const folderLists = vi.hoisted(() => ({
     messageCount: number;
     lastMessagePreview: string | null;
     folderId?: string | null;
+    assemblyId?: string | null;
   }[],
 }));
 
@@ -164,17 +179,19 @@ vi.mock("@/services/toolSwitches", () => ({
 vi.mock("@/services/permissionAxes", () => ({
   BOUNDARY_LABELS: {
     read: { short: "只看", description: "看" },
-    folder: { short: "这个文件夹", description: "文件夹" },
+    folder: { short: "本文件夹", description: "文件夹" },
     computer: { short: "这台电脑", description: "电脑" },
+    full: { short: "完全权限", description: "全权" },
   },
-  BOUNDARY_ORDER: ["read", "folder", "computer"],
-  DEFAULT_PERMISSION_AXES: { boundary: "folder" },
-  boundaryShortLabel: () => "这个文件夹",
+  BOUNDARY_ORDER: ["read", "folder", "computer", "full"],
+  DEFAULT_PERMISSION_AXES: { boundary: "computer" },
+  factoryPermissionAxes: () => ({ boundary: "folder" }),
+  boundaryShortLabel: () => "本文件夹",
   axesEqual: () => false,
   resolveDefaultPermissionAxes: () => Promise.resolve({ boundary: "folder" }),
   setConversationPermissionAxes: vi.fn(),
   setComposerDraftAxes: vi.fn(),
-  setUserDefaultRecipe: vi.fn(),
+  rememberBoundarySelection: vi.fn(),
   confirmComputerIfNeeded: () => true,
 }));
 vi.mock("@/components/chat/message-input/useVoiceInput", () => ({
@@ -214,6 +231,7 @@ const genMock = vi.hoisted(() => ({ value: false }));
 const handleSendMock = vi.hoisted(() => vi.fn());
 const sendingMock = vi.hoisted(() => ({ value: false }));
 const mentionToggleMock = vi.hoisted(() => vi.fn());
+const openBrowseMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/components/chat/message-input/useComposerSend", () => ({
   useComposerSend: () => ({
@@ -246,6 +264,7 @@ vi.mock("@/components/chat/message-input/useMentionMenu", () => ({
     handleAddRoot: vi.fn(),
     pickLocalFile: vi.fn(),
     toggleAtMention: mentionToggleMock,
+    openBrowse: openBrowseMock,
     clearActiveMention: vi.fn(),
     drillCategory: vi.fn(),
     goBack: vi.fn(),
@@ -261,6 +280,7 @@ import {
   COMPOSER_CONTINUE_PLACEHOLDER,
   COMPOSER_EMPTY_INTERRUPTED_HINT,
 } from "@/lib/composerContinueHint";
+import { setComposerDraftDelegateMode } from "@/lib/composerDelegateMode";
 import { useComposerProfileDraftStore } from "@/lib/composerModelProfile";
 import { LLM_RATE_LIMIT_MESSAGE, LLM_RATE_LIMIT_WHY } from "@/lib/errors";
 import type { FolderMeta } from "@/services/folders";
@@ -277,6 +297,7 @@ import { DRAFT_KEY, EMPTY_RUNTIME } from "@/stores/conversation/runtime";
 import { type ExecutionPlan, useExecutionStore } from "@/stores/execution";
 import { useFoldersStore } from "@/stores/folders";
 import { useServerHealthStore } from "@/stores/serverHealth";
+import { useUIStore } from "@/stores/ui";
 import { TurnComposer } from "../TurnComposer";
 import { COMPOSER_FOLDER_READ_ONLY_HINT } from "../composerFolderWrite";
 import { COMPOSER_DEBATE_STEER_PLACEHOLDER } from "../liveDebateSteer";
@@ -512,6 +533,7 @@ beforeEach(async () => {
   sendingMock.value = false;
   handleSendMock.mockClear();
   mentionToggleMock.mockClear();
+  openBrowseMock.mockClear();
   dropMock.handlePaste.mockClear();
   dropMock.handleDrop.mockClear();
   dropMock.dropError = null;
@@ -532,71 +554,179 @@ beforeEach(async () => {
     fillToken: 0,
     dockFlipToken: 0,
   });
-  useComposerProfileDraftStore.setState({ profileId: null });
+  setComposerDraftDelegateMode(false);
+  useComposerProfileDraftStore.setState({
+    profileId: null,
+    assemblyId: null,
+    modelOverride: null,
+  });
   useFoldersStore.setState({ draftWorkspaceIntent: { kind: "quick_cloud" } });
+  useUIStore.setState({ sendOnEnter: true });
   folderLists.accessible = [];
   folderLists.grouped = [];
   folderLists.conversations = [];
+  profileRows.data = [{ ...PROFILE_FULL }];
 });
 
 afterEach(cleanup);
 
-function expectWorkspaceBeforeAssembly(root: ParentNode = document) {
+function expectWorldThenSend(root: ParentNode = document) {
   const workspace = screen.getByLabelText("在哪工作");
-  const assembly = screen.getByLabelText(/装配：/);
-  const nodes = root.querySelectorAll("button, [aria-label]");
-  const order = [...nodes];
+  const assembly = screen.getByLabelText(/能力：/);
+  const delegate = screen.getByRole("switch", { name: "统筹" });
+  const permission = screen.getByLabelText(/权限：/);
+  const model = screen.getByLabelText(/模型：/);
+  const order = [...root.querySelectorAll("button, [aria-label]")];
   expect(order.indexOf(workspace)).toBeGreaterThanOrEqual(0);
-  expect(order.indexOf(assembly)).toBeGreaterThan(order.indexOf(workspace));
+  expect(order.indexOf(permission)).toBeGreaterThan(order.indexOf(workspace));
+  expect(order.indexOf(assembly)).toBeGreaterThan(order.indexOf(permission));
+  expect(order.indexOf(delegate)).toBeGreaterThan(order.indexOf(assembly));
+  expect(order.indexOf(model)).toBeGreaterThan(order.indexOf(delegate));
 }
 
 describe("TurnComposer variants", () => {
-  it("defaults to card: workspace then assembly in left cluster, no「更多」", () => {
+  it("defaults to card: world row outside the card, model in send cluster", () => {
     const { container } = renderComposer();
     expect(
       container.querySelector('[data-composer-variant="card"]'),
     ).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "更多选项" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "更多" })).toBeNull();
+    expect(screen.getByRole("button", { name: "添加" })).toBeTruthy();
     expect(screen.getByLabelText("在哪工作")).toBeTruthy();
-    expect(screen.getByLabelText(/装配：/)).toBeTruthy();
+    expect(screen.getByLabelText(/模型：/)).toBeTruthy();
+    const modelChip = screen.getByLabelText(/模型：/);
+    expect(modelChip.className).toContain("text-foreground");
+    expect(modelChip.className).not.toContain("text-muted-foreground");
+    expect(modelChip.querySelector("[data-vendor-icon]")).toBeNull();
+    expect(screen.getByLabelText(/能力：/)).toBeTruthy();
     expect(screen.getByLabelText(/权限：/)).toBeTruthy();
-    expect(screen.getByLabelText("@ 引用")).toBeTruthy();
-    expectWorkspaceBeforeAssembly(container);
+    expect(screen.queryByLabelText("@ 引用")).toBeNull();
     expect(container.querySelector("[data-composer-name-row]")).toBeNull();
+    const world = container.querySelector("[data-composer-world]");
+    const card = container.querySelector('[data-composer-variant="card"]');
     const actions = container.querySelector("[data-composer-actions]");
-    expect(actions?.contains(screen.getByLabelText("在哪工作"))).toBe(true);
-    expect(
-      actions?.contains(screen.getByRole("button", { name: "发送" })),
-    ).toBe(true);
+    const sendCluster = container.querySelector("[data-composer-send-cluster]");
+    const workspace = screen.getByLabelText("在哪工作");
+    const model = screen.getByLabelText(/模型：/);
+    const assembly = screen.getByLabelText(/能力：/);
+    const permission = screen.getByLabelText(/权限：/);
+    const send = screen.getByRole("button", { name: "发送" });
+    const delegate = screen.getByRole("switch", { name: "统筹" });
+    const attach = screen.getByRole("button", { name: "添加" });
+    expect(world?.contains(workspace)).toBe(true);
+    expect(world?.contains(assembly)).toBe(true);
+    expect(world?.contains(delegate)).toBe(true);
+    expect(world?.contains(permission)).toBe(true);
+    expect(card?.contains(workspace)).toBe(false);
+    expect(card?.contains(assembly)).toBe(false);
+    expect(card?.contains(delegate)).toBe(false);
+    expect(actions?.contains(attach)).toBe(true);
+    expect(actions?.contains(send)).toBe(true);
+    expect(sendCluster?.contains(model)).toBe(true);
+    expect(sendCluster?.contains(delegate)).toBe(false);
+    expect(sendCluster?.contains(send)).toBe(true);
+    expect(sendCluster?.contains(workspace)).toBe(false);
+    expect(sendCluster?.contains(assembly)).toBe(false);
+    expect(delegate.getAttribute("aria-checked")).toBe("false");
+    expect((delegate as HTMLButtonElement).disabled).toBe(false);
+    expectWorldThenSend(container);
+    const order = [...container.querySelectorAll("button, [aria-label]")];
+    expect(order.indexOf(permission)).toBeGreaterThan(order.indexOf(workspace));
+    expect(order.indexOf(assembly)).toBeGreaterThan(order.indexOf(permission));
+    expect(order.indexOf(delegate)).toBeGreaterThan(order.indexOf(assembly));
+    expect(order.indexOf(send)).toBeGreaterThan(order.indexOf(model));
   });
 
-  it("bar: 「更多选项」收纳左簇；未打开时不占常显", () => {
+  it("＋ opens mention browse, does not insert @ into the body", () => {
+    renderComposer();
+    fireEvent.click(screen.getByRole("button", { name: "添加" }));
+    expect(openBrowseMock).toHaveBeenCalled();
+    expect(mentionToggleMock).not.toHaveBeenCalled();
+    expect(screen.getByTestId("composer-body").textContent ?? "").not.toContain(
+      "@",
+    );
+  });
+
+  it("极简时统筹灰掉", () => {
+    profileRows.data = [{ ...PROFILE_FULL }, { ...PROFILE_CHAT }];
+    folderLists.conversations = [
+      { ...listedConv("c-chat", null), assemblyId: "sys-chat" },
+    ];
+    seedOpenConversation("c-chat");
+    renderComposer();
+    fireEvent.click(screen.getByRole("button", { name: "更多" }));
+    const btn = screen.getByRole("switch", { name: "统筹" });
+    expect((btn as HTMLButtonElement).disabled).toBe(true);
+    expect(btn.getAttribute("aria-checked")).toBe("false");
+  });
+
+  it("bar draft: world row stays visible; ＋ opens browse, not a settings dump", () => {
     renderComposer("bar");
     expect(
       document.querySelector('[data-composer-variant="bar"]'),
     ).toBeTruthy();
-    expect(screen.getByRole("button", { name: "更多选项" })).toBeTruthy();
-    // 收纳前：工作区 / 装配 / 附件不在常显条上
-    expect(screen.queryByLabelText("在哪工作")).toBeNull();
-    expect(screen.queryByLabelText(/装配：/)).toBeNull();
-    expect(screen.queryByLabelText("@ 引用")).toBeNull();
-    expect(screen.getByRole("button", { name: "发送" })).toBeTruthy();
-    const actions = document.querySelector("[data-composer-actions]");
-    expect(actions?.contains(screen.getByTestId("composer-body"))).toBe(true);
-    expect(document.querySelector("[data-composer-name-row]")).toBeNull();
-
-    fireEvent.click(screen.getByRole("button", { name: "更多选项" }));
-    const menu = screen.getByTestId("composer-plus-menu");
-    expect(menu).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "更多" })).toBeNull();
+    expect(screen.queryByTestId("composer-plus-menu")).toBeNull();
+    expect(screen.getByRole("button", { name: "添加" })).toBeTruthy();
     expect(screen.getByLabelText("在哪工作")).toBeTruthy();
-    expect(screen.getByLabelText(/装配：/)).toBeTruthy();
+    expect(screen.getByLabelText(/模型：/)).toBeTruthy();
+    expect(screen.getByLabelText(/能力：/)).toBeTruthy();
     expect(screen.getByLabelText(/权限：/)).toBeTruthy();
-    expect(screen.getByLabelText("@ 引用")).toBeTruthy();
-    expect(within(menu).getByText("引用")).toBeTruthy();
-    expect(menu.className).not.toMatch(/\bw-72\b/);
-    expectWorkspaceBeforeAssembly(menu);
-    expect(within(menu).queryByText("后台云端")).toBeNull();
-    expect(within(menu).queryByRole("button", { name: /后台云端/ })).toBeNull();
+    expect(screen.queryByLabelText("@ 引用")).toBeNull();
+    expect(screen.getByRole("switch", { name: "统筹" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "发送" })).toBeTruthy();
+    const world = document.querySelector("[data-composer-world]");
+    const card = document.querySelector('[data-composer-variant="bar"]');
+    const actions = document.querySelector("[data-composer-actions]");
+    expect(world?.contains(screen.getByLabelText("在哪工作"))).toBe(true);
+    expect(card?.contains(screen.getByLabelText("在哪工作"))).toBe(false);
+    expect(actions?.contains(screen.getByTestId("composer-body"))).toBe(true);
+    expect(card?.contains(screen.getByTestId("composer-body"))).toBe(true);
+    expect(document.querySelector("[data-composer-name-row]")).toBeNull();
+    expectWorldThenSend();
+    expect(screen.queryByText("后台云端")).toBeNull();
+    expect(screen.queryByRole("button", { name: /后台云端/ })).toBeNull();
+  });
+
+  it("有会话：世界行与＋收进更多，模型仍在底栏", () => {
+    seedOpenConversation("c-open");
+    renderComposer("bar");
+    expect(document.querySelector("[data-composer-world]")).toBeNull();
+    expect(screen.queryByRole("button", { name: "添加" })).toBeNull();
+    expect(screen.queryByLabelText(/能力：/)).toBeNull();
+    expect(screen.queryByRole("switch", { name: "统筹" })).toBeNull();
+    const more = screen.getByRole("button", { name: "更多" });
+    const actions = document.querySelector("[data-composer-actions]");
+    expect(actions?.contains(more)).toBe(true);
+    expect(actions?.contains(screen.getByLabelText(/模型：/))).toBe(true);
+
+    fireEvent.click(more);
+    const menu = screen.getByTestId("composer-plus-menu");
+    const add = within(menu).getByTestId("composer-more-add");
+    const permissionInMenu = within(menu).getByLabelText(/权限：/);
+    const assemblyInMenu = within(menu).getByLabelText(/能力：/);
+    const delegateInMenu = within(menu).getByRole("switch", { name: "统筹" });
+    expect(add).toBeTruthy();
+    const menuOrder = [...menu.querySelectorAll("button, [aria-label]")];
+    expect(menuOrder.indexOf(permissionInMenu)).toBeGreaterThan(
+      menuOrder.indexOf(add),
+    );
+    expect(menuOrder.indexOf(assemblyInMenu)).toBeGreaterThan(
+      menuOrder.indexOf(permissionInMenu),
+    );
+    expect(menuOrder.indexOf(delegateInMenu)).toBeGreaterThan(
+      menuOrder.indexOf(assemblyInMenu),
+    );
+    expect(menu.contains(screen.getByLabelText(/模型：/))).toBe(false);
+  });
+
+  it("有会话：更多第一行打开引用目录", () => {
+    seedOpenConversation("c-open");
+    renderComposer("bar");
+    fireEvent.click(screen.getByRole("button", { name: "更多" }));
+    fireEvent.click(screen.getByTestId("composer-more-add"));
+    expect(openBrowseMock).toHaveBeenCalled();
+    expect(mentionToggleMock).not.toHaveBeenCalled();
   });
 
   it("bar: 收到的上下文 sits outside the input card, not in send cluster or ＋ — even while streaming", () => {
@@ -656,36 +786,41 @@ describe("TurnComposer variants", () => {
     const actions = card?.querySelector("[data-composer-actions]");
     expect(actions).toBeTruthy();
     expect(actions?.contains(ctx)).toBe(false);
-    fireEvent.click(screen.getByRole("button", { name: "更多选项" }));
-    expect(
-      within(screen.getByTestId("composer-plus-menu")).queryByTestId(
-        "composer-received-context",
-      ),
-    ).toBeNull();
+    expect(screen.queryByTestId("composer-plus-menu")).toBeNull();
   });
 
-  it("bar: 装配在＋内展开，不另开一层；返回回到列表", () => {
+  it("bar: 模型弹层直接从芯片打开", () => {
     renderComposer("bar");
-    fireEvent.click(screen.getByRole("button", { name: "更多选项" }));
-    const menu = screen.getByTestId("composer-plus-menu");
-    fireEvent.click(screen.getByLabelText(/装配：/));
-    expect(menu.getAttribute("data-plus-panel")).toBe("assembly");
-    expect(within(menu).getByRole("button", { name: "返回" })).toBeTruthy();
-    expect(within(menu).getByText("管理装配…")).toBeTruthy();
-    expect(screen.queryByLabelText("在哪工作")).toBeNull();
-    fireEvent.click(within(menu).getByRole("button", { name: "返回" }));
-    expect(menu.getAttribute("data-plus-panel")).toBe("list");
+    fireEvent.click(screen.getByLabelText(/模型：/));
+    expect(screen.getByRole("listbox", { name: "模型" })).toBeTruthy();
+    expect(
+      screen
+        .getByTestId("assembly-model-row")
+        .getAttribute("data-shelf-layout"),
+    ).toBe("columns");
+    expect(
+      screen
+        .getByRole("listbox", { name: "模型" })
+        .closest("[data-side]")
+        ?.getAttribute("data-side"),
+    ).toBe("top");
+    expect(
+      screen.getByTestId("composer-model-detail").getAttribute("data-side"),
+    ).toBe("right");
     expect(screen.getByLabelText("在哪工作")).toBeTruthy();
   });
 
-  it("bar: 工作区在＋内展开", () => {
+  it("bar: 能力弹层直接从芯片打开", () => {
     renderComposer("bar");
-    fireEvent.click(screen.getByRole("button", { name: "更多选项" }));
-    const menu = screen.getByTestId("composer-plus-menu");
+    fireEvent.click(screen.getByLabelText(/能力：/));
+    expect(screen.getByText("管理能力…")).toBeTruthy();
+    expect(screen.getByLabelText("在哪工作")).toBeTruthy();
+  });
+
+  it("bar: 工作区弹层直接从芯片打开", () => {
+    renderComposer("bar");
     fireEvent.click(screen.getByLabelText("在哪工作"));
-    expect(menu.getAttribute("data-plus-panel")).toBe("workspace");
-    expect(within(menu).getByRole("button", { name: "云端对话" })).toBeTruthy();
-    expect(within(menu).getByRole("button", { name: "返回" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /云端对话/ })).toBeTruthy();
   });
 
   it("N4-A: offline hard-disables 发送 even with draft text", async () => {
@@ -815,17 +950,16 @@ describe("TurnComposer variants", () => {
     expect(handleSendMock).toHaveBeenCalledWith();
   });
 
-  it("生成中：@ 可点、粘贴与拖入照旧进附件收集", () => {
-    // 插话 / 排队本就带附件走（useComposerSend 的 mid-flight 分支会 settleAttachments），
-    // 禁用 @ 既不一致、又零反馈：用户只会以为入口坏了。
+  it("生成中：＋可点、粘贴与拖入照旧进附件收集", () => {
     genMock.value = true;
-    mentionToggleMock.mockClear();
     const { container } = renderComposer();
 
-    const mentionBtn = screen.getByLabelText("@ 引用") as HTMLButtonElement;
-    expect(mentionBtn.disabled).toBe(false);
-    fireEvent.click(mentionBtn);
-    expect(mentionToggleMock).toHaveBeenCalled();
+    const attach = screen.getByRole("button", {
+      name: "添加",
+    }) as HTMLButtonElement;
+    expect(attach.disabled).toBe(false);
+    fireEvent.click(attach);
+    expect(openBrowseMock).toHaveBeenCalled();
 
     const body = screen.getByTestId("composer-body");
     const root = container.querySelector("[data-composer-variant]");
@@ -952,6 +1086,60 @@ describe("TurnComposer variants", () => {
     expect(handleSendMock).toHaveBeenCalledWith();
   });
 
+  it("Enter 换行：空闲 Enter 不发，Ctrl/Cmd+Enter 仍发", async () => {
+    useUIStore.setState({ sendOnEnter: false });
+    const { useComposerDraftStore } = await import("@/stores/composer");
+    useComposerDraftStore.getState().setValue("__draft__", "hello");
+    renderComposer("bar");
+    const body = screen.getByTestId("composer-body");
+    fireEvent.keyDown(body, { key: "Enter" });
+    expect(handleSendMock).not.toHaveBeenCalled();
+    fireEvent.keyDown(body, { key: "Enter", ctrlKey: true });
+    expect(handleSendMock).toHaveBeenCalledWith();
+  });
+
+  it("Enter 换行：占用中 hint 不写 Enter 发送，裸 Enter 不排队", async () => {
+    useUIStore.setState({ sendOnEnter: false });
+    genMock.value = true;
+    useConversationStore.setState({
+      currentConversationId: OUTCOME_CID,
+      byId: {
+        [OUTCOME_CID]: {
+          ...EMPTY_RUNTIME,
+          isGenerating: true,
+          messages: [
+            {
+              id: "a-tool",
+              role: "assistant",
+              content: "",
+              createdAt: new Date().toISOString(),
+              executionId: null,
+              isStreaming: true,
+              process: [
+                {
+                  kind: "tool",
+                  id: "t1",
+                  tool_name: "read_file",
+                  arguments: {},
+                  result: null,
+                  status: "running",
+                },
+              ],
+            },
+          ],
+        },
+      },
+    });
+    const { useComposerDraftStore } = await import("@/stores/composer");
+    useComposerDraftStore.getState().setValue(OUTCOME_CID, "改用另一份");
+    renderComposer("bar");
+    expect(
+      screen.getByRole("button", { name: "发送" }).getAttribute("title"),
+    ).toBe("排队至本回合结束后发送；Ctrl/Cmd+Enter 送进当前回合");
+    fireEvent.keyDown(screen.getByTestId("composer-body"), { key: "Enter" });
+    expect(handleSendMock).not.toHaveBeenCalled();
+  });
+
   it("live debate + generating: hides 排队/插队/出结论, send+stop", async () => {
     genMock.value = true;
     seedLiveDebate();
@@ -1013,18 +1201,24 @@ describe("TurnComposer variants", () => {
     expect(screen.queryByRole("button", { name: "发送" })).toBeNull();
   });
 
-  it("live debate: hides @ 入口 (card 常显 and bar ＋菜单)", () => {
+  it("live debate: no @ 入口 and no 添加; 更多仍在", () => {
     genMock.value = true;
     seedLiveDebate();
     const { unmount } = renderComposer();
     expect(screen.queryByLabelText("@ 引用")).toBeNull();
+    expect(screen.queryByRole("button", { name: "添加" })).toBeNull();
+    expect(screen.queryByTestId("composer-more-add")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "更多" }));
+    expect(screen.queryByTestId("composer-more-add")).toBeNull();
+    expect(screen.getByLabelText(/能力：/)).toBeTruthy();
     unmount();
 
     renderComposer("bar");
     expect(screen.queryByLabelText("@ 引用")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "更多选项" }));
-    expect(screen.queryByLabelText("@ 引用")).toBeNull();
     expect(screen.queryByText("引用")).toBeNull();
+    expect(screen.queryByRole("button", { name: "添加" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "更多" }));
+    expect(screen.queryByTestId("composer-more-add")).toBeNull();
   });
 
   it("live debate: mention 芯片不点亮发送", async () => {
@@ -1132,29 +1326,38 @@ describe("TurnComposer variants", () => {
     }
   });
 
-  it("narrow card splits names and actions onto two rows", () => {
+  it("narrow card: world row outside, actions keep ＋ and 发送", () => {
     const view = renderNarrowComposer("card");
     try {
-      const nameRow = document.querySelector("[data-composer-name-row]");
+      const world = document.querySelector("[data-composer-world]");
       const actions = document.querySelector("[data-composer-actions]");
-      const halves = document.querySelectorAll("[data-composer-name-half]");
       const workspace = screen.getByLabelText("在哪工作");
-      const assembly = screen.getByLabelText(/装配：/);
-      expect(nameRow).toBeTruthy();
-      expect(halves).toHaveLength(2);
-      expect(halves[0]?.contains(workspace)).toBe(true);
-      expect(halves[1]?.contains(assembly)).toBe(true);
-      expect(halves[0]?.querySelector(".composer-fill-git")).toBeTruthy();
-      expect(nameRow?.contains(screen.getByLabelText(/权限：/))).toBe(false);
+      const model = screen.getByLabelText(/模型：/);
+      const assembly = screen.getByLabelText(/能力：/);
+      expect(world).toBeTruthy();
+      expect(world?.contains(workspace)).toBe(true);
+      expect(world?.contains(assembly)).toBe(true);
       expect(
-        nameRow?.contains(screen.getByRole("button", { name: "发送" })),
+        world?.contains(screen.getByRole("switch", { name: "统筹" })),
+      ).toBe(true);
+      expect(world?.contains(screen.getByLabelText(/权限：/))).toBe(true);
+      expect(world?.querySelector(".composer-fill-git")).toBeTruthy();
+      expect(world?.contains(model)).toBe(false);
+      expect(
+        world?.contains(screen.getByRole("button", { name: "发送" })),
       ).toBe(false);
-      expect(actions?.contains(screen.getByLabelText(/权限：/))).toBe(true);
-      expect(actions?.contains(screen.getByLabelText("@ 引用"))).toBe(true);
+      expect(actions?.contains(model)).toBe(true);
+      expect(
+        actions?.contains(screen.getByRole("button", { name: "添加" })),
+      ).toBe(true);
       expect(
         actions?.contains(screen.getByRole("button", { name: "发送" })),
       ).toBe(true);
-      expect(screen.queryByRole("button", { name: "更多选项" })).toBeNull();
+      expect(
+        actions?.contains(screen.getByRole("switch", { name: "统筹" })),
+      ).toBe(false);
+      expect(screen.queryByRole("button", { name: "更多" })).toBeNull();
+      expect(screen.queryByLabelText("@ 引用")).toBeNull();
       expect(actions?.contains(screen.getByTestId("composer-body"))).toBe(
         false,
       );
@@ -1163,25 +1366,40 @@ describe("TurnComposer variants", () => {
     }
   });
 
-  it("narrow bar puts the field on its own row above ＋ and 发送", () => {
+  it("narrow bar keeps the field on the same row as ＋ and 发送", () => {
     const view = renderNarrowComposer("bar");
     try {
       const card = document.querySelector('[data-composer-variant="bar"]');
       const actions = card?.querySelector("[data-composer-actions]");
       const body = screen.getByTestId("composer-body");
-      const plus = screen.getByRole("button", { name: "更多选项" });
+      const plus = screen.getByRole("button", { name: "添加" });
       const send = screen.getByRole("button", { name: "发送" });
       expect(actions).toBeTruthy();
       expect(card?.contains(body)).toBe(true);
-      expect(actions?.contains(body)).toBe(false);
+      expect(actions?.contains(body)).toBe(true);
       expect(actions?.contains(plus)).toBe(true);
       expect(actions?.contains(send)).toBe(true);
       expect(
-        body.compareDocumentPosition(actions as Node) &
-          Node.DOCUMENT_POSITION_FOLLOWING,
+        plus.compareDocumentPosition(body) & Node.DOCUMENT_POSITION_FOLLOWING,
       ).toBeTruthy();
+      expect(
+        body.compareDocumentPosition(send) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      expect(
+        actions?.contains(screen.getByRole("switch", { name: "统筹" })),
+      ).toBe(false);
+      expect(
+        document
+          .querySelector("[data-composer-world]")
+          ?.contains(screen.getByRole("switch", { name: "统筹" })),
+      ).toBe(true);
       expect(document.querySelector("[data-composer-name-row]")).toBeNull();
-      expect(screen.queryByLabelText("在哪工作")).toBeNull();
+      expect(screen.getByLabelText("在哪工作")).toBeTruthy();
+      expect(
+        document
+          .querySelector("[data-composer-world]")
+          ?.contains(screen.getByLabelText("在哪工作")),
+      ).toBe(true);
     } finally {
       view.restore();
     }

@@ -51,6 +51,11 @@ class WireDialect:
     # Official o-series Chat Completions wants ``max_completion_tokens``, not
     # ``max_tokens``. Probe and the hot path share :meth:`apply_token_limit`.
     use_max_completion_tokens: bool = False
+    # Model family speaks vendor tool-search (Claude 4.5+ / GPT-5.4+).
+    # Stamping still requires an official vendor + native protocol — see
+    # ``tools.defer_loading.should_stamp_vendor_defer_loading``. Completions
+    # and OpenCode never stamp even when this is True.
+    defer_loading: bool = False
 
     @property
     def token_limit_field(self) -> Literal["max_tokens", "max_completion_tokens"]:
@@ -75,6 +80,7 @@ class _DialectOverlay:
     omit_temperature: bool | None = None
     retry_forced_tool_choice_on_400: bool | None = None
     use_max_completion_tokens: bool | None = None
+    defer_loading: bool | None = None
 
     def matches(self, leaf: str) -> bool:
         if self.kind == "exact":
@@ -151,6 +157,8 @@ _DIALECT_OVERLAYS: tuple[_DialectOverlay, ...] = (
             name,
             omit_temperature=True,
             use_max_completion_tokens=True,
+            reasoning_effort_options=("low", "medium", "high"),
+            reasoning_effort_default="medium",
         )
         for name in ("o1", "o3", "o4")
     ),
@@ -160,8 +168,65 @@ _DIALECT_OVERLAYS: tuple[_DialectOverlay, ...] = (
             prefix,
             omit_temperature=True,
             use_max_completion_tokens=True,
+            reasoning_effort_options=("low", "medium", "high"),
+            reasoning_effort_default="medium",
         )
         for prefix in ("o1-", "o3-", "o4-")
+    ),
+    # GPT-5/6 Responses: effort tokens + no custom temperature (Astra rejects it).
+    # Completions still skips these — sending is gated on thinking_type_switch.
+    _DialectOverlay(
+        "prefix",
+        "gpt-5",
+        omit_temperature=True,
+        reasoning_effort_options=("minimal", "low", "medium", "high"),
+        reasoning_effort_default="medium",
+    ),
+    _DialectOverlay(
+        "prefix",
+        "gpt-6",
+        omit_temperature=True,
+        reasoning_effort_options=("low", "medium", "high"),
+        reasoning_effort_default="medium",
+    ),
+    # Vendor tool-search. Anthropic: Opus 4.1 and earlier are out.
+    # OpenAI: gpt-5.4 and later on /responses (not bare gpt-5).
+    *tuple(
+        _DialectOverlay("contains", marker, defer_loading=True)
+        for marker in (
+            "haiku-4-5",
+            "haiku-4.5",
+            "haiku-5",
+            "haiku-9",
+            "sonnet-4-5",
+            "sonnet-4.5",
+            "sonnet-4-6",
+            "sonnet-4.6",
+            "sonnet-5",
+            "opus-4-5",
+            "opus-4.5",
+            "opus-4-6",
+            "opus-4.6",
+            "opus-4-7",
+            "opus-4.7",
+            "opus-4-8",
+            "opus-4.8",
+            "opus-5",
+            "fable-5",
+            "mythos-5",
+        )
+    ),
+    *tuple(
+        _DialectOverlay("prefix", prefix, defer_loading=True)
+        for prefix in (
+            "gpt-5.4",
+            "gpt-5-4",
+            "gpt-5.5",
+            "gpt-5-5",
+            "gpt-5.6",
+            "gpt-5-6",
+            "gpt-6",
+        )
     ),
 )
 
@@ -183,6 +248,7 @@ def resolve_wire_dialect(model: str, *, base_url: str | None = None) -> WireDial
     # Universal default: keep forced-tool_choice 400 retry (historical behaviour).
     retry_required = True
     use_max_completion = False
+    defer_loading = False
     for rule in _DIALECT_OVERLAYS:
         if not rule.matches(leaf):
             continue
@@ -200,6 +266,8 @@ def resolve_wire_dialect(model: str, *, base_url: str | None = None) -> WireDial
             retry_required = rule.retry_forced_tool_choice_on_400
         if rule.use_max_completion_tokens is not None:
             use_max_completion = use_max_completion or rule.use_max_completion_tokens
+        if rule.defer_loading is not None:
+            defer_loading = defer_loading or rule.defer_loading
     # Moonshot BYOK: sampling is fixed for current Kimi leaves; legacy
     # ``moonshot-v1*`` still accepts temperature → keep sending it.
     if base_url:
@@ -214,6 +282,7 @@ def resolve_wire_dialect(model: str, *, base_url: str | None = None) -> WireDial
         omit_temperature=omit_temp,
         retry_forced_tool_choice_on_400=retry_required,
         use_max_completion_tokens=use_max_completion,
+        defer_loading=defer_loading,
     )
 
 

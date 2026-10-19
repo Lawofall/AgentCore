@@ -111,7 +111,6 @@ def _assistant_row(*, usage=None):
         agent_mentions=[],
         citations=[],
         evidence_ledger=[],
-        followups=[],
         cost=None,
         trace_id=None,
     )

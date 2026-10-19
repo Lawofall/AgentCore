@@ -312,8 +312,8 @@ async def test_resolve_provider_credentials_bad_cipher_returns_none(monkeypatch)
     assert await resolve_user_llm_credentials(MagicMock(), "u1", provider_id="prov-1") is None
 
 
-async def test_resolve_model_config_byok_with_background_slot(monkeypatch):
-    """Without platform key, background falls back to the account profile background slot."""
+async def test_resolve_model_config_byok_ignores_background_slot(monkeypatch):
+    """Catalog closed: title follows main, leftover background slot is ignored."""
     from agentcore.llm.model_profiles import ExpandedProfile
     from agentcore.llm.resolve import ModelSelection
 
@@ -330,10 +330,13 @@ async def test_resolve_model_config_byok_with_background_slot(monkeypatch):
         name="当前配置",
         kind="user",
         main=ModelSelection(model="user-flash", origin="byok", provider_id="prov-1"),
-        background=ModelSelection(model="user-bg", origin="byok", provider_id="prov-1"),
     )
     monkeypatch.setattr(
         "agentcore.llm.model_profiles.LlmModelProfileService.expand",
+        AsyncMock(return_value=expanded),
+    )
+    monkeypatch.setattr(
+        "agentcore.llm.model_profiles.LlmModelProfileService.expand_for_conversation_id",
         AsyncMock(return_value=expanded),
     )
     monkeypatch.setattr(
@@ -347,13 +350,13 @@ async def test_resolve_model_config_byok_with_background_slot(monkeypatch):
     chat = await resolve_model_config(MagicMock(), "u1", "chat")
     title = await resolve_model_config(MagicMock(), "u1", "title")
     assert chat is not None and chat.source == "byok" and chat.model == "user-flash"
-    assert title is not None and title.source == "byok" and title.model == "user-bg"
+    assert title is not None and title.source == "byok" and title.model == "user-flash"
     assert chat.api_key == "sk-user"
     assert chat.provider_id == "prov-1"
 
 
-def _mock_background_account(monkeypatch, *, background):
-    """Platform key live + visible, on a BYOK account whose combo has ``background``.
+def _mock_background_account(monkeypatch):
+    """Platform key live + visible, on a BYOK account whose combo has a chat main.
 
     Fixture models are curated-CNY listable ids (glm-5.2 / deepseek-v4-flash).
     """
@@ -369,10 +372,13 @@ def _mock_background_account(monkeypatch, *, background):
         name="当前配置",
         kind="user",
         main=ModelSelection(model="user-flash", origin="byok", provider_id="prov-1"),
-        background=background,
     )
     monkeypatch.setattr(
         "agentcore.llm.model_profiles.LlmModelProfileService.expand",
+        AsyncMock(return_value=expanded),
+    )
+    monkeypatch.setattr(
+        "agentcore.llm.model_profiles.LlmModelProfileService.expand_for_conversation_id",
         AsyncMock(return_value=expanded),
     )
     row = _provider_row(default_model="user-flash")
@@ -393,69 +399,49 @@ def _mock_background_account(monkeypatch, *, background):
     monkeypatch.setattr("agentcore.llm.resolve._decrypt_provider", lambda _r, _u: user_creds)
 
 
-@pytest.mark.parametrize("purpose", ["title", "compaction"])
-async def test_resolve_model_config_background_explicit_byok_slot_beats_platform(
-    monkeypatch, purpose
+async def test_resolve_model_config_title_catalog_open_pins_chrome(
+    monkeypatch,
 ):
-    """显式把「后台任务」指向自带 Key 的服务商 → 用他的凭据与模型，不落平台默认。
+    """代付开着：标题钉 PLATFORM_BACKGROUND_MODEL，不读主模型、不读后台槽。"""
+    _mock_background_account(monkeypatch)
+    title = await resolve_model_config(MagicMock(), "u1", "title")
+    assert title is not None
+    assert title.source == "platform"
+    assert title.model == "deepseek-v4-flash"
+    assert title.api_key == "sk-platform"
 
-    平台 key 仍在且可见：「平台优先」防的是 BYOK 账号白嫖平台额度，用户花自己的钱
-    没有可白嫖的对象。model id 原样透传（不改写、不降档到 PLATFORM_BACKGROUND_MODEL）。
-    """
-    from agentcore.llm.resolve import ModelSelection
 
-    _mock_background_account(
-        monkeypatch,
-        background=ModelSelection(model="user-bg", origin="byok", provider_id="prov-1"),
-    )
-    cfg = await resolve_model_config(MagicMock(), "u1", purpose)
+async def test_resolve_model_config_compaction_follows_main_not_chrome(
+    monkeypatch,
+):
+    """压缩跟这场主模型，不走平台标题档，也不读后台槽。"""
+    _mock_background_account(monkeypatch)
+    cfg = await resolve_model_config(MagicMock(), "u1", "compaction")
     assert cfg is not None
     assert cfg.source == "byok"
-    assert cfg.model == "user-bg"
+    assert cfg.model == "user-flash"
     assert cfg.api_key == "sk-user"
-    assert cfg.base_url == "https://user.example/v1"
     assert cfg.provider_id == "prov-1"
 
 
-async def test_resolve_model_config_background_empty_slot_follows_main(
+async def test_resolve_model_config_title_dormant_follows_conversation_main(
     monkeypatch,
 ):
-    """后台槽未设（跟随主模型）→ 这场主模型的 Key 和模型，不走平台代付。"""
-    _mock_background_account(monkeypatch, background=None)
-    title = await resolve_model_config(MagicMock(), "u1", "title")
-    assert title is not None
-    assert title.source == "byok"
-    assert title.model == "user-flash"
-    assert title.api_key == "sk-user"
-    assert title.provider_id == "prov-1"
-
-
-async def test_resolve_model_config_title_follows_conversation_main_not_star(
-    monkeypatch,
-):
-    """有对话时读这场装配，不读账号星标。"""
+    """代付关掉：标题跟这场主模型，不读账号星标、不读后台槽。"""
     from agentcore.llm.model_profiles import ExpandedProfile
     from agentcore.llm.resolve import ModelSelection
 
-    _mock_background_account(monkeypatch, background=None)
+    _mock_background_account(monkeypatch)
+    monkeypatch.setattr(settings, "billing_mode", "byok")
     conversation = ExpandedProfile(
         profile_id="conv",
         name="这场",
         kind="user",
         main=ModelSelection(model="conv-main", origin="byok", provider_id="prov-1"),
-        background=None,
     )
     monkeypatch.setattr(
-        "agentcore.llm.model_profiles.LlmModelProfileService.expand_for_conversation",
+        "agentcore.llm.model_profiles.LlmModelProfileService.expand_for_conversation_id",
         AsyncMock(return_value=conversation),
-    )
-    monkeypatch.setattr(
-        "agentcore.db.repositories.ConversationRepository",
-        lambda _s: SimpleNamespace(
-            get_by_id_unscoped=AsyncMock(
-                return_value=SimpleNamespace(id="c1", user_id="u1")
-            )
-        ),
     )
     title = await resolve_model_config(
         MagicMock(), "u1", "title", conversation_id="c1"
@@ -466,14 +452,14 @@ async def test_resolve_model_config_title_follows_conversation_main_not_star(
     assert title.api_key == "sk-user"
 
 
-async def test_resolve_model_config_title_platform_main_keeps_that_model(
+async def test_resolve_model_config_title_platform_main_still_uses_chrome(
     monkeypatch,
 ):
-    """主模型是平台时，空后台槽用这只平台模型，不降到 PLATFORM_BACKGROUND_MODEL。"""
+    """主模型是平台 GLM 时，标题仍钉后台 Flash，不跟主模型。"""
     from agentcore.llm.model_profiles import ExpandedProfile
     from agentcore.llm.resolve import ModelSelection
 
-    _mock_background_account(monkeypatch, background=None)
+    _mock_background_account(monkeypatch)
     monkeypatch.setattr(
         "agentcore.llm.model_profiles.LlmModelProfileService.expand",
         AsyncMock(
@@ -482,26 +468,8 @@ async def test_resolve_model_config_title_platform_main_keeps_that_model(
                 name="平台主模型",
                 kind="user",
                 main=ModelSelection(model="glm-5.2", origin="platform", provider_id=None),
-                background=None,
             )
         ),
-    )
-    title = await resolve_model_config(MagicMock(), "u1", "title")
-    assert title is not None
-    assert title.source == "platform"
-    assert title.model == "glm-5.2"
-    assert title.api_key == "sk-platform"
-
-
-async def test_resolve_model_config_background_platform_slot_keeps_platform_default(
-    monkeypatch,
-):
-    """后台槽显式选了平台模型 → 仍走平台档（本次只改「指向自带 Key」那一支）。"""
-    from agentcore.llm.resolve import ModelSelection
-
-    _mock_background_account(
-        monkeypatch,
-        background=ModelSelection(model="glm-5.2", origin="platform", provider_id=None),
     )
     title = await resolve_model_config(MagicMock(), "u1", "title")
     assert title is not None
@@ -521,7 +489,7 @@ async def test_background_user_fallback_keeps_chat_model_not_platform_background
     """
     from agentcore.llm.resolve import resolve_background_user_fallback
 
-    _mock_background_account(monkeypatch, background=None)
+    _mock_background_account(monkeypatch)
     monkeypatch.setattr(settings, "platform_background_model", "deepseek-v4.1-flash")
     cfg = await resolve_background_user_fallback(MagicMock(), "u1", purpose)
     assert cfg is not None
@@ -533,7 +501,7 @@ async def test_background_user_fallback_keeps_chat_model_not_platform_background
 
 async def test_resolve_model_config_background_dormant_keeps_chat_model(monkeypatch):
     """``billing_mode=byok`` title resolve uses the account chat model, not Go's id."""
-    _mock_background_account(monkeypatch, background=None)
+    _mock_background_account(monkeypatch)
     monkeypatch.setattr(settings, "billing_mode", "byok")
     monkeypatch.setattr(settings, "platform_background_model", "deepseek-v4.1-flash")
     title = await resolve_model_config(MagicMock(), "u1", "title")

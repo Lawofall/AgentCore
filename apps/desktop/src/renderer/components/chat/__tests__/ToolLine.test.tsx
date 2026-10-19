@@ -2354,8 +2354,8 @@ describe("ToolLine · channel redirect", () => {
     expect(screen.queryByText(/我会改用搜索工具定位后再读文件/)).toBeNull();
   });
 
-  it("normalizes a legacy error + redirect code the same way", () => {
-    const { container } = renderWithTooltip(
+  it("does not treat error + redirect code as a steer", () => {
+    renderWithTooltip(
       <ToolLine
         step={step({
           tool_name: "code_execute",
@@ -2371,8 +2371,6 @@ describe("ToolLine · channel redirect", () => {
         })}
       />,
     );
-    expect(screen.getByText("改用搜索")).toBeTruthy();
-    expect(container.querySelector(".text-destructive")).toBeNull();
-    expect(screen.queryByText(/禁止用/)).toBeNull();
+    expect(screen.queryByText("改用搜索")).toBeNull();
   });
 });

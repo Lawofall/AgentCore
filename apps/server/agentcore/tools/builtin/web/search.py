@@ -19,13 +19,17 @@ from agentcore.core.errors import QuotaExceededError
 from agentcore.core.logging import get_logger
 from agentcore.core.net import EgressError, site_of
 from agentcore.core.types import ToolApproval, ToolFace
-from agentcore.tools.builtin.web.cleversee import CleverSeeBackend
+from agentcore.search.choice import (
+    DEEPSEEK,
+    SEARXNG,
+    resolve_search_target,
+)
+from agentcore.search.connection import record_provider_search_failure
 from agentcore.tools.builtin.web.cloud_fallback import (
-    CLOUD_FALLBACK_NOTE,
     cloud_inference_web_search,
     get_inference_search_credentials,
 )
-from agentcore.tools.builtin.web.provider_service import record_provider_search_failure
+from agentcore.tools.builtin.web.deepseek import DeepSeekBackend
 from agentcore.tools.builtin.web.relevance import (
     dropped_host_samples,
     filter_results_for_injection,
@@ -44,11 +48,6 @@ from agentcore.tools.builtin.web.search_backend import (
 from agentcore.tools.builtin.web.search_cache import (
     SearchCacheEntry,
     default_search_cache_registry,
-)
-from agentcore.tools.builtin.web.search_choice import (
-    CLEVERSEE,
-    SEARXNG,
-    resolve_search_target,
 )
 from agentcore.tools.builtin.web.search_quota import (
     admit_platform_search,
@@ -468,18 +467,15 @@ def _backend_label(
     backend: SearchBackend | None,
     *,
     cached: bool,
-    cloud_fallback: bool = False,
     engine: str = "",
 ) -> str:
     """Stable backend name for ``tool.web_search`` observability."""
     if cached:
         return "cache"
-    if cloud_fallback:
-        return "cloud_inference"
-    if engine in (CLEVERSEE, SEARXNG):
+    if engine in (DEEPSEEK, SEARXNG):
         return engine
-    if isinstance(backend, CleverSeeBackend) or engine == CLEVERSEE:
-        return "cleversee"
+    if isinstance(backend, DeepSeekBackend):
+        return DEEPSEEK
     if backend is None:
         return "unknown"
     if isinstance(backend, SearXNGBackend):
@@ -692,22 +688,18 @@ class WebSearchTool:
 
         # A6: wrap the existing on_phase channel to emit structured phase durations.
         on_phase, finish_phases = track_phase_durations(context.on_phase)
-        cloud_fallback = False
         backend: SearchBackend | None = None
         try:
             creds = get_inference_search_credentials()
-            if target.proxy:
-                # Platform, CleverSee, and keyed SearXNG run on the server so the
-                # desktop never holds a search key and the platform count is real.
-                if creds is None:
-                    raise EgressError("读取联网搜索设置失败")
+            if creds is not None:
+                # Sidecar always POSTs inference so the desktop never holds a
+                # search key and the platform count is real.
                 results = await cloud_inference_web_search(
                     creds,
                     query,
                     max_results=max_results,
                     language=language,
                     on_phase=on_phase,
-                    as_fallback=False,
                 )
             elif target.kind == "platform":
                 await admit_platform_search(context.user_id)
@@ -720,14 +712,9 @@ class WebSearchTool:
                 )
                 await note_platform_search(context.user_id)
             else:
-                if target.protocol == CLEVERSEE:
-                    if not target.api_key:
-                        raise EgressError("开析搜索未配置 API key")
-                    backend = CleverSeeBackend(target.api_key, target.base_url or None)
-                else:
-                    backend = SearXNGBackend(
-                        target.base_url or None, api_key=target.api_key or None
-                    )
+                if target.protocol != DEEPSEEK or not target.api_key:
+                    raise EgressError("DeepSeek 搜索未配置 API Key")
+                backend = DeepSeekBackend(target.api_key, target.base_url or None)
                 try:
                     results = await backend.search(
                         query,
@@ -807,7 +794,6 @@ class WebSearchTool:
             context=context,
             original_query=original_query,
             adjustment_note=adjustment_note,
-            cloud_fallback=cloud_fallback,
             engine=target.protocol,
         )
 
@@ -839,7 +825,6 @@ class WebSearchTool:
         context: ToolContext | None = None,
         original_query: str | None = None,
         adjustment_note: str | None = None,
-        cloud_fallback: bool = False,
         engine: str = "",
     ) -> ToolResult:
         """Build the (identical-shape) success ToolResult for a live or cached hit.
@@ -869,8 +854,6 @@ class WebSearchTool:
         notes: list[str] = []
         if adjustment_note:
             notes.append(adjustment_note)
-        if cloud_fallback:
-            notes.append(CLOUD_FALLBACK_NOTE)
         empty_streak = 0
         budget = getattr(context, "retrieval_budget", None) if context is not None else None
         run_id = getattr(context, "run_id", "") if context is not None else ""
@@ -966,9 +949,7 @@ class WebSearchTool:
                 for r in kept
             ],
         }
-        backend_name = _backend_label(
-            backend, cached=cached, cloud_fallback=cloud_fallback, engine=engine
-        )
+        backend_name = _backend_label(backend, cached=cached, engine=engine)
         metadata: dict[str, Any] = {
             "result_count": len(items),
             "query": query,
@@ -982,8 +963,6 @@ class WebSearchTool:
             metadata["dropped_hosts"] = dropped_hosts
         if cached:
             metadata["cached"] = True
-        if cloud_fallback:
-            metadata["cloud_fallback"] = True
         if not items:
             metadata["empty"] = True
         if empty_streak:
@@ -1009,7 +988,6 @@ class WebSearchTool:
             empty_streak=empty_streak,
             backend=backend_name,
             cached=cached,
-            cloud_fallback=cloud_fallback,
             search_policy=search_policy or "",
         )
         return ToolResult(

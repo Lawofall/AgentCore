@@ -141,6 +141,13 @@ describe("SidecarManager warmLlmHttp", () => {
         userMessage: "hi",
         userId: ACCOUNT_USER,
         inference: INFERENCE,
+        session: {
+          permissionAxes: { boundary: "folder" as const },
+          delegateMode: false,
+          folderId: null,
+          localRootId: null,
+          localSubpath: null,
+        },
       },
       "/tmp/ws-await-llm",
     );

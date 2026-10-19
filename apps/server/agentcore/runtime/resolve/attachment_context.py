@@ -33,8 +33,6 @@ from agentcore.workspace.attachment_parse import (
 )
 
 if TYPE_CHECKING:
-    from agentcore.runtime.costing import RunCost
-    from agentcore.vision.protocol import VisionReader
     from agentcore.workspace.protocol import WorkspaceBackend
 
 logger = get_logger(__name__)
@@ -246,10 +244,7 @@ async def _build_attachment_prompt(
     *,
     user_id: str | None = None,
     host_conversation_id: str | None = None,
-    vision_reader: VisionReader | None = None,
     backend: WorkspaceBackend | None = None,
-    cost_sink: list[RunCost] | None = None,
-    vision_parent_run_id: str | None = None,
     main_native_vision: bool = False,
     native_image_parts: list[dict] | None = None,
     available_tools: Collection[str] | None = None,
@@ -278,7 +273,6 @@ async def _build_attachment_prompt(
     """
     if not attachments:
         return AttachmentPrompt(None, (), None)
-    del vision_reader, cost_sink, vision_parent_run_id
 
     blocks: list[str] = []
     slots: list[str] = []
@@ -563,10 +557,7 @@ async def _build_attachment_context(
     *,
     user_id: str | None = None,
     host_conversation_id: str | None = None,
-    vision_reader: VisionReader | None = None,
     backend: WorkspaceBackend | None = None,
-    cost_sink: list[RunCost] | None = None,
-    vision_parent_run_id: str | None = None,
     main_native_vision: bool = False,
     native_image_parts: list[dict] | None = None,
     available_tools: Collection[str] | None = None,
@@ -576,10 +567,7 @@ async def _build_attachment_context(
         attachments,
         user_id=user_id,
         host_conversation_id=host_conversation_id,
-        vision_reader=vision_reader,
         backend=backend,
-        cost_sink=cost_sink,
-        vision_parent_run_id=vision_parent_run_id,
         main_native_vision=main_native_vision,
         native_image_parts=native_image_parts,
         available_tools=available_tools,

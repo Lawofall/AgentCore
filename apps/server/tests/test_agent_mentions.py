@@ -27,14 +27,6 @@ def test_send_message_request_agent_mentions_default_empty():
     assert body.agent_mentions == []
 
 
-def test_table_selection_over_budget_truncates_not_422():
-    ids = [f"r{i}" for i in range(50)]
-    body = SendMessageRequest(content="hi", delivery="steer", table_selection=ids)
-    assert len(body.table_selection) == 40
-    assert body.table_selection[0] == "r0"
-    assert body.table_selection[-1] == "r39"
-
-
 def test_send_message_request_agent_mentions_max_length():
     ok = [
         AgentMention(agent_id=f"a{i}", role=f"role-{i}") for i in range(10)
@@ -133,13 +125,13 @@ def test_queued_turn_item_schema_returns_attachments_and_mentions():
 def test_record_turn_request_agent_mentions_optional():
     empty = RecordTurnRequest(
         user_message="hi",
-        user_message_id="u1",
+        user_message_id="01234567-89ab-4def-8123-456789abcdef",
         trace_id="0123456789abcdef0123456789abcdef",
     )
     assert empty.agent_mentions == []
     body = RecordTurnRequest(
         user_message="hi",
-        user_message_id="u1",
+        user_message_id="01234567-89ab-4def-8123-456789abcdef",
         trace_id="0123456789abcdef0123456789abcdef",
         agent_mentions=[AgentMention(agent_id="w1", role="写手")],
     )
@@ -149,13 +141,13 @@ def test_record_turn_request_agent_mentions_optional():
 def test_record_turn_request_attachments_optional():
     empty = RecordTurnRequest(
         user_message="hi",
-        user_message_id="u1",
+        user_message_id="01234567-89ab-4def-8123-456789abcdef",
         trace_id="0123456789abcdef0123456789abcdef",
     )
     assert empty.attachments == []
     body = RecordTurnRequest(
         user_message="hi",
-        user_message_id="u1",
+        user_message_id="01234567-89ab-4def-8123-456789abcdef",
         trace_id="0123456789abcdef0123456789abcdef",
         attachments=[
             StoredAttachment(
@@ -270,7 +262,6 @@ async def test_stream_chat_persists_agent_mentions(monkeypatch):
 
     from agentcore.api.sse import EventSink
     from agentcore.conversation import turns as turns_mod
-    from agentcore.core.types import WorkspaceBoundary
 
     created: list[dict] = []
 
@@ -296,29 +287,15 @@ async def test_stream_chat_persists_agent_mentions(monkeypatch):
             created.append(kwargs)
             return SimpleNamespace(id="um1")
 
-    class _BoardRepo:
-        def __init__(self, _session):
-            pass
-
-        async def get_by_conversation_id(self, *_a, **_k):
-            return None
-
     monkeypatch.setattr(turns_mod, "async_session_factory", lambda: _FakeSessionCM())
     monkeypatch.setattr(turns_mod, "ConversationRepository", _ConvRepo)
     monkeypatch.setattr(turns_mod, "MessageRepository", _MsgRepo)
-    monkeypatch.setattr(turns_mod, "TableRepository", _BoardRepo)
     monkeypatch.setattr(
         "agentcore.conversation.midflight_persist.MessageRepository",
         _MsgRepo,
     )
     monkeypatch.setattr(turns_mod, "resolve_local_binding", AsyncMock(return_value=None))
     monkeypatch.setattr(turns_mod, "resolve_profile_set", AsyncMock(return_value=None))
-
-    monkeypatch.setattr(
-        turns_mod,
-        "resolve_permission_axes",
-        AsyncMock(return_value=WorkspaceBoundary.FOLDER),
-    )
     monkeypatch.setattr(
         turns_mod,
         "build_turn_backend",
@@ -365,7 +342,6 @@ async def test_regenerate_forwards_stored_agent_mentions(monkeypatch):
 
     from agentcore.api.sse import EventSink
     from agentcore.conversation import turns as turns_mod
-    from agentcore.core.types import WorkspaceBoundary
 
     captured: list[dict] = []
     mentions = [{"agent_id": "w1", "role": "写手"}]
@@ -403,28 +379,14 @@ async def test_regenerate_forwards_stored_agent_mentions(monkeypatch):
         async def update_content(self, *_a, **_k):
             return None
 
-    class _BoardRepo:
-        def __init__(self, _session):
-            pass
-
-        async def get_by_conversation_id(self, *_a, **_k):
-            return None
-
     async def _run(**kwargs):
         captured.append(kwargs)
 
     monkeypatch.setattr(turns_mod, "async_session_factory", lambda: _FakeSessionCM())
     monkeypatch.setattr(turns_mod, "ConversationRepository", _ConvRepo)
     monkeypatch.setattr(turns_mod, "MessageRepository", _MsgRepo)
-    monkeypatch.setattr(turns_mod, "TableRepository", _BoardRepo)
     monkeypatch.setattr(turns_mod, "resolve_local_binding", AsyncMock(return_value=None))
     monkeypatch.setattr(turns_mod, "resolve_profile_set", AsyncMock(return_value=None))
-
-    monkeypatch.setattr(
-        turns_mod,
-        "resolve_permission_axes",
-        AsyncMock(return_value=WorkspaceBoundary.FOLDER),
-    )
     monkeypatch.setattr(
         turns_mod,
         "build_turn_backend",
@@ -462,7 +424,6 @@ async def test_regenerate_replaces_agent_mentions_when_edit_sends_empty(monkeypa
 
     from agentcore.api.sse import EventSink
     from agentcore.conversation import turns as turns_mod
-    from agentcore.core.types import WorkspaceBoundary
 
     captured: list[dict] = []
     updates: list[dict] = []
@@ -501,27 +462,14 @@ async def test_regenerate_replaces_agent_mentions_when_edit_sends_empty(monkeypa
         async def update_content(self, message_id, content=None, **kwargs):
             updates.append({"message_id": message_id, "content": content, **kwargs})
 
-    class _BoardRepo:
-        def __init__(self, _session):
-            pass
-
-        async def get_by_conversation_id(self, *_a, **_k):
-            return None
-
     async def _run(**kwargs):
         captured.append(kwargs)
 
     monkeypatch.setattr(turns_mod, "async_session_factory", lambda: _FakeSessionCM())
     monkeypatch.setattr(turns_mod, "ConversationRepository", _ConvRepo)
     monkeypatch.setattr(turns_mod, "MessageRepository", _MsgRepo)
-    monkeypatch.setattr(turns_mod, "TableRepository", _BoardRepo)
     monkeypatch.setattr(turns_mod, "resolve_local_binding", AsyncMock(return_value=None))
     monkeypatch.setattr(turns_mod, "resolve_profile_set", AsyncMock(return_value=None))
-    monkeypatch.setattr(
-        turns_mod,
-        "resolve_permission_axes",
-        AsyncMock(return_value=WorkspaceBoundary.FOLDER),
-    )
     monkeypatch.setattr(
         turns_mod,
         "build_turn_backend",

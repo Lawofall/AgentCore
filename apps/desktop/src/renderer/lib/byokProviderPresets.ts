@@ -54,6 +54,34 @@ export function normalizeByokBaseUrl(url: string): string {
   return normalized;
 }
 
+/**
+ * Console origin → OpenAI-compat API root.
+ * Empty path becomes `{origin}/v1`. Preset official endpoints and URLs that
+ * already have a path are left as-is. Trailing slashes are stripped.
+ */
+export function canonicalizeByokApiRoot(url: string): string {
+  const trimmed = url.trim();
+  if (!trimmed) return trimmed;
+  let stripped = trimmed;
+  while (stripped.endsWith("/")) {
+    stripped = stripped.slice(0, -1);
+  }
+  if (!stripped) return trimmed;
+  if (resolveByokProviderFromConfig(stripped) !== BYOK_CUSTOM_PROVIDER_ID) {
+    return stripped;
+  }
+  try {
+    const parsed = new URL(stripped);
+    const path = parsed.pathname.replace(/\/+$/, "");
+    if (path === "" || path === "/") {
+      return `${stripped}/v1`;
+    }
+  } catch {
+    return stripped;
+  }
+  return stripped;
+}
+
 function presetBaseUrls(preset: ByokProviderPreset): string[] {
   return [preset.baseUrl, ...(preset.baseUrlAliases ?? [])];
 }
@@ -72,6 +100,18 @@ export function isCustomByokProvider(
   id: ByokProviderId,
 ): id is typeof BYOK_CUSTOM_PROVIDER_ID {
   return id === BYOK_CUSTOM_PROVIDER_ID;
+}
+
+/** Saved vendor identity. Unknown / missing → custom. Never inferred from URL. */
+export function parseByokVendorId(
+  raw: string | undefined | null,
+): ByokProviderId {
+  const vid = (raw ?? "").trim();
+  if (vid === BYOK_CUSTOM_PROVIDER_ID) return vid;
+  if (PRESET_BY_ID.has(vid as Exclude<ByokProviderId, "custom">)) {
+    return vid as ByokProviderId;
+  }
+  return BYOK_CUSTOM_PROVIDER_ID;
 }
 
 /** Match stored base_url to a preset, or fall back to custom.

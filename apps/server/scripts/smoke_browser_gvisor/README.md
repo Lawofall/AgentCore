@@ -33,10 +33,10 @@ docker build -t agentcore-server:browser-smoke --build-arg INSTALL_BROWSER=1 app
 
 # 2) privileged 容器内跑产品模块端到端冒烟。
 #    GVISOR_ENABLED=true 让 registry 走真 gVisor 沙箱工厂；
-#    BROWSER_SANDBOX_IGNORE_CGROUPS=true 为 Docker Desktop 嵌套 cgroup v1（PoC finding #6）；
+#    sandboxd argv 固定 --ignore-cgroups（Docker Desktop 嵌套 cgroup v1）；
 #    web_fetch_allow_fake_ip_proxy 默认 True，dev Clash fake-IP 下代理才能触达真公网（PoC finding #5）。
 docker run --rm --privileged --user root `
-  -e GVISOR_ENABLED=true -e BROWSER_SANDBOX_IGNORE_CGROUPS=true `
+  -e GVISOR_ENABLED=true `
   -e SMOKE_OUT=/smoke/out `
   -v "${PWD}\apps\server\scripts\smoke_browser_gvisor:/smoke" `
   agentcore-server:browser-smoke python /smoke/smoke_product_e2e.py

@@ -1,6 +1,6 @@
 """Platform leaf — resolve upstream credentials per ``request.model``.
 
-运营中转「一 key 一模型」(``PLATFORM_MODEL_CREDENTIALS``) 要求同一 ``platform/``
+「一 key 一模型」(``PLATFORM_MODEL_CREDENTIALS``) 要求同一 ``platform/``
 路由前缀下，不同 model id 使用不同 api_key。冻结单 key 的
 ``OpenAICompatibleProvider`` 无法表达这一点；本 leaf 在每次调用时经
 ``platform_llm_credentials(model=…)`` 取对 key，并按 (api_key, base_url) 缓存

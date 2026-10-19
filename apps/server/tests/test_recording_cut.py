@@ -309,8 +309,8 @@ def test_e2e_synthetic_recording_cut_passes_turn_conformance(tmp_path: Path):
     assert serialize_fixture(again) == path.read_text(encoding="utf-8")
 
 
-def test_legacy_v1_recording_cuts_via_read_alias(tmp_path: Path):
-    """旧 v1 录制（kind/ts 方言）经 load_recording 读时别名 → 裁切产物为契约字段。"""
+def test_legacy_v1_kind_ts_recording_does_not_alias(tmp_path: Path):
+    """v1 kind/ts 方言硬切：裁切产物没有可用 type。"""
     from agentcore.demo_tape.recorder import load_recording
 
     v1 = {
@@ -333,9 +333,7 @@ def test_legacy_v1_recording_cuts_via_read_alias(tmp_path: Path):
     p = tmp_path / "legacy.json"
     p.write_text(json.dumps(v1, ensure_ascii=False), encoding="utf-8")
     fx = cut_recording_to_fixture(load_recording(p), name="legacy")
-    assert [ev["type"] for ev in fx["events"]] == ["message_start", "content_delta", "message_end"]
-    assert fx["projected"]["status"] == "completed"
-    assert fx["projected"]["content"] == "老格式正文"
+    assert all(ev.get("type") == "" for ev in fx["events"])
 
 
 # ---------------------------------------------------------------------------

@@ -23,6 +23,11 @@ from agentcore.workspace.host_path import (
 
 from .errors import _error
 
+# Model-facing path contract: rewrite at the tool entry, not a second dialect.
+TOOL_PATH_DESCRIPTION = (
+    "工作区相对 POSIX（`.`=根），或本机绝对路径 / ~/Desktop|Downloads|Documents。"
+)
+
 
 def _sidecar_rel_under_workspace_root(path: str, backend: Any) -> str | None:
     """Rewrite abs-on-this-disk workspace paths. Sidecar only — not ``location=local``."""

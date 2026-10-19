@@ -4,6 +4,7 @@ import { type GrantFolderHints, grantIpcFields } from "@/lib/grantFolderHints";
 import { revokeExternalGrant } from "@/lib/revokeExternalGrant";
 import { ApiError, api } from "@/services/api";
 import { invalidateExternalGrants } from "@/services/externalGrants";
+import { peekConversationBoundary } from "@/services/permissionAxes";
 import type {
   FsRoot,
   GrantSessionReadonlyRootFailReason,
@@ -56,7 +57,8 @@ function describeGrantError(e: unknown): string {
 /**
  * Resolve grant hints → session organize root → POST grant.
  * Never opens a folder picker; unresolved → not_found (≠ cancelled).
- * Same root upgrading from readonly confirms in main (system dialog).
+ * ``folder`` / ``read``: upgrading from readonly confirms in main.
+ * ``computer`` / ``full`` mint silently.
  */
 export async function pickAndGrantSessionFolder(
   conversationId: string,
@@ -67,10 +69,12 @@ export async function pickAndGrantSessionFolder(
     return { ok: false, reason: "unavailable" };
   }
   try {
+    const boundary = await peekConversationBoundary(conversationId);
     const granted = await window.fsApi.grantSessionReadonlyRoot({
       conversationId,
       mode,
       ...grantIpcFields(hints),
+      ...(boundary ? { boundary } : {}),
     });
     if (!granted.ok) {
       const reason = granted.reason;

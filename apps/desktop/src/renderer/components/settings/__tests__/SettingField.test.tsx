@@ -97,6 +97,54 @@ describe("SettingField", () => {
     );
     expect(screen.getByRole("button", { name: "恢复跟随" })).toBeTruthy();
   });
+
+  it("puts an inline action beside the control, not in the label column", () => {
+    const { container } = render(
+      <SettingField
+        label="邮箱"
+        htmlFor="account-email"
+        layout="inline"
+        action={<span>未验证</span>}
+      >
+        <Input id="account-email" />
+      </SettingField>,
+    );
+    const row = container.firstElementChild?.firstElementChild as HTMLElement;
+    const labelCol = row.firstElementChild as HTMLElement;
+    const controlCol = row.lastElementChild as HTMLElement;
+    expect(labelCol.textContent).toBe("邮箱");
+    expect(controlCol.textContent).toContain("未验证");
+  });
+
+  it("puts the label beside the control on inline, and indents the hint", () => {
+    const { container } = render(
+      <SettingField
+        label="名称"
+        htmlFor="provider-label"
+        layout="inline"
+        hint="选择后将预填名称与端点"
+      >
+        <Input id="provider-label" />
+      </SettingField>,
+    );
+    const row = container.firstElementChild?.firstElementChild as HTMLElement;
+    expect(row.className).toContain("md:flex-row");
+    expect(row.className).toContain("md:items-start");
+    const labelCol = row.firstElementChild as HTMLElement;
+    expect(labelCol.className).toContain("md:w-24");
+    const hint = screen.getByText("选择后将预填名称与端点");
+    expect(hint.className).toContain("md:pl-24");
+    expect(screen.getByLabelText("名称").id).toBe("provider-label");
+  });
+
+  it("keeps stack as the default — no inline row classes", () => {
+    const { container } = render(
+      <SettingField label="Token" htmlFor="git-pat">
+        <Input id="git-pat" />
+      </SettingField>,
+    );
+    expect(container.firstElementChild?.innerHTML).not.toContain("md:flex-row");
+  });
 });
 
 describe("SettingsFormMessage", () => {

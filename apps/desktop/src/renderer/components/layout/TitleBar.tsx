@@ -1,6 +1,5 @@
 import { BrandMarkIcon } from "@/components/brand/BrandMark";
 import { WindowControls } from "@/components/layout/WindowControls";
-import { WindowFrameMenu } from "@/components/layout/WindowFrameMenu";
 import { IconButton } from "@/components/ui";
 import { isMac, macTitleBarInsetClass } from "@/lib/platform";
 import { clientReleaseChannel } from "@/lib/releaseChannel";
@@ -49,7 +48,6 @@ export function TitleBar() {
 
       {/* Window controls (Win/Linux; macOS uses traffic lights) */}
       <div className="flex items-center [-webkit-app-region:no-drag]">
-        <WindowFrameMenu />
         <WindowControls />
       </div>
     </header>

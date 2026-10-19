@@ -113,6 +113,9 @@ jobs:
       - name: Check doc section pointers (compound §N title → heading)
         run: node scripts/check-doc-section-pointers.mjs
 
+      - name: Check AgentCore rules mirror transform
+        run: node scripts/sync-agentcore-rules.mjs --check
+
       - name: Fail on uncommitted drift
         run: git diff --exit-code
 

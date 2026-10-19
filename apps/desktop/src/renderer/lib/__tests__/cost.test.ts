@@ -2,6 +2,7 @@ import {
   type SpendRun,
   resolveReplyInvoice,
   resolveTurnCost,
+  resolveTurnDisplayBill,
   resolveTurnDisplayMoney,
 } from "@/lib/cost";
 import { describe, expect, it } from "vitest";
@@ -25,47 +26,66 @@ describe("resolveTurnCost", () => {
   });
 });
 
-describe("resolveTurnDisplayMoney", () => {
-  it("prefers turn billed total, then estimated_total", () => {
+const credit = (nano: number) => ({
+  nano,
+  estimated: false,
+  currency: "CNY",
+  unit: "credit" as const,
+});
+const cashCny = (nano: number) => ({
+  nano,
+  estimated: false,
+  currency: "CNY",
+  unit: "cash" as const,
+});
+const cashUsd = (nano: number) => ({
+  nano,
+  estimated: true,
+  currency: "USD",
+  unit: "cash" as const,
+});
+
+describe("resolveTurnDisplayBill", () => {
+  it("splits a mixed turn: total already includes the BYOK copy", () => {
     expect(
-      resolveTurnDisplayMoney({ total: 28, estimated_total: 99 }, []),
-    ).toEqual({ nano: 28, estimated: false, currency: "CNY" });
+      resolveTurnDisplayBill({ total: 127, estimated_total: 99 }, []),
+    ).toEqual({ billed: credit(28), extra: cashCny(99) });
     expect(
-      resolveTurnDisplayMoney({ total: 0, estimated_total: 99 }, []),
-    ).toEqual({ nano: 99, estimated: false, currency: "CNY" });
+      resolveTurnDisplayBill({ total: 0, estimated_total: 99 }, []),
+    ).toEqual({ billed: null, extra: cashCny(99) });
   });
 
   it("falls back to run estimated sum when turn cost is absent", () => {
     expect(
-      resolveTurnDisplayMoney(null, [
+      resolveTurnDisplayBill(null, [
         { total: 0, estimated_total: 10 },
         { total: 0, estimated_total: 5 },
       ]),
-    ).toEqual({ nano: 15, estimated: false, currency: "CNY" });
+    ).toEqual({ billed: null, extra: cashCny(15) });
   });
 
   it("sums run billed totals when turn cost is absent", () => {
     expect(
-      resolveTurnDisplayMoney(null, [
+      resolveTurnDisplayBill(null, [
         { total: 10, pricing_source: "curated" },
         { total: 5, pricing_source: "curated" },
       ]),
-    ).toEqual({ nano: 15, estimated: false, currency: "CNY" });
+    ).toEqual({ billed: credit(15), extra: null });
   });
 
   it("legacy USD estimates still carry ≈$ (estimated: true)", () => {
     expect(
-      resolveTurnDisplayMoney(
+      resolveTurnDisplayBill(
         { total: 0, estimated_total: 99, estimated_currency: "USD" },
         [],
       ),
-    ).toEqual({ nano: 99, estimated: true, currency: "USD" });
+    ).toEqual({ billed: null, extra: cashUsd(99) });
     expect(
-      resolveTurnDisplayMoney(null, [
+      resolveTurnDisplayBill(null, [
         { total: 0, estimated_total: 10, estimated_currency: "USD" },
         { total: 0, estimated_total: 5, estimated_currency: "USD" },
       ]),
-    ).toEqual({ nano: 15, estimated: true, currency: "USD" });
+    ).toEqual({ billed: null, extra: cashUsd(15) });
   });
 
   it("returns null when nothing real to show", () => {
@@ -110,11 +130,8 @@ describe("resolveReplyInvoice", () => {
         }),
       ],
     });
-    expect(invoice.money).toEqual({
-      nano: 8,
-      estimated: false,
-      currency: "CNY",
-    });
+    expect(invoice.billed).toEqual(credit(8));
+    expect(invoice.extra).toBeNull();
     expect(invoice.provisional).toBe(true);
     expect(invoice.lines.map((line) => line.provisional)).toEqual([
       false,
@@ -132,7 +149,7 @@ describe("resolveReplyInvoice", () => {
         spendRun({ id: "w", cost: cny(3) }),
       ],
     });
-    expect(late.money?.nano).toBe(8);
+    expect(late.billed?.nano).toBe(8);
     expect(late.provisional).toBe(false);
 
     const ledgerExtra = resolveReplyInvoice({
@@ -141,11 +158,11 @@ describe("resolveReplyInvoice", () => {
       soloAccrued: null,
       runs: [spendRun({ id: "cap", role: "captain", cost: cny(8) })],
     });
-    expect(ledgerExtra.money?.nano).toBe(10);
+    expect(ledgerExtra.billed?.nano).toBe(10);
     expect(ledgerExtra.provisional).toBe(false);
   });
 
-  it("keeps the ledger when currencies differ", () => {
+  it("keeps platform credits and leftover USD on separate columns", () => {
     const invoice = resolveReplyInvoice({
       ledger: cny(5),
       bubbleLive: false,
@@ -157,11 +174,8 @@ describe("resolveReplyInvoice", () => {
         }),
       ],
     });
-    expect(invoice.money).toEqual({
-      nano: 5,
-      estimated: false,
-      currency: "CNY",
-    });
+    expect(invoice.billed).toEqual(credit(5));
+    expect(invoice.extra).toEqual(cashUsd(9));
   });
 
   it("fills the captain line from solo accrued without double-counting", () => {
@@ -179,9 +193,9 @@ describe("resolveReplyInvoice", () => {
         }),
       ],
     });
-    expect(invoice.money?.nano).toBe(5);
+    expect(invoice.billed?.nano).toBe(5);
     expect(invoice.lines).toHaveLength(1);
-    expect(invoice.lines[0]?.money?.nano).toBe(5);
+    expect(invoice.lines[0]?.billed?.nano).toBe(5);
     expect(invoice.lines[0]?.provisional).toBe(true);
   });
 
@@ -200,7 +214,7 @@ describe("resolveReplyInvoice", () => {
       runs: [],
     });
     expect(live.provisional).toBe(true);
-    expect(live.money?.nano).toBe(2);
+    expect(live.billed?.nano).toBe(2);
     expect(live.lines[0]?.label).toBe("队长");
     expect(live.lines[0]?.usage?.input).toBe(10);
 
@@ -211,7 +225,28 @@ describe("resolveReplyInvoice", () => {
       runs: [],
     });
     expect(closed.provisional).toBe(false);
-    expect(closed.money?.nano).toBe(5);
+    expect(closed.billed?.nano).toBe(5);
     expect(closed.lines).toEqual([]);
+  });
+
+  it("splits mixed platform + BYOK on the same reply", () => {
+    const invoice = resolveReplyInvoice({
+      ledger: { total: 8, estimated_total: 3, currency: "CNY" },
+      bubbleLive: false,
+      soloAccrued: null,
+      runs: [
+        spendRun({
+          id: "cap",
+          role: "captain",
+          cost: { total: 5, currency: "CNY" },
+        }),
+        spendRun({
+          id: "w",
+          cost: { total: 3, estimated_total: 3, currency: "CNY" },
+        }),
+      ],
+    });
+    expect(invoice.billed).toEqual(credit(5));
+    expect(invoice.extra).toEqual(cashCny(3));
   });
 });

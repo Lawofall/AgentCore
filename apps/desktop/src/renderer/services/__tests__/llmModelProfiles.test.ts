@@ -11,8 +11,6 @@ type ProfileRow = {
   is_default: boolean;
   main: { origin: "byok"; model: string; provider_id: string };
   worker: { origin: "byok"; model: string; provider_id: string } | null;
-  background: { origin: "byok"; model: string; provider_id: string } | null;
-  vision: { origin: "byok"; model: string; provider_id: string } | null;
   reasoning_effort?: string | null;
 };
 
@@ -48,8 +46,6 @@ function profile(overrides: Partial<ProfileRow> = {}): ProfileRow {
       provider_id: "prov-deepseek",
     },
     worker: null,
-    background: null,
-    vision: null,
     is_default: false,
     ...overrides,
   };
@@ -67,6 +63,21 @@ describe("slotDisplayName", () => {
         CATALOG,
       ),
     ).toBe("DeepSeek V4 Pro");
+  });
+
+  it("uses the catalog display_name for a platform slot", () => {
+    expect(
+      slotDisplayName(
+        { origin: "platform", model: "deepseek-v4-flash", provider_id: null },
+        [
+          {
+            id: "deepseek-v4-flash",
+            origin: "platform",
+            display_name: "DeepSeek V4 Flash",
+          },
+        ],
+      ),
+    ).toBe("DeepSeek V4 Flash");
   });
 });
 
@@ -90,32 +101,6 @@ describe("profileSlotSummary", () => {
         CATALOG,
       ),
     ).toBe("DeepSeek V4 Pro · GPT-4o mini");
-  });
-
-  it("appends 后台 only when that slot is configured", () => {
-    expect(
-      profileSlotSummary(
-        profile({
-          background: {
-            origin: "byok",
-            model: "gpt-4o-mini",
-            provider_id: "prov-openai",
-          },
-          vision: {
-            origin: "byok",
-            model: "gpt-4o",
-            provider_id: "prov-openai",
-          },
-        }),
-        CATALOG,
-      ),
-    ).toBe("DeepSeek V4 Pro · 跟随主模型 · 后台 GPT-4o mini");
-  });
-
-  it("does not mention 后台 / 识图 when unset (keeps list rows compact)", () => {
-    const summary = profileSlotSummary(profile(), CATALOG);
-    expect(summary).not.toContain("后台");
-    expect(summary).not.toContain("识图");
   });
 
   it("appends vendor effort token when the main model sends reasoning_effort", () => {

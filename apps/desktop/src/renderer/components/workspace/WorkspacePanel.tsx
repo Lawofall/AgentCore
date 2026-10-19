@@ -21,9 +21,8 @@ import { WorkspaceModeBar } from "./WorkspaceModeBar";
  * header row (FileBrowser owns that row): 云端/本地选择器 (leading) plus 软删区
  * (trailing). The shell (SidePanel) owns the frame / resize / close.
  *
- * 快照不在此面板。云端命名版本在「我的文件」根右键「版本…」；
+ * 快照不在此面板。命名版本在文件页根右键「版本…」（云端「我的文件」/ 本机「本机文件夹」）；
  * 右坞「改动」tab 只审本对话 AI 改动与回合基线回滚（不含留版本）。
- * 本机命名版本无产品 UI（盘上 `AgentCore/versions` / sidecar 仍在）。
  *
  * 交接（把活交给云端团队）已下沉为对话时间线里的「后台云端任务」卡（交接「方案 B」/
  * `BackgroundTaskCard`），完成后就地内联评审应用，不再占用工作区侧栏的独立入口。

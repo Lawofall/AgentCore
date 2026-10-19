@@ -14,6 +14,7 @@ from agentcore.tools.builtin.debate.schema import (
 )
 from agentcore.tools.builtin.delegate.schema import (
     DELEGATE_DESCRIPTION,
+    DELEGATE_DESCRIPTION_PREFER,
     DELEGATE_PARAMETERS,
 )
 from agentcore.tools.builtin.host import HostTool
@@ -99,10 +100,13 @@ def test_on_demand_faces_point_how_to_consult():
     assert "决策简报" not in DEBATE_DESCRIPTION
     assert "非终结" not in DEBATE_DESCRIPTION
     assert "HOW→consult" not in DELEGATE_DESCRIPTION
+    assert "HOW→consult" not in DELEGATE_DESCRIPTION_PREFER
     from agentcore.tools.builtin.delegate.schema import (
         DELEGATE_STAFF_HOW,
         DELEGATE_WHEN,
+        DELEGATE_WHEN_PREFER,
         NESTED_DELEGATE_DESCRIPTION,
+        NESTED_DELEGATE_DESCRIPTION_PREFER,
         NESTED_STAFF_HOW,
     )
 
@@ -112,7 +116,17 @@ def test_on_demand_faces_point_how_to_consult():
     assert NESTED_STAFF_HOW not in DELEGATE_DESCRIPTION
     assert DELEGATE_WHEN in DELEGATE_DESCRIPTION
     assert DELEGATE_WHEN in NESTED_DELEGATE_DESCRIPTION
+    assert DELEGATE_WHEN_PREFER in DELEGATE_DESCRIPTION_PREFER
+    assert DELEGATE_WHEN_PREFER in NESTED_DELEGATE_DESCRIPTION_PREFER
+    assert DELEGATE_WHEN not in DELEGATE_DESCRIPTION_PREFER
+    assert DELEGATE_WHEN not in NESTED_DELEGATE_DESCRIPTION_PREFER
+    assert DELEGATE_WHEN_PREFER not in DELEGATE_DESCRIPTION
+    assert DELEGATE_WHEN_PREFER not in NESTED_DELEGATE_DESCRIPTION
+    assert DELEGATE_STAFF_HOW in DELEGATE_DESCRIPTION_PREFER
+    assert NESTED_STAFF_HOW in NESTED_DELEGATE_DESCRIPTION_PREFER
+    assert NESTED_STAFF_HOW not in DELEGATE_DESCRIPTION_PREFER
     assert "成篇落盘" not in NESTED_DELEGATE_DESCRIPTION
+    assert "成篇落盘" not in NESTED_DELEGATE_DESCRIPTION_PREFER
     host_cmd_desc = HostTool().schema.parameters["properties"]["command"]["description"]
     assert "Get-WinEvent" not in host_cmd_desc
     from agentcore.runtime.resolve.prompt import capability_how_suffix
@@ -121,7 +135,15 @@ def test_on_demand_faces_point_how_to_consult():
     assert capability_how_suffix({"browser"}) == ""
     host_cmd = HostTool().schema.parameters["properties"]["command"]["description"]
     assert "PowerShell" not in host_cmd
-    assert set(HostTool().schema.parameters["properties"]) == {"command"}
+    assert set(HostTool().schema.parameters["properties"]) == {
+        "action",
+        "command",
+        "ref",
+        "text",
+        "snapshot_version",
+    }
+    host_text = HostTool().schema.parameters["properties"]["text"]["description"]
+    assert "密码" in host_text
     text_desc = BrowserTool().schema.parameters["properties"]["text"]["description"]
     assert "密码" in text_desc
     sid_desc = BrowserTool().schema.parameters["properties"]["session_id"]["description"]

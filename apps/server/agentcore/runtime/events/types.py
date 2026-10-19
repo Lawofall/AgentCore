@@ -46,7 +46,7 @@ class EventType(StrEnum):
     PLAN_REVISED = "plan_revised"
     WORKSPACE_OP_REQUIRED = "workspace_op_required"
     # External directory mount: transport-only client-tool — desktop mints a
-    # session root (readonly silent; organize / attach_rw confirms). NOT journaled.
+    # session root (computer/full silent; folder/read may confirm). NOT journaled.
     EXTERNAL_MOUNT_REQUIRED = "external_mount_required"
     # Host 第三能力面 P0: transport-only client-tool — desktop fulfils host_* ops
     # (ping / info / audio_devices / open_settings) via backfill. NOT journaled.

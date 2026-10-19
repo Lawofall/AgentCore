@@ -2,7 +2,6 @@ import { EnvelopeSwitchList } from "@/components/tools/EnvelopeSwitchList";
 import { ToolSwitchList } from "@/components/tools/ToolSwitchList";
 import { AssemblyOverview } from "@/pages/toolbox/AssemblyOverview";
 import { GuidelinesPage } from "@/pages/toolbox/GuidelinesPage";
-import { hasLocalMcp } from "@/pages/toolbox/assemblyTabs";
 import { APP_PATHS } from "@/pages/toolbox/manual/paths";
 import { McpRoute } from "@/pages/toolbox/mcp/McpPage";
 import { useEditingAssembly } from "@/pages/toolbox/useEditingAssembly";
@@ -11,13 +10,14 @@ import { Link, useLocation } from "react-router-dom";
 
 /**
  * One scroll for the assembly editor. Name chips and copy actions stick.
- * Model knobs scroll away; tools, envelopes, prompts, and plugs follow.
+ * Model lives in the composer; tools, envelopes, prompts, and plugs follow.
  * No page filter: the lists are short, and folder prompts open with the folder.
  */
 export function AssemblyShelfPage() {
   const { hash } = useLocation();
   const { profile, conversationId, conversation } = useEditingAssembly();
-  const showPlugs = hasLocalMcp();
+  const locked = profile?.kind === "system";
+  const showPlugs = true;
 
   useEffect(() => {
     const id = hash.replace(/^#/, "");
@@ -61,9 +61,9 @@ export function AssemblyShelfPage() {
           conversationTitle={conversation?.title}
           readOnlyBoundary={conversation?.permissionAxes?.boundary === "read"}
           showBinding={false}
-          showSessionDefault={false}
           showTurnHint={false}
           showBulk
+          locked={locked}
         />
       </section>
       <section id="envelope" className="scroll-mt-24">
@@ -77,6 +77,7 @@ export function AssemblyShelfPage() {
           showBinding={false}
           showTurnHint={false}
           showBulk
+          locked={locked}
         />
       </section>
       <section id="prompts" className="scroll-mt-24">

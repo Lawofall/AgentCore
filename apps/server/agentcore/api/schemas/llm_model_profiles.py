@@ -1,7 +1,7 @@
 """Model combination profile (模型组合) API schemas.
 
 Distinct from scenario ``ProfileParams`` (temperature / rounds) — this is the
-account/session selectable ``{main, worker?, background?, vision?}`` combination.
+account/session selectable ``{main, worker?}`` combination.
 """
 
 from datetime import datetime
@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field, model_validator
 
 
 class ModelProfileSlot(BaseModel):
-    """One slot in a model combination (main / worker / background / vision)."""
+    """One slot in a model combination (main / worker)."""
 
     origin: Literal["byok", "platform"] = Field(
         description="Credential origin: byok (user key) or platform (operator catalog)"
@@ -40,18 +40,15 @@ class LlmModelProfileView(BaseModel):
     name: str
     kind: Literal["system", "user", "implicit"]
     is_default: bool = False
-    recipe: Literal["chat", "web", "full"] | None = Field(
+    recipe: Literal["chat", "full"] | None = Field(
         default=None,
         description=(
             "Official recipe still locked on this assembly. "
-            "Null once tools, the envelope, the factory catalog, or plugs "
-            "are edited, or the row was never a recipe."
+            "Null on user snapshots. Official 完整 / 极简 themselves are virtual ids."
         ),
     )
     main: ModelProfileSlot | None = None
     worker: ModelProfileSlot | None = None
-    background: ModelProfileSlot | None = None
-    vision: ModelProfileSlot | None = None
     reasoning_effort: str | None = None
     context_budget: int | None = Field(
         default=None,
@@ -64,12 +61,13 @@ class LlmModelProfileView(BaseModel):
         default_factory=list,
         description="Local MCP server ids this assembly enables. Empty = none.",
     )
-    omit_factory_catalog: bool | None = Field(
-        default=None,
+    omitted_factory_skills: list[str] = Field(
+        default_factory=list,
         description=(
-            "When true, this assembly does not carry the three factory skill rows. "
-            "consult stays only if user on-demand rows remain. Null means the "
-            "factory rows are still on."
+            "Official HOW names this assembly leaves off the consult directory. "
+            "Empty = every factory row stays. A name on the list is missing from "
+            "the directory and consult. New skills default on once the recipe "
+            "is released."
         ),
     )
     created_at: datetime | None = None
@@ -82,20 +80,25 @@ class LlmModelProfileView(BaseModel):
         ),
     )
 
+
 class LlmModelProfileListResponse(BaseModel):
     data: list[LlmModelProfileView]
     default_assembly_id: str | None = None
 
 
 class CreateLlmModelProfileRequest(BaseModel):
-    """New assembly. Copies the starred assembly, including its model."""
+    """New user assembly. Always a snapshot of official 完整, not a locked recipe."""
 
     name: str = Field(max_length=200)
     set_as_default: bool = False
+    origin: Literal["full"] = Field(
+        default="full",
+        description="Snapshot of official 完整 (tools, envelope, factory catalog on).",
+    )
 
 
 class UpdateLlmModelProfileRequest(BaseModel):
-    """Partial update. Explicit null on worker/background/vision clears that slot.
+    """Partial update. Explicit null on worker clears that slot.
 
     Changing the model does not release a locked recipe.
     """
@@ -103,8 +106,6 @@ class UpdateLlmModelProfileRequest(BaseModel):
     name: str | None = Field(default=None, max_length=200)
     main: ModelProfileSlot | None = None
     worker: ModelProfileSlot | None = None
-    background: ModelProfileSlot | None = None
-    vision: ModelProfileSlot | None = None
     reasoning_effort: str | None = Field(default=None, max_length=32)
     context_budget: int | None = Field(
         default=None,
@@ -120,11 +121,11 @@ class UpdateLlmModelProfileRequest(BaseModel):
             "Omitted = unchanged. Empty list = this assembly enables none."
         ),
     )
-    omit_factory_catalog: bool | None = Field(
+    omitted_factory_skills: list[str] | None = Field(
         default=None,
         description=(
-            "Omit the three factory skill rows on this assembly. "
-            "Omitted = unchanged."
+            "Official HOW names to leave off this assembly. "
+            "Omitted = unchanged. Empty list = every factory row stays."
         ),
     )
 

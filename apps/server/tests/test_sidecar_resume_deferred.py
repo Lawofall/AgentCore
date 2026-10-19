@@ -14,6 +14,7 @@ from agentcore.runtime.events import EventType
 from agentcore.runtime.suspension import AskUserSuspension
 from agentcore.sidecar.paused_store import LocalPausedTurnStore
 from agentcore.sidecar.server import SidecarServer
+from tests.sidecar_session import sidecar_session
 
 
 @pytest.fixture(autouse=True)
@@ -140,6 +141,7 @@ def test_resume_deferred_wrap_up_then_auto_claim(tmp_path, monkeypatch):
                         "decision": "continue",
                         "note": "",
                         "userMessageId": "um-wrap",
+                        "session": sidecar_session(),
                     },
                 }
             )
@@ -236,6 +238,7 @@ def test_resume_deferred_same_id_joins_both_rpcs(tmp_path, monkeypatch):
                             "decision": "continue",
                             "note": "",
                             "userMessageId": "um-join",
+                            "session": sidecar_session(),
                         },
                     }
                 )
@@ -324,6 +327,7 @@ def test_resume_deferred_different_id_still_supersedes(tmp_path, monkeypatch):
                         "decision": "continue",
                         "note": "",
                         "userMessageId": "um-first",
+                        "session": sidecar_session(),
                     },
                 }
             )
@@ -347,6 +351,7 @@ def test_resume_deferred_different_id_still_supersedes(tmp_path, monkeypatch):
                         "decision": "continue",
                         "note": "",
                         "userMessageId": "um-second",
+                        "session": sidecar_session(),
                     },
                 }
             )
@@ -419,6 +424,7 @@ def test_resume_deferred_without_umid_mints_uuid_outbox_key(tmp_path, monkeypatc
                         "conversationId": conversation_id,
                         "decision": "continue",
                         "traceId": "a" * 32,
+                        "session": sidecar_session(),
                     },
                 }
             )

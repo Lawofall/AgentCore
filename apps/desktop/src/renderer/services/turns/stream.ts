@@ -70,8 +70,6 @@ export interface SendTurnSpec {
   optimisticUserId: string;
   /** 必填分流；空闲开跑传 ``steer``。 */
   delivery?: "steer" | "queue";
-  /** This turn's selected table row ids. Cloud POST / sidecar startTurn. */
-  tableSelection?: readonly string[];
 }
 
 function setExecutionVia(conversationId: string, via: "sidecar" | null): void {
@@ -156,7 +154,6 @@ export async function sendTurn(spec: SendTurnSpec): Promise<SendTurnResult> {
     agentMentions = [],
     optimisticUserId,
     delivery = "steer",
-    tableSelection,
   } = spec;
   const store = useConversationStore.getState();
   // A new send takes the stream — stop GET-attach retries so we never race a
@@ -277,7 +274,6 @@ export async function sendTurn(spec: SendTurnSpec): Promise<SendTurnResult> {
           optimisticUserId,
           attachments,
           agentMentions,
-          tableSelection,
           signal: ac.signal,
           turnCommit,
         });
@@ -297,7 +293,6 @@ export async function sendTurn(spec: SendTurnSpec): Promise<SendTurnResult> {
             {
               sidecarTarget,
               userMessageId: optimisticUserId,
-              tableSelection,
             },
           );
           useConversationStore.getState().setGenerating(true, conversationId);
@@ -353,7 +348,6 @@ export async function sendTurn(spec: SendTurnSpec): Promise<SendTurnResult> {
         signal: ac.signal,
         turnCommit,
         streamPathReason: reason,
-        tableSelection,
       });
     }
     const zero = inspectZeroOutputSendRollback(

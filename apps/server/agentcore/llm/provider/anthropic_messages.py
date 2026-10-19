@@ -20,6 +20,7 @@ from agentcore.llm.provider.protocol import (
     ToolCall,
     ToolCallDelta,
     ToolCallFunction,
+    anthropic_echo_blocks,
     llm_content_text,
     normalize_thinking_blocks,
 )
@@ -71,7 +72,7 @@ def map_stop_reason(reason: str | None) -> str:
     return "stop"
 
 
-def convert_tools(tools: list[dict] | None) -> list[dict]:
+def convert_tools(tools: list[dict] | None, *, defer_loading: bool = False) -> list[dict]:
     if not tools:
         return []
     out: list[dict] = []
@@ -92,6 +93,10 @@ def convert_tools(tools: list[dict] | None) -> list[dict]:
             continue
         if isinstance(item.get("name"), str) and isinstance(item.get("input_schema"), dict):
             out.append(item)
+    if defer_loading:
+        from agentcore.tools.defer_loading import stamp_anthropic_defer_loading
+
+        return stamp_anthropic_defer_loading(out)
     return out
 
 
@@ -154,7 +159,7 @@ def _content_blocks(content: LLMContent) -> list[dict]:
 
 
 def _assistant_blocks(message: LLMMessage) -> list[dict]:
-    echoed = normalize_thinking_blocks(message.thinking_blocks) or []
+    echoed = anthropic_echo_blocks(message.thinking_blocks)
     text_blocks = _content_blocks(message.content)
     if (
         len(text_blocks) == 1
@@ -251,7 +256,9 @@ def fold_history(messages: list[LLMMessage]) -> tuple[str, list[dict]]:
     return system, wire
 
 
-def build_messages_payload(request: LLMRequest, *, stream: bool) -> dict[str, Any]:
+def build_messages_payload(
+    request: LLMRequest, *, stream: bool, vendor_id: str = ""
+) -> dict[str, Any]:
     system, messages = fold_history(request.messages)
     payload: dict[str, Any] = {
         "model": request.model,
@@ -267,7 +274,14 @@ def build_messages_payload(request: LLMRequest, *, stream: bool) -> dict[str, An
     thinking = thinking_payload(request)
     if thinking is not None:
         payload["thinking"] = thinking
-    tools = convert_tools(request.tools)
+    from agentcore.tools.defer_loading import should_stamp_vendor_defer_loading
+
+    stamp = should_stamp_vendor_defer_loading(
+        model=request.model,
+        vendor_id=vendor_id,
+        protocol="anthropic_messages",
+    )
+    tools = convert_tools(request.tools, defer_loading=stamp)
     if tools:
         payload["tools"] = tools
         payload["tool_choice"] = convert_tool_choice(request.tool_choice)

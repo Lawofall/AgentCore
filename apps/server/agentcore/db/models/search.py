@@ -1,8 +1,8 @@
 """Account web-search connections and the platform search-count ledger.
 
 Platform SearXNG is the default index and is metered by ``platform_search_uses``.
-A row in ``user_search_providers`` is one engine slot (开析 or SearXNG) for the
-account. At most one row per engine. Those calls do not write the ledger.
+A row in ``user_search_providers`` is the DeepSeek slot for the account. At most
+one row per engine. Those calls do not write the ledger.
 """
 
 from datetime import datetime
@@ -20,12 +20,16 @@ class UserSearchProvider(Base):
     __tablename__ = "user_search_providers"
     __table_args__ = (
         CheckConstraint(
-            "protocol in ('searxng', 'cleversee')",
+            "protocol in ('deepseek')",
             name="ck_user_search_providers_protocol",
         ),
         CheckConstraint(
             "status in ('connected', 'needs_reconnect')",
             name="ck_user_search_providers_status",
+        ),
+        CheckConstraint(
+            "source in ('provider')",
+            name="ck_user_search_providers_source",
         ),
         UniqueConstraint(
             "user_id",
@@ -40,8 +44,12 @@ class UserSearchProvider(Base):
     label: Mapped[str] = mapped_column(String(100), server_default=text("''"))
     protocol: Mapped[str] = mapped_column(String(16))
     base_url: Mapped[str] = mapped_column(String(500))
-    # AES-256-GCM ciphertext. NULL when a SearXNG instance has no key.
+    # Unused for the provider-sourced slot; kept nullable for the row shape.
     api_key_enc: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    # Official DeepSeek 服务商 Key. Pasted search keys were removed.
+    source: Mapped[str] = mapped_column(
+        String(16), default="provider", server_default=text("'provider'")
+    )
     # connected = last probe succeeded. needs_reconnect = a later search failed;
     # only a successful connect clears it.
     status: Mapped[str] = mapped_column(

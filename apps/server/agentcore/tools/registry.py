@@ -22,7 +22,6 @@ _KNOWN_TOOL_ALIASES: dict[str, str] = {
     "file_append": "edit",
     "md_to_docx": "md_export",
     "md_to_pdf": "md_export",
-    "read_image": "read",
     "search": "web_search",
     "websearch": "web_search",
     "google": "web_search",

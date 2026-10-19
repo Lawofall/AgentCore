@@ -6,6 +6,7 @@ import {
 import { WindowControls } from "@/components/layout/WindowControls";
 import { isMac, macTitleBarInsetClass } from "@/lib/platform";
 import { useApplyTheme } from "@/lib/theme";
+import { useApplyAppearance } from "@/lib/useApplyAppearance";
 import { useConversationStore } from "@/stores/conversation";
 import {
   CHANGES_TAB_ID,
@@ -27,6 +28,7 @@ import { useSearchParams } from "react-router-dom";
  */
 export function FloatWindowPage() {
   useApplyTheme();
+  useApplyAppearance();
 
   const [params] = useSearchParams();
   const conversationId = params.get("cid")?.trim() || "";

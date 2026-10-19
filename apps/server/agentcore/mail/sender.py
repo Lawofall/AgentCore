@@ -49,6 +49,29 @@ def format_verification_body(*, purpose: str, code: str, ttl_seconds: int) -> st
     return f"您的{label}是 {code}，{minutes} 分钟内有效。请勿泄露给他人。"
 
 
+async def send_text(*, to: str, subject: str, body: str, purpose: str) -> None:
+    """One-shot transactional mail (seat receipts). Never raises to the caller
+    unless SMTP is configured and the hand-off itself fails — console sink in
+    DEBUG prints; unconfigured production logs ``email.unconfigured``.
+    """
+    if is_smtp_configured():
+        from agentcore.mail.smtp import send_smtp_text
+
+        await send_smtp_text(to=to, subject=subject, body=body, purpose=purpose)
+        return
+    if settings.debug:
+        logger.info(
+            "email.dev_outbound",
+            to=to,
+            purpose=purpose,
+            subject=subject,
+            body=body,
+        )
+        print(f"[agentcore mail] to={to} subject={subject}\n{body}", flush=True)
+        return
+    logger.info("email.unconfigured", purpose=purpose, subject=subject)
+
+
 def is_smtp_configured() -> bool:
     """Host + from-address are the minimum to attempt a real send."""
     return bool(settings.smtp_host.strip() and settings.smtp_from_address.strip())

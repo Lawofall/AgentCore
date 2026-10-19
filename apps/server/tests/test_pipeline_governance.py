@@ -29,6 +29,7 @@ from agentcore.core.types import ToolFace
 from agentcore.llm.provider.protocol import LLMChunk, ToolCallDelta
 from agentcore.runtime import pipeline
 from agentcore.runtime.events import EventSink, EventType, FinishReason, title_generated
+from agentcore.runtime.turn.snapshot import ConversationSnapshot
 from agentcore.tools.protocol import ToolResult, ToolSchema
 from agentcore.tools.registry import ToolRegistry
 from agentcore.tools.sandbox.subprocess import SubprocessSandbox
@@ -145,6 +146,7 @@ async def _run_pipeline(monkeypatch, provider: _ScriptedProvider, registry: Tool
         sink=sink,
         user_id="user-1",
         backend=backend,
+        conversation=ConversationSnapshot.default(),
         approvals_enabled=False,  # no live client → skip the approval/checkpoint gate
         profile_set=make_turn_profiles(model="chat-model"),
     )
@@ -182,6 +184,7 @@ async def test_pipeline_leaves_sink_open_for_post_turn_tail(monkeypatch):
         sink=sink,
         user_id="user-1",
         backend=backend,
+        conversation=ConversationSnapshot.default(),
         approvals_enabled=False,
         profile_set=make_turn_profiles(model="chat-model"),
     )

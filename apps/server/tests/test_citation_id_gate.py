@@ -340,7 +340,6 @@ async def test_settle_keeps_search_only_and_unregistered_body():
             debate_tool=SimpleNamespace(usage={}, run_ledger=[], citations=[]),
             profile=SimpleNamespace(max_rounds=20),
             citations=[],
-            vision_cost_sink=[],
             sink=sink,
             fact_log=None,
             audit_recorder=SimpleNamespace(drops=0, flush=AsyncMock()),

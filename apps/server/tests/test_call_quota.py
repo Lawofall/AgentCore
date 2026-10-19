@@ -282,7 +282,7 @@ async def test_refusal_is_the_sidecar_leaf_twin_and_never_retried(gate):
     assert err.status_code == 429
     assert err.retryable is False
     # The gate's own copy reaches the user (reset window + BYOK exit), not a generic one.
-    assert "今日额度" in err.message
+    assert "今日积分" in err.message
     assert "接入自己的 key" in err.message
     # …and so does the instant it resets at: the copy no longer names one, so losing
     # it on this hop would leave the leaf face alone unable to say when the wall lifts.

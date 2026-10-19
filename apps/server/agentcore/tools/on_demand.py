@@ -3,7 +3,8 @@
 ``resident`` is a human catalog chip (开场即用), **not** a FC-table gate.
 Factory builtins and assembled MCP actions are opening-resident; unplugged
 connectors simply do not list actions. No builtin currently has a consult
-handbook. Consult does not promote schemas.
+handbook. Consult does not promote schemas. Vendor ``defer_loading`` (hide
+definitions from the model prefix) is a different axis → ``tools.defer_loading``.
 """
 
 from __future__ import annotations

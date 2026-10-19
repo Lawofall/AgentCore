@@ -26,6 +26,8 @@ export type McpOpResult =
   | { ok: true; value: Record<string, unknown> }
   | { ok: false; error: { kind: string; detail: string } };
 
+export type McpTransport = "stdio" | "http";
+
 export interface McpServerConfig {
   id: string;
   name: string;
@@ -33,11 +35,15 @@ export interface McpServerConfig {
   command: string;
   args: string[];
   env?: Record<string, string>;
+  transport?: McpTransport;
+  url?: string;
+  authKind?: "none" | "oauth" | "bearer";
+  hasToken?: boolean;
 }
 
 export interface McpServerListItem extends McpServerConfig {
   /** Last known handshake status (best-effort, not durable). */
-  runtimeStatus?: "idle" | "ready" | "failed";
+  runtimeStatus?: "idle" | "ready" | "failed" | "needs_auth";
   runtimeError?: string;
 }
 

@@ -95,31 +95,16 @@ const fsApi: FsApi = {
   listRoots: () => ipcRenderer.invoke(FS_CHANNELS.listRoots),
   removeRoot: (rootId) =>
     ipcRenderer.invoke(FS_CHANNELS.removeRoot, { rootId }),
-  grantSessionReadonlyRoot: (conversationIdOrParams, mode) => {
-    const params =
-      typeof conversationIdOrParams === "string"
-        ? {
-            conversationId: conversationIdOrParams,
-            mode: mode ?? "readonly",
-          }
-        : {
-            conversationId: conversationIdOrParams.conversationId,
-            mode: conversationIdOrParams.mode ?? "readonly",
-            ...(conversationIdOrParams.path
-              ? { path: conversationIdOrParams.path }
-              : {}),
-            ...(conversationIdOrParams.wellKnown
-              ? { wellKnown: conversationIdOrParams.wellKnown }
-              : {}),
-            ...(conversationIdOrParams.targetName
-              ? { targetName: conversationIdOrParams.targetName }
-              : {}),
-            ...(conversationIdOrParams.rootId
-              ? { rootId: conversationIdOrParams.rootId }
-              : {}),
-          };
-    return ipcRenderer.invoke(FS_CHANNELS.grantSessionReadonlyRoot, params);
-  },
+  grantSessionReadonlyRoot: (params) =>
+    ipcRenderer.invoke(FS_CHANNELS.grantSessionReadonlyRoot, {
+      conversationId: params.conversationId,
+      mode: params.mode ?? "readonly",
+      ...(params.path ? { path: params.path } : {}),
+      ...(params.wellKnown ? { wellKnown: params.wellKnown } : {}),
+      ...(params.targetName ? { targetName: params.targetName } : {}),
+      ...(params.rootId ? { rootId: params.rootId } : {}),
+      ...(params.boundary ? { boundary: params.boundary } : {}),
+    }),
   listSessionReadonlyRoots: (conversationId) =>
     ipcRenderer.invoke(FS_CHANNELS.listSessionReadonlyRoots, {
       conversationId,

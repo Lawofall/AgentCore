@@ -117,20 +117,6 @@ class SendMessageRequest(BaseModel):
     # Locality is conversation/project state (birth-time bind), not a per-turn field —
     # auto-promote is vetoed (双模式工作区).
     requires_tools: bool = False
-    # This turn's selected table row ids. Injected as ``<表格>``; empty → omit.
-    # Not stored on the message row. Over-budget lists are truncated, not 422.
-    table_selection: list[str] = Field(default_factory=list)
-
-    @field_validator("table_selection", mode="before")
-    @classmethod
-    def _cap_table_selection(cls, v: object) -> object:
-        from agentcore.table.context import sanitize_table_selection
-
-        if v is None:
-            return []
-        if isinstance(v, list):
-            return sanitize_table_selection([str(item) for item in v])
-        return []
 
     @model_validator(mode="after")
     def _require_content_or_attachments(self) -> "SendMessageRequest":
@@ -702,9 +688,6 @@ class MessageDetail(BaseModel):
     # 回合调研台账（引用即出处 P1, DERIVED）：live 走 ``evidence_ledger`` SSE；落库
     # ``messages.evidence_ledger``。缺字段 / [] = legacy。不含辩论场级台账。
     evidence_ledger: list[EvidenceLedgerEntryRest] = Field(default_factory=list)
-    # Historical「下一步」chips column (DERIVED). New turns leave []; live mint/emit
-    # retired. Auto-populated from the ORM attribute via from_attributes.
-    followups: list[str] = Field(default_factory=list)
     runs: RunsPayload | None = None
     # 回合 token 用量 + 轮次 (Tier 2 重载持久化): the assistant row's ``usage`` column carries
     # the turn's token snapshot + rounds; surfaced so the bubble's meta row (用量 + 轮次)
@@ -1190,12 +1173,23 @@ class RecordTurnRequest(BaseModel):
     # old clients omit). Existing occupy-written rows are not updated.
     attachments: list[StoredAttachment] = Field(default_factory=list, max_length=20)
 
+    @field_validator("user_message_id")
+    @classmethod
+    def _uuid_user_message_id(cls, value: str) -> str:
+        return _require_message_uuid(value)
+
+    @field_validator("message_id")
+    @classmethod
+    def _uuid_message_id(cls, value: str | None) -> str | None:
+        if value is None or value == "":
+            return value
+        return _require_message_uuid(value)
+
 
 class RecordTurnResponse(BaseModel):
     """The persisted ids for a recorded local turn (the desktop reconciles its
     optimistic user/assistant bubbles against these; ``title`` is set only when this
-    turn minted the conversation's first title; ``followups`` is always null on new
-    turns — chips mint is offline; historical rows may still carry the column).
+    turn minted the conversation's first title).
 
     ``noop=True`` means the server intentionally skipped an assistant row (empty
     body + no process state). Desktop may delete the outbox only when
@@ -1206,7 +1200,6 @@ class RecordTurnResponse(BaseModel):
     user_message_id: str
     assistant_message_id: str | None = None
     title: str | None = None
-    followups: list[str] | None = None
     noop: bool = False
 
 

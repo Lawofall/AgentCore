@@ -11,8 +11,7 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const select = vi.fn();
-const star = vi.fn();
-const createFromCurrent = vi.fn();
+const create = vi.fn();
 const rename = vi.fn(async () => true);
 
 const editing = {
@@ -39,8 +38,7 @@ const editing = {
   pending: false,
   loading: false,
   select,
-  star,
-  createFromCurrent,
+  create,
   rename,
 };
 
@@ -107,8 +105,7 @@ beforeEach(() => {
   editing.pending = false;
   editing.loading = false;
   select.mockReset();
-  star.mockReset();
-  createFromCurrent.mockReset();
+  create.mockReset();
   rename.mockReset();
   rename.mockResolvedValue(true);
   vi.unstubAllGlobals();
@@ -134,13 +131,16 @@ describe("装配摘要文案", () => {
         countPromptModes([{ applyMode: "always" }, { applyMode: "paths" }]),
       ),
     ).toBe("常驻 1 · 按需 0 · 碰到文件 1");
-    expect(assemblyPromptSummary("常驻 1 · 按需 0", false)).toBe(
+    expect(assemblyPromptSummary("常驻 1 · 按需 0", 0, 4)).toBe(
       "常驻 1 · 按需 0 · 出厂 开",
     );
-    expect(assemblyPromptSummary("常驻 1 · 按需 0", true)).toBe(
+    expect(assemblyPromptSummary("常驻 1 · 按需 0", 4, 4)).toBe(
       "常驻 1 · 按需 0 · 出厂 关",
     );
-    expect(assemblyPromptSummary("加载中…", true)).toBe("加载中…");
+    expect(assemblyPromptSummary("常驻 1 · 按需 0", 1, 4)).toBe(
+      "常驻 1 · 按需 0 · 出厂 关了 1 本",
+    );
+    expect(assemblyPromptSummary("加载中…", 4, 4)).toBe("加载中…");
   });
 });
 
@@ -152,7 +152,7 @@ describe("装配胶囊", () => {
 
     expect(screen.queryByRole("group", { name: "预置" })).toBeNull();
     const presetChip = screen.getByRole("button", {
-      name: "GLM-5.2，新建对话用这份",
+      name: "GLM-5.2",
       pressed: true,
     });
     const mineChip = screen.getByRole("button", { name: "写稿" });
@@ -161,7 +161,6 @@ describe("装配胶囊", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "写稿" }));
     expect(select).toHaveBeenCalledWith("mine");
-    expect(star).not.toHaveBeenCalled();
     expect(
       screen.queryByRole("button", { name: "以后新建也用这份" }),
     ).toBeNull();
@@ -171,31 +170,21 @@ describe("装配胶囊", () => {
     const createCopy = within(copyActions).getByRole("button", {
       name: "新建一份",
     });
-    const deleteCopy = within(copyActions).getByRole("button", {
-      name: "删除这份",
-    });
     expect(createCopy.textContent?.trim()).toBe("");
-    expect(deleteCopy.textContent?.trim()).toBe("");
     fireEvent.click(createCopy);
-    expect(createFromCurrent).toHaveBeenCalled();
-    expect(deleteCopy).toBeTruthy();
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(
+      within(copyActions).queryByRole("button", { name: "删除这份" }),
+    ).toBeNull();
     expect(screen.queryByRole("button", { name: "删除GLM-5.2" })).toBeNull();
     expect(screen.queryByRole("button", { name: "删除写稿" })).toBeNull();
     expect(screen.queryByRole("button", { name: "收成空白" })).toBeNull();
-    expect(screen.getByText("主模型")).toBeTruthy();
+    expect(screen.queryByText("主模型")).toBeNull();
     expect(screen.queryByRole("dialog", { name: "模型" })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "删除这份" }));
-    const dialog = screen.getByRole("dialog");
-    expect(
-      within(dialog).getByText(
-        "从这排拿掉。星标改到剩下的另一份，还指着它的对话也改过去。",
-      ),
-    ).toBeTruthy();
-    expect(within(dialog).queryByText(/跟随主模型/)).toBeNull();
     expect(screen.queryByText(/只对之后用这份装配新建的对话成立/)).toBeNull();
   });
 
-  it("自建这份可以删除，有这场时才能改星标", () => {
+  it("自建这份可以删除，点另一颗只换这份", () => {
     editing.conversationId = "c1";
     editing.profile = mine;
     renderPage();
@@ -208,141 +197,151 @@ describe("装配胶囊", () => {
       screen.getByRole("button", { name: "写稿", pressed: true }),
     ).toBeTruthy();
     const copyActions = screen.getByTestId("assembly-copy-actions");
-    const model = screen.getByTestId("assembly-model-block");
     expect(
       within(copyActions).getByRole("button", { name: "删除这份" }),
     ).toBeTruthy();
     expect(screen.queryByRole("button", { name: "删除写稿" })).toBeNull();
     expect(screen.queryByRole("button", { name: "收成空白" })).toBeNull();
-    expect(
-      within(model).queryByRole("button", { name: "新建一份" }),
-    ).toBeNull();
-    expect(
-      within(model).queryByRole("button", { name: "删除这份" }),
-    ).toBeNull();
-    expect(
-      within(model).queryByRole("button", { name: "以后新建也用这份" }),
-    ).toBeNull();
+    expect(screen.queryByTestId("assembly-model-block")).toBeNull();
+    expect(screen.queryByTestId("assembly-model-row")).toBeNull();
     const nameChip = screen.getByRole("button", {
       name: "写稿",
       pressed: true,
     });
-    const adopt = screen.getByRole("button", { name: "以后新建也用这份" });
-    expect(adopt.parentElement).toBe(nameChip.parentElement);
-    expect(screen.getByText("主模型")).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "以后新建也用这份" }),
+    ).toBeNull();
+    expect(screen.queryByText("主模型")).toBeNull();
     expect(screen.queryByRole("button", { name: "保存" })).toBeNull();
-    fireEvent.click(
-      screen.getByRole("button", { name: "GLM-5.2，新建对话用这份" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "GLM-5.2" }));
     expect(select).toHaveBeenCalledWith("sys");
-    expect(star).not.toHaveBeenCalled();
-    fireEvent.click(adopt);
-    expect(star).toHaveBeenCalledWith("mine");
-    expect(select).toHaveBeenCalledTimes(1);
-    star.mockClear();
     select.mockClear();
     fireEvent.click(nameChip);
-    expect(star).not.toHaveBeenCalled();
     expect(select).not.toHaveBeenCalled();
     expect(screen.queryByText(/只对之后用这份装配新建的对话成立/)).toBeNull();
     expect(screen.queryByRole("switch", { name: "出厂" })).toBeNull();
     expect(screen.queryByRole("switch", { name: "出厂目录" })).toBeNull();
   });
 
-  it("配方还在且同名的落成行不另画，预置和自建同一套胶囊", () => {
+  it("官方完整和自建同一套胶囊，自建不折进完整", () => {
+    const full = {
+      id: "sys-full",
+      name: "完整",
+      kind: "system" as const,
+      is_default: false,
+      recipe: "full" as const,
+      main: { origin: "platform" as const, provider_id: null, model: "flash" },
+      enabled_mcp_server_ids: [],
+    };
+    const owned = {
+      id: "owned",
+      name: "写稿",
+      kind: "user" as const,
+      is_default: true,
+      recipe: null,
+      main: { origin: "platform" as const, provider_id: null, model: "flash" },
+      enabled_mcp_server_ids: [],
+    };
+    editing.profile = owned;
+    editing.profiles = [full, owned];
+    renderPage();
+
+    expect(screen.queryByRole("group", { name: "预置" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "极简" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "轻量" })).toBeNull();
+    const presetChip = screen.getByRole("button", { name: "完整" });
+    const ownedChip = screen.getByRole("button", {
+      name: "写稿",
+      pressed: true,
+    });
+    expect(presetChip.parentElement).toBe(ownedChip.parentElement);
+    expect(presetChip.className).toContain("rounded-full");
+    expect(ownedChip.className).toContain("rounded-full");
+
+    fireEvent.click(screen.getByRole("button", { name: "删除这份" }));
+    expect(screen.getByText(/还指着它的对话会改用剩下的另一份/)).toBeTruthy();
+  });
+
+  it("看着完整点新建直接从完整复制，极简不进胶囊", () => {
     const chat = {
       id: "sys-chat",
       name: "极简",
       kind: "system" as const,
       is_default: false,
-      recipe: "chat",
+      recipe: "chat" as const,
       main: { origin: "platform" as const, provider_id: null, model: "flash" },
       enabled_mcp_server_ids: [],
     };
-    const owned = {
-      id: "owned-chat",
-      name: "极简",
-      kind: "user" as const,
-      is_default: true,
-      recipe: "chat",
-      main: { origin: "platform" as const, provider_id: null, model: "flash" },
-      enabled_mcp_server_ids: [],
-    };
-    const renamed = {
-      id: "renamed",
-      name: "闲聊",
-      kind: "user" as const,
-      is_default: false,
-      recipe: "chat",
-      main: { origin: "platform" as const, provider_id: null, model: "flash" },
-      enabled_mcp_server_ids: [],
-    };
-    const released = {
-      id: "released",
-      name: "极简",
-      kind: "user" as const,
-      is_default: false,
-      recipe: null,
-      main: { origin: "platform" as const, provider_id: null, model: "flash" },
-      enabled_mcp_server_ids: [],
-    };
-    const web = {
-      id: "sys-web",
-      name: "轻量",
+    const full = {
+      id: "sys-full",
+      name: "完整",
       kind: "system" as const,
-      is_default: false,
-      recipe: "web",
+      is_default: true,
+      recipe: "full" as const,
       main: { origin: "platform" as const, provider_id: null, model: "flash" },
       enabled_mcp_server_ids: [],
     };
-    editing.profile = owned;
-    editing.profiles = [chat, web, owned, renamed, released];
+    editing.profile = full;
+    editing.profiles = [full, chat, mine];
     renderPage();
-
-    expect(screen.queryByRole("group", { name: "预置" })).toBeNull();
-    const presetChip = screen.getByRole("button", {
-      name: "极简，新建对话用这份",
-      pressed: true,
-    });
-    const idlePreset = screen.getByRole("button", { name: "轻量" });
-    const ownedChip = screen.getByRole("button", { name: "闲聊" });
-    expect(presetChip.parentElement).toBe(ownedChip.parentElement);
-    expect(idlePreset.parentElement).toBe(ownedChip.parentElement);
-    expect(idlePreset.className).toBe(ownedChip.className);
-    expect(screen.getAllByRole("button", { name: /^极简$/ })).toHaveLength(1);
-
-    fireEvent.click(screen.getByRole("button", { name: "删除这份" }));
-    expect(screen.getByText(/预置还在这排/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "新建一份" }));
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("button", { name: "空白" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "从完整复制" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "极简" })).toBeNull();
+    expect(screen.getByText("完整不能改。要自己关工具，点新建。")).toBeTruthy();
   });
 
-  it("再点当前胶囊就地改名，点另一颗仍是换份", () => {
+  it("这场用极简时胶囊不选中，说明只聊天", () => {
+    const chat = {
+      id: "sys-chat",
+      name: "极简",
+      kind: "system" as const,
+      is_default: false,
+      recipe: "chat" as const,
+      main: { origin: "platform" as const, provider_id: null, model: "flash" },
+      enabled_mcp_server_ids: [],
+    };
+    const full = {
+      id: "sys-full",
+      name: "完整",
+      kind: "system" as const,
+      is_default: true,
+      recipe: "full" as const,
+      main: { origin: "platform" as const, provider_id: null, model: "flash" },
+      enabled_mcp_server_ids: [],
+    };
+    editing.profile = chat;
+    editing.profiles = [full, chat, mine];
+    editing.conversationId = "c1";
     renderPage();
-    fireEvent.click(
-      screen.getByRole("button", { name: "GLM-5.2，新建对话用这份" }),
-    );
+    expect(screen.queryByRole("button", { name: "极简" })).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "完整", pressed: false }),
+    ).toBeTruthy();
+    expect(
+      screen.getByText("这场只聊天，不能改。要自己关工具，点新建。"),
+    ).toBeTruthy();
+  });
+
+  it("官方胶囊再点不改名，点另一颗仍是换份", () => {
+    renderPage();
+    fireEvent.click(screen.getByRole("button", { name: "GLM-5.2" }));
     expect(select).not.toHaveBeenCalled();
-    const input = screen.getByRole("textbox", { name: "装配名称" });
-    expect((input as HTMLInputElement).value).toBe("GLM-5.2");
+    expect(screen.queryByRole("textbox", { name: "能力名称" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "写稿" }));
+    expect(select).toHaveBeenCalledWith("mine");
+  });
+
+  it("自建再点当前胶囊就地改名", () => {
+    editing.profile = mine;
+    renderPage();
+    fireEvent.click(screen.getByRole("button", { name: "写稿" }));
+    const input = screen.getByRole("textbox", { name: "能力名称" });
+    expect((input as HTMLInputElement).value).toBe("写稿");
     fireEvent.change(input, { target: { value: "草稿" } });
     fireEvent.keyDown(input, { key: "Enter" });
     expect(rename).toHaveBeenCalledWith("草稿");
-
-    cleanup();
-    rename.mockClear();
-    select.mockClear();
-    renderPage();
-    fireEvent.click(
-      screen.getByRole("button", { name: "GLM-5.2，新建对话用这份" }),
-    );
-    fireEvent.keyDown(screen.getByRole("textbox", { name: "装配名称" }), {
-      key: "Escape",
-    });
-    expect(rename).not.toHaveBeenCalled();
-    expect(
-      screen.getByRole("button", { name: "GLM-5.2，新建对话用这份" }),
-    ).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "写稿" }));
-    expect(select).toHaveBeenCalledWith("mine");
   });
 
   it("新建和删除交给标题行，市场不在这一行里", () => {
@@ -376,32 +375,18 @@ describe("装配胶囊", () => {
       within(slot).queryByRole("button", { name: "以后新建也用这份" }),
     ).toBeNull();
     expect(
-      within(row).getByRole("button", { name: "以后新建也用这份" }),
-    ).toBeTruthy();
+      within(row).queryByRole("button", { name: "以后新建也用这份" }),
+    ).toBeNull();
     expect(
       within(row).queryByRole("textbox", { name: "搜提示词、工具" }),
     ).toBeNull();
-    expect(
-      within(screen.getByTestId("assembly-model-block")).queryByRole("button", {
-        name: "以后新建也用这份",
-      }),
-    ).toBeNull();
   });
 
-  it("模型直接铺在名字下面，不进对话框", () => {
+  it("装配页不再改模型", () => {
     renderPage();
-    expect(screen.queryByRole("dialog", { name: "模型" })).toBeNull();
-    expect(screen.queryByLabelText("名称")).toBeNull();
-    expect(screen.queryByText("高级 · 其他模型")).toBeNull();
-    expect(screen.queryByText("必填，下一回合生效")).toBeNull();
-    expect(screen.queryByText("标题等")).toBeNull();
-    expect(screen.queryByRole("button", { name: "恢复跟随" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "保存" })).toBeNull();
-    const row = screen.getByTestId("assembly-model-row");
-    expect(row.className).toContain("flex-wrap");
-    const shorts = screen.getByTestId("assembly-model-shorts");
-    expect(within(shorts).getByText("组队队员")).toBeTruthy();
-    expect(within(shorts).getByText("后台任务")).toBeTruthy();
-    expect(within(shorts).queryByText("辩论仍用主模型")).toBeNull();
+    expect(screen.queryByTestId("assembly-model-block")).toBeNull();
+    expect(screen.queryByTestId("assembly-model-row")).toBeNull();
+    expect(screen.queryByLabelText("主模型")).toBeNull();
+    expect(screen.queryByText("组队队员")).toBeNull();
   });
 });

@@ -79,6 +79,17 @@ export function formatCompact(n: number): string {
   return `${(n / 1_000_000).toFixed(1)}M`;
 }
 
+/** 账户用量入/出构成：`↓ 6.2k ↑ 4.7k`，有命中率才跟 `· 命中 48%`。 */
+export function formatTokenFlow(
+  input: number,
+  output: number,
+  hitRatePercent?: number | null,
+): string {
+  const body = `↓ ${formatCompact(input)} ↑ ${formatCompact(output)}`;
+  if (hitRatePercent == null || hitRatePercent <= 0) return body;
+  return `${body} · 命中 ${hitRatePercent}%`;
+}
+
 /** 用量详情计数：1_234 → "1,234"；≥1_000_000 仍走 {@link formatCompact}。 */
 export function formatUsageCount(n: number): string {
   if (!Number.isFinite(n)) return "0";
@@ -284,28 +295,84 @@ function currencySymbol(currency?: string | null): string {
 }
 
 /**
- * BYOK 费用位说明（详情 / tooltip）：产品名义价，不扣平台额度。
+ * BYOK 费用位说明（详情 / tooltip）：官网价目，人民币，不扣平台积分。
  */
-export const COST_ESTIMATE_HINT = "按产品价目，不扣额度";
+export const COST_ESTIMATE_HINT = "按官网价目";
 
-/**
- * 把整数 nano 成本格式化为带币种符号的展示串（大众面，§7.2）。
- *
- * 钱一律以整数 nano 流转（1 单位 = 1e9），绝不用 float；前端直接 `nano/1e9`，
- * **不做汇率换算**——符号取自后端随金额下发的 `currency`（产品名义价 CNY）。
- * 约定（§7.5）：0 / 无花销显「—」（不显「¥0.00」）；有花销但
- * 不足 1 分/1 美分显「<¥0.01」/「<$0.01」。
- */
-export function formatCost(nano: number, currency?: string | null): string {
-  if (nano <= 0) return "—";
+/** 平台代付写积分；自己的 Key / 遗留 USD 写现金符号。 */
+export type CostUnit = "credit" | "cash";
+
+export type CostMoney = {
+  nano: number;
+  /** True only for leftover USD community estimates (≈$). */
+  estimated: boolean;
+  currency: string;
+  unit: CostUnit;
+};
+
+export type SplitCostMoney = {
+  billed: CostMoney | null;
+  extra: CostMoney | null;
+};
+
+function isCreditCurrency(currency?: string | null): boolean {
+  return (currency || DEFAULT_CURRENCY).toUpperCase() === "CNY";
+}
+
+function isUsd(currency?: string | null): boolean {
+  return (currency || "").toUpperCase() === "USD";
+}
+
+function formatCreditAmount(amount: number): string {
+  if (amount < 0.01) return "<0.01 积分";
+  return `${amount.toFixed(2)} 积分`;
+}
+
+function formatCashAmount(amount: number, currency?: string | null): string {
   const symbol = currencySymbol(currency);
-  const amount = nano / NANO_PER_UNIT;
   if (amount < 0.01) return `<${symbol}0.01`;
   return `${symbol}${amount.toFixed(2)}`;
 }
 
+function resolveCostUnit(currency?: string | null, unit?: CostUnit): CostUnit {
+  if (unit) return unit;
+  return isCreditCurrency(currency) ? "credit" : "cash";
+}
+
+function costMoney(
+  nano: number,
+  currency: string,
+  unit: CostUnit,
+  estimated = false,
+): CostMoney | null {
+  if (nano <= 0) return null;
+  return { nano, estimated, currency, unit };
+}
+
 /**
- * 额度还剩（用量主卡）。0 显「¥0.00」（用尽），不足 1 分显「<¥0.01」。
+ * 把整数 nano 成本格式化为展示串（大众面，§7.2）。
+ *
+ * 钱一律以整数 nano 流转（1 单位 = 1e9），绝不用 float；前端直接 `nano/1e9`，
+ * **不做汇率换算**。平台 CNY = 积分（1 积分 = ¥1 卖价）；自己的 Key 同额写 ¥；
+ * 遗留 USD 仍 `$`。约定（§7.5）：0 / 无花销显「—」（不显「0.00 积分」）；
+ * 有花销但不足 0.01 显「<0.01 积分」/「<¥0.01」/「<$0.01」。
+ */
+export function formatCost(
+  nano: number,
+  currency?: string | null,
+  unit?: CostUnit,
+): string {
+  if (nano <= 0) return "—";
+  const amount = nano / NANO_PER_UNIT;
+  const resolved = resolveCostUnit(currency, unit);
+  if (resolved === "credit" && isCreditCurrency(currency)) {
+    return formatCreditAmount(amount);
+  }
+  return formatCashAmount(amount, currency);
+}
+
+/**
+ * 积分还剩（用量额度行）。0 显「0.00 积分」（用尽），不足 0.01 显「<0.01 积分」。
  * 与 {@link formatCost} 的「0 = 无花销 → —」不同，避免把用尽读成没花钱。
  */
 export function formatQuotaRemaining(
@@ -313,28 +380,178 @@ export function formatQuotaRemaining(
   currency?: string | null,
 ): string {
   if (!Number.isFinite(nano) || nano <= 0) {
-    return `${currencySymbol(currency)}0.00`;
+    return isCreditCurrency(currency)
+      ? "0.00 积分"
+      : `${currencySymbol(currency)}0.00`;
   }
   return formatCost(nano, currency);
 }
 
 /**
- * 展示金额：产品名义价走 {@link formatCost}；仅遗留美元估算带「≈」。
+ * 展示金额：平台积分走 {@link formatCost}；自己的 Key 写 ¥；仅遗留美元估算带「≈」。
  * 0 / 无值仍显「—」。
  */
 export function formatDisplayCost(
   nano: number,
   estimated = false,
   currency?: string | null,
+  unit?: CostUnit,
 ): string {
-  const base = formatCost(nano, currency);
+  const base = formatCost(nano, currency, unit);
   if (base === "—" || !estimated) return base;
   return `≈${base}`;
 }
 
+export function formatCostMoney(money: CostMoney): string {
+  return formatDisplayCost(
+    money.nano,
+    money.estimated,
+    money.currency,
+    money.unit,
+  );
+}
+
+/** 平台积分在前、自己的 Key ¥ 在后；混合一轮写成 `0.01 积分 · ¥0.04`。 */
+export function formatCostBill(
+  billed: CostMoney | null | undefined,
+  extra?: CostMoney | null,
+  provisional = false,
+): string | null {
+  const parts: string[] = [];
+  if (billed && billed.nano > 0) parts.push(formatCostMoney(billed));
+  if (extra && extra.nano > 0) parts.push(formatCostMoney(extra));
+  if (parts.length === 0) return null;
+  const text = parts.join(" · ");
+  return provisional ? `${text} 至今` : text;
+}
+
+export function mergeCostMoney(
+  left: CostMoney | null | undefined,
+  right: CostMoney | null | undefined,
+): CostMoney | null {
+  if (!left || left.nano <= 0) {
+    return right && right.nano > 0 ? right : null;
+  }
+  if (!right || right.nano <= 0) return left;
+  if (
+    left.currency !== right.currency ||
+    left.estimated !== right.estimated ||
+    left.unit !== right.unit
+  ) {
+    return left;
+  }
+  return { ...left, nano: left.nano + right.nano };
+}
+
+export function mergeSplitCost(
+  left: SplitCostMoney,
+  right: SplitCostMoney,
+): SplitCostMoney {
+  return {
+    billed: mergeCostMoney(left.billed, right.billed),
+    extra: mergeCostMoney(left.extra, right.extra),
+  };
+}
+
+export function higherCostMoney(
+  left: CostMoney | null | undefined,
+  right: CostMoney | null | undefined,
+): CostMoney | null {
+  if (!left || left.nano <= 0) {
+    return right && right.nano > 0 ? right : null;
+  }
+  if (!right || right.nano <= 0) return left;
+  if (
+    left.currency !== right.currency ||
+    left.estimated !== right.estimated ||
+    left.unit !== right.unit
+  ) {
+    return left;
+  }
+  return left.nano >= right.nano ? left : right;
+}
+
+export function higherSplitCost(
+  left: SplitCostMoney,
+  right: SplitCostMoney,
+): SplitCostMoney {
+  return {
+    billed: higherCostMoney(left.billed, right.billed),
+    extra: higherCostMoney(left.extra, right.extra),
+  };
+}
+
+type CostLeafLike = {
+  total: number;
+  currency?: string | null;
+  estimated_total?: number | null;
+  estimated_currency?: string | null;
+  pricing_source?: string | null;
+};
+
+function extraMoney(nano: number, currency: string): CostMoney | null {
+  return costMoney(nano, currency, "cash", isUsd(currency));
+}
+
+/**
+ * 回合 / run 叶子：`total` 已含 BYOK 名义价（与 `estimated_total` 同币可加）。
+ * 拆开后平台列写积分、自己的 Key 写 ¥。
+ */
+export function splitCostMoney(
+  cost: CostLeafLike | null | undefined,
+): SplitCostMoney {
+  if (!cost) return { billed: null, extra: null };
+  const billedCurrency = cost.currency || DEFAULT_CURRENCY;
+  const extraCurrency = cost.estimated_currency || billedCurrency;
+  const total = cost.total ?? 0;
+  const extra = cost.estimated_total ?? 0;
+  const sameCurrency =
+    billedCurrency.toUpperCase() === extraCurrency.toUpperCase();
+  let billedNano = 0;
+  if (total > 0) {
+    if (sameCurrency && extra > 0 && total >= extra) {
+      billedNano = total - extra;
+    } else {
+      billedNano = total;
+    }
+  }
+  return {
+    billed: costMoney(billedNano, billedCurrency, "credit"),
+    extra: extra > 0 ? extraMoney(extra, extraCurrency) : null,
+  };
+}
+
+/**
+ * 账户用量窗：`cost.total` 只含平台记账，`estimated_cost.total` 是 BYOK 切片，
+ * 两列互斥，不能相减。
+ */
+export function splitAccountSpend(opts: {
+  billed: number;
+  billedCurrency?: string | null;
+  extra: number;
+  extraCurrency?: string | null;
+}): SplitCostMoney {
+  const billedCurrency = opts.billedCurrency || DEFAULT_CURRENCY;
+  const extraCurrency = opts.extraCurrency || billedCurrency;
+  return {
+    billed: costMoney(opts.billed, billedCurrency, "credit"),
+    extra: extraMoney(opts.extra, extraCurrency),
+  };
+}
+
+export function sumSplitCosts(
+  costs: Array<CostLeafLike | null | undefined>,
+): SplitCostMoney {
+  let acc: SplitCostMoney = { billed: null, extra: null };
+  for (const cost of costs) {
+    acc = mergeSplitCost(acc, splitCostMoney(cost));
+  }
+  return acc;
+}
+
 /**
  * 把 nano 映到与 {@link formatCost} 相同的「分」整数（`toFixed(2)` 口径）。
- * 0 / 不足 1 分返回 null——那些走「—」/「<¥0.01」，不能拿来做加减找齐。
+ * 0 / 不足 0.01 返回 null——那些走「—」/「<0.01 积分」，不能拿来做加减找齐。
  */
 function displayFen(nano: number): number | null {
   if (nano <= 0) return null;
@@ -343,8 +560,17 @@ function displayFen(nano: number): number | null {
   return Math.round(Number(amount.toFixed(2)) * 100);
 }
 
-function formatFen(fen: number, currency?: string | null): string {
-  return `${currencySymbol(currency)}${(fen / 100).toFixed(2)}`;
+function formatFen(
+  fen: number,
+  currency?: string | null,
+  unit?: CostUnit,
+): string {
+  const amount = (fen / 100).toFixed(2);
+  const resolved = resolveCostUnit(currency, unit);
+  if (resolved === "credit" && isCreditCurrency(currency)) {
+    return `${amount} 积分`;
+  }
+  return `${currencySymbol(currency)}${amount}`;
 }
 
 /**
@@ -357,6 +583,7 @@ export function formatAlignedCostParts(
   outputNano: number,
   totalNano: number,
   currency?: string | null,
+  unit?: CostUnit,
 ): { input: string; output: string } {
   const totalFen = displayFen(totalNano);
   const inputFenRaw = displayFen(inputNano);
@@ -366,15 +593,15 @@ export function formatAlignedCostParts(
     (outputNano > 0 && displayFen(outputNano) == null)
   ) {
     return {
-      input: formatCost(inputNano, currency),
-      output: formatCost(outputNano, currency),
+      input: formatCost(inputNano, currency, unit),
+      output: formatCost(outputNano, currency, unit),
     };
   }
   if (inputNano <= 0) {
-    return { input: "—", output: formatFen(totalFen, currency) };
+    return { input: "—", output: formatFen(totalFen, currency, unit) };
   }
   if (outputNano <= 0) {
-    return { input: formatFen(totalFen, currency), output: "—" };
+    return { input: formatFen(totalFen, currency, unit), output: "—" };
   }
   let inputFen = inputFenRaw ?? 0;
   let outputFen = totalFen - inputFen;
@@ -383,42 +610,18 @@ export function formatAlignedCostParts(
     inputFen = totalFen - outputFen;
   }
   return {
-    input: formatFen(inputFen, currency),
-    output: formatFen(outputFen, currency),
+    input: formatFen(inputFen, currency, unit),
+    output: formatFen(outputFen, currency, unit),
   };
 }
 
 /**
- * SSE / fold `CostBreakdown` 叶子上挑展示金额，**连同该笔金额自己的币种**一起返回。
- *
- * `total` 是产品名义价（CNY）。无 total 时回落 `estimated_total`：CNY = 账单，
- * 遗留 USD = ≈$。调用方必须把 currency 一路带到格式化。
+ * SSE / fold `CostBreakdown` 叶子上挑一笔展示金额（签名 / 单值回落）。
+ * 混合一轮请用 {@link splitCostMoney}，不要把积分和 ¥ 加成一个数。
  */
 export function pickCostMoney(
-  cost:
-    | {
-        total: number;
-        currency?: string | null;
-        estimated_total?: number | null;
-        estimated_currency?: string | null;
-        pricing_source?: string | null;
-      }
-    | null
-    | undefined,
-): { nano: number; estimated: boolean; currency: string } | null {
-  if (!cost) return null;
-  const billedCurrency = cost.currency || DEFAULT_CURRENCY;
-  if (cost.total > 0) {
-    return { nano: cost.total, estimated: false, currency: billedCurrency };
-  }
-  const est = cost.estimated_total;
-  if (est != null && est > 0) {
-    const estCurrency = cost.estimated_currency || billedCurrency;
-    return {
-      nano: est,
-      estimated: estCurrency.toUpperCase() === "USD",
-      currency: estCurrency,
-    };
-  }
-  return { nano: 0, estimated: false, currency: billedCurrency };
+  cost: CostLeafLike | null | undefined,
+): CostMoney | null {
+  const split = splitCostMoney(cost);
+  return split.billed ?? split.extra;
 }

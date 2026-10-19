@@ -195,13 +195,6 @@ async def test_regenerate_does_not_touch_orm_after_expire(monkeypatch):
         async def delete_after(self, *_a, **_k):
             return None
 
-    class _BoardRepo:
-        def __init__(self, _session):
-            pass
-
-        async def get_by_conversation_id(self, *_a, **_k):
-            return None
-
     async def _run_and_persist(**kwargs):
         assert kwargs["user_message"] == "继续任务"
         assert kwargs["history"] == [{"role": "user", "content": "prior"}]
@@ -209,11 +202,8 @@ async def test_regenerate_does_not_touch_orm_after_expire(monkeypatch):
     monkeypatch.setattr(turns_mod, "async_session_factory", lambda: _CM())
     monkeypatch.setattr(turns_mod, "ConversationRepository", _ConvRepo)
     monkeypatch.setattr(turns_mod, "MessageRepository", _MsgRepo)
-    monkeypatch.setattr(turns_mod, "TableRepository", _BoardRepo)
     monkeypatch.setattr(turns_mod, "resolve_local_binding", AsyncMock(return_value=None))
     monkeypatch.setattr(turns_mod, "resolve_profile_set", AsyncMock(return_value=None))
-
-    monkeypatch.setattr(turns_mod, "resolve_permission_axes", AsyncMock(return_value=None))
     monkeypatch.setattr(turns_mod, "compact_before_turn", AsyncMock(return_value=None))
     monkeypatch.setattr(
         turns_mod,

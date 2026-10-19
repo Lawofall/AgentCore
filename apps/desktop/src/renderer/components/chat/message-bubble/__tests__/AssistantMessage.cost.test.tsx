@@ -188,7 +188,7 @@ describe("AssistantMessage turn cost at bubble end", () => {
         durationMs: 12_000,
       }),
     );
-    expect(screen.getByText("¥5.00")).toBeTruthy();
+    expect(screen.getByText("5.00 积分")).toBeTruthy();
     expect(screen.getByText("12s")).toBeTruthy();
     expect(screen.queryByText(/用时/)).toBeNull();
     expect(screen.getByRole("button", { name: "复制" })).toBeTruthy();
@@ -225,6 +225,19 @@ describe("AssistantMessage turn cost at bubble end", () => {
       }),
     );
     expect(screen.getByText("¥3.00")).toBeTruthy();
+    expect(screen.queryByText("3.00 积分")).toBeNull();
+  });
+
+  it("混合平台 + BYOK：脚上拆开积分与 ¥", () => {
+    renderBubble(
+      settledMessage({
+        cost: nanoCost(8_000_000_000, {
+          estimated_total: 3_000_000_000,
+          currency: "CNY",
+        }),
+      }),
+    );
+    expect(screen.getByText("5.00 积分 · ¥3.00")).toBeTruthy();
   });
 
   it("遗留美元估算：费用位出 ≈$", () => {
@@ -281,7 +294,7 @@ describe("AssistantMessage turn cost at bubble end", () => {
         content: "团队汇总答复",
       }),
     );
-    expect(screen.getByText("¥8.00")).toBeTruthy();
+    expect(screen.getByText("8.00 积分")).toBeTruthy();
     expect(screen.queryByText(/至今/)).toBeNull();
   });
 
@@ -314,7 +327,7 @@ describe("AssistantMessage turn cost at bubble end", () => {
         isStreaming: true,
       }),
     );
-    expect(screen.getByText("¥8.00 至今")).toBeTruthy();
+    expect(screen.getByText("8.00 积分 至今")).toBeTruthy();
     expect(screen.queryByText("12s")).toBeNull();
   });
 
@@ -382,7 +395,7 @@ describe("AssistantMessage turn cost at bubble end", () => {
         },
       }),
     );
-    expect(screen.getByText("¥4.00")).toBeTruthy();
+    expect(screen.getByText("4.00 积分")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "重新生成" })).toBeNull();
     expect(screen.getByRole("button", { name: "复制" })).toBeTruthy();
   });
@@ -401,7 +414,7 @@ describe("AssistantMessage turn cost at bubble end", () => {
         },
       }),
     );
-    expect(screen.getByText("¥5.00")).toBeTruthy();
+    expect(screen.getByText("5.00 积分")).toBeTruthy();
     expect(screen.queryByText("3 轮")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "用量" }));
     expect(await screen.findByText("ReAct 轮次")).toBeTruthy();

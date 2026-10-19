@@ -170,6 +170,7 @@ async def test_llm_provider_key_updated_and_deleted_emit(monkeypatch):
             id="prov-1",
             label="x",
             base_url="https://api.example",
+            vendor_id="custom",
             status="unchecked",
             masked_key="••••1234",
             supports_tools=None,

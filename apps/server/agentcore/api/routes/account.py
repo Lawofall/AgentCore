@@ -73,10 +73,28 @@ async def list_account_models(
 ) -> ModelCatalogResponse:
     """Model catalog for a ticketed sidecar. Same rows as ``GET /v1/users/me/models``."""
     from agentcore.api.routes.model_catalog import to_model_catalog_response
+    from agentcore.db.repositories import UserRepository
     from agentcore.llm.catalog import resolve_model_catalog
+    from agentcore.llm.composer_knobs import knobs_by_model
 
-    catalog = await resolve_model_catalog(session, user.user_id)
-    return to_model_catalog_response(catalog)
+    users = UserRepository(session)
+    hidden = await users.hidden_model_refs(user.user_id)
+    enabled = await users.enabled_model_refs(user.user_id)
+    catalog = await resolve_model_catalog(
+        session, user.user_id, enabled_refs=enabled
+    )
+    names = await users.model_display_names(user.user_id)
+    composer = await users.composer_model_override(user.user_id)
+    vision_accept = await users.vision_accept_refs(user.user_id)
+    return to_model_catalog_response(
+        catalog,
+        hidden_refs=list(hidden),
+        enabled_refs=list(enabled),
+        display_names=names,
+        composer_model=composer,
+        composer_model_knobs=knobs_by_model(composer),
+        vision_accept_refs=vision_accept,
+    )
 
 
 @router.post("/token", response_model=AccountTokenResponse)

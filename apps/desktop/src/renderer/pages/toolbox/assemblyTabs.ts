@@ -2,7 +2,6 @@ import { APP_PATHS } from "@/pages/toolbox/manual/paths";
 
 export type ToolboxTab =
   | "overview"
-  | "model"
   | "tools"
   | "envelope"
   | "prompts"
@@ -13,10 +12,6 @@ export type AssemblyHome = "toolbox" | "settings";
 /** Opt-in on a tool or envelope shelf while a conversation is open. */
 export const ASSEMBLY_TURN_HINT =
   "正在生成的这一轮不换，从下一次进入回合生效。";
-
-export function hasLocalMcp(): boolean {
-  return typeof window !== "undefined" && Boolean(window.mcpApi);
-}
 
 export function assemblyHomeFromPath(pathname: string): AssemblyHome {
   return pathname.startsWith("/more/model") ? "settings" : "toolbox";
@@ -29,22 +24,17 @@ export function assemblyShelfPath(
 ): string {
   const base = home === "settings" ? "/more/model" : APP_PATHS.toolbox.root;
   if (!tab || tab === "overview") return base;
-  const hash = tab === "prompts" ? "prompts" : tab === "plugs" ? "plugs" : tab;
-  return `${base}#${hash}`;
+  return `${base}#${tab}`;
 }
 
 export function toolboxTabFromPath(pathname: string): ToolboxTab | null {
   if (
     pathname === APP_PATHS.toolbox.overview ||
-    pathname === "/more/model/overview"
-  ) {
-    return "overview";
-  }
-  if (
+    pathname === "/more/model/overview" ||
     pathname === APP_PATHS.toolbox.model ||
     pathname === "/more/model/model"
   ) {
-    return "model";
+    return "overview";
   }
   if (
     pathname === APP_PATHS.toolbox.toolSwitches ||

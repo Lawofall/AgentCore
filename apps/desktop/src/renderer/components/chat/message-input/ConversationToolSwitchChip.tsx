@@ -23,8 +23,7 @@ import { ComposerPlusBackHeader, useComposerPlusRow } from "./ComposerPlusMenu";
 
 /**
  * Composer tool deny list. Same shape as the permission badge and the model
- * picker: this conversation (or the blank draft), with 「设为新会话默认」
- * as the only account write.
+ * picker: this conversation, or the blank draft that the next new chat will pin.
  */
 export function ConversationToolSwitchChip() {
   const conversationId = useChatPaneId();

@@ -1391,27 +1391,6 @@ def test_the_real_ceo_layers_splice_into_leaf_sections():
     assert "</工作区>" not in ceo_prompt
 
 
-def test_a_growing_table_section_is_attributable_to_its_own_section():
-    from agentcore.runtime.resolve.prompt import render_ceo_turn_envelope
-
-    def _turn(table: str) -> None:
-        render_ceo_turn_envelope(
-            attachment_context="",
-            table_context=table,
-            include_runtime=False,
-        )
-
-    bind_log_context(conversation_id="conv-ledger", trace_id="t1")
-    _turn("<表格>\n行 1\n</表格>")
-    bind_log_context(trace_id="t2")
-    _turn("<表格>\n行 1\n行 2\n</表格>")
-
-    delta = prompt_section_delta("conv-ledger")
-    assert delta.comparable is True
-    assert delta.first_changed == "table_context"
-    assert delta.changed == ("table_context",)
-
-
 def test_observe_carries_per_section_digests_for_offline_diffing(monkeypatch):
     captured: list[dict] = []
 

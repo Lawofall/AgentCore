@@ -17,6 +17,7 @@ import {
   processTurnLane,
   timelineNodeKeys,
 } from "@/lib/processTimeline";
+import { trimMarkdownLeadingPad } from "@/lib/trimMarkdownLeadingPad";
 import type { CheckpointDisplay } from "@/stores/conversation";
 import { useStreamAwareDisclosure } from "@/stores/disclosure";
 import { type ExecutionJournal, useMessageExecution } from "@/stores/execution";
@@ -148,7 +149,7 @@ const ProcessRow = memo(function ProcessRow({
     return (
       <div className="process-narration min-w-0 max-w-full text-foreground">
         <Markdown
-          content={step.text}
+          content={trimMarkdownLeadingPad(step.text)}
           conversationId={conversationId}
           citations={citations}
           knownLedgerIds={knownLedgerIds}
@@ -401,7 +402,7 @@ export function ProcessTimeline({
   const answerMarkdown = (
     <div className="process-narration min-w-0 max-w-full text-foreground">
       <Markdown
-        content={fallbackContent}
+        content={trimMarkdownLeadingPad(fallbackContent)}
         conversationId={conversationId}
         citations={citations}
         knownLedgerIds={knownLedgerIds}

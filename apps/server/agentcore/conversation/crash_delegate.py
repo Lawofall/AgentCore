@@ -15,7 +15,6 @@ from typing import TYPE_CHECKING, Any
 import agentcore.runtime.pipeline as pipeline_pkg
 from agentcore.conversation.common import (
     resolve_local_binding,
-    resolve_permission_axes,
     resolve_profile_set,
 )
 from agentcore.conversation.turn_backend import build_turn_backend
@@ -23,7 +22,7 @@ from agentcore.conversation.turn_runner import session_callbacks, suspension_cal
 from agentcore.core.logging import get_logger
 from agentcore.core.types import new_id
 from agentcore.db.base import async_session_factory
-from agentcore.db.repositories import ConversationRepository, TableRepository
+from agentcore.db.repositories import ConversationRepository
 from agentcore.llm.credentials import bind_credential_pricing_context
 from agentcore.llm.profiles import turn_profiles_for_turn
 from agentcore.llm.resolve import resolve_credentials
@@ -31,6 +30,7 @@ from agentcore.runtime.facts import FactKind
 from agentcore.runtime.pipeline.resume.wire import wire_crash_turn
 from agentcore.runtime.resolve.prompt.rebuild import rebuild_fresh_worker_base_prompt
 from agentcore.runtime.runs.types import RunKind
+from agentcore.runtime.turn.snapshot import ConversationSnapshot
 
 if TYPE_CHECKING:
     from agentcore.runtime.events import EventSink
@@ -99,11 +99,8 @@ async def production_crash_delegate_factory(
             profile_set = await resolve_profile_set(
                 session, conv, user_id, credentials=llm_credentials
             )
-            permission_axes = await resolve_permission_axes(session, conversation_id)
-            table = await TableRepository(session).get_by_conversation_id(
-                conversation_id, user_id=user_id
-            )
-            table_id = table.id if table else None
+            snapshot = ConversationSnapshot.from_row(conv)
+            permission_axes = snapshot.permission_axes
 
         profiles = turn_profiles_for_turn(profile_set, llm_credentials)
         bind_credential_pricing_context(llm_credentials)
@@ -136,7 +133,6 @@ async def production_crash_delegate_factory(
             llm=llm,
             sink=sink,
             backend=backend,
-            table_id=table_id,
             conversation_id=conversation_id,
             message_id=message_id,
             captain_run_id=captain_run_id,
@@ -147,6 +143,7 @@ async def production_crash_delegate_factory(
             journal_entries=list(state.entries),
             profiles=profiles,
             permission_axes=permission_axes,
+            prefer_delegate=snapshot.prefer_delegate,
             session_saver=session_saver,
             session_loader=session_loader,
             suspension_saver=suspension_saver,

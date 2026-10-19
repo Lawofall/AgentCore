@@ -1,4 +1,4 @@
-"""Platform LLM upstream, vendor keys, vision, and billing settings."""
+"""Platform LLM upstream, vendor keys, and billing settings."""
 
 from __future__ import annotations
 
@@ -15,17 +15,18 @@ class PlatformSettings(BaseModel):
     platform_credential_id: str = ""
     platform_base_url: str = "https://api.deepseek.com"
     platform_model: str = "deepseek-v4.1-flash"
-    # Background purposes (title/compaction); empty = follow platform_model.
-    platform_background_model: str = ""
+    # Title chrome. Product pin = Flash; empty env falls back to platform_model.
+    # Compaction follows the conversation's chat model, not this field.
+    platform_background_model: str = "deepseek-v4.1-flash"
     # Explicit platform model catalog allowlist (运营配置, 成本配额与计费 §〇·六 F3):
-    # comma-separated ids the operator subsidizes on the partner relay. Empty = fall
+    # comma-separated ids the operator subsidizes. Empty = fall
     # back to platform_model (+ background). Every listed id MUST have a curated price
     # card (F4) or it is hard-excluded from catalog / system presets; discovery of the
     # full upstream set is deliberately NOT used here (stays a BYOK-row concern).
     # When non-empty, PLATFORM_MODEL and (if set) PLATFORM_BACKGROUND_MODEL must be
     # members — fail-fast at settings load (no silent drift).
     platform_models: str = ""
-    # Per-model platform credential overrides (运营中转「一 key 一模型」, 成本配额与计费
+    # Per-model platform credential overrides (「一 key 一模型」, 成本配额与计费
     # §〇·六 F3): a JSON object mapping model id →
     # {"api_key"?, "base_url"?, "upstream_model"?, "id"?}.
     # When a model in the catalog has an entry **with its own api_key**, that
@@ -47,36 +48,16 @@ class PlatformSettings(BaseModel):
     doubao_api_key: str = ""
     doubao_base_url: str = "https://ark.cn-beijing.volces.com/api/v3"
 
-    # --- 对话读图 ---
-    # Platform fallback when profile vision slot is null: requires billing_mode=platform
-    # + VISION_API_KEY + VISION_BASE_URL. A filled vision slot builds the reader from that
-    # slot's credentials even under billing_mode=byok.
-    # OpenAI-compatible multimodal. Default model = kimi-k2.5 (operator relay vision).
-    # VISION_BASE_URL must be set (typically = PLATFORM_BASE_URL); empty → fallback off.
-    # Keep VISION_MODEL off PLATFORM_MODELS — not a selectable chat catalog id.
-    vision_api_key: str = ""
-    vision_base_url: str = ""
-    vision_model: str = "kimi-k2.5"
-    vision_timeout_seconds: float = 60.0
-
     # --- 计费模式 ---
     billing_mode: str = "byok"
-    # Leftover env: no longer scales the product Flash meter (official DeepSeek CNY).
-    # OpenCode's published allowance multiplier is also not this knob.
-    go_cost_multiplier: str = "1"
 
     # OpenCode Go monthly window anniversary (UTC day-of-month, 1–31). Short
     # months clamp to the last day. Used as the empty-pool / env-fallback
     # aggregate on admin Go-window calibration. Pool members each carry their
     # own subscription_day (accounts are bought in batches). Ops must set the
-    # env value to the real Go billing anniversary of the env key — default 1
+    # env value to the real billing anniversary of the env key — default 1
     # is only a bootable fallback.
     platform_go_subscription_day: int = Field(default=1, ge=1, le=31)
-
-    # Sub2API 管理 API（可选）。配置后 platform 模式 503 时自动探测账号状态生成诊断。
-    sub2api_admin_url: str = ""
-    sub2api_admin_email: str = ""
-    sub2api_admin_password: str = ""
 
     # AES-256-GCM 主密钥：BYOK API Key、平台额度账号池、Git PAT、admin TOTP。
     encryption_key: str = ""

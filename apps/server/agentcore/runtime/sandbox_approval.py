@@ -5,8 +5,9 @@ In-boundary execution auto-passes. Out-of-boundary calls are refused, not
 prompted. Cloud workers still skip per-call cards for in-boundary server
 tools. ``read`` does not skip file writes — those calls are denied.
 
-Desktop Client Tools (MCP) still share the turn ApprovalGate. Host is only
-assembled on ``computer``, and always-confirm shapes still prompt.
+Desktop Client Tools (MCP) still share the turn ApprovalGate. Host is
+assembled on ``computer``, and on ``full`` only for a local engine.
+Always-confirm shapes still prompt except on ``full``.
 """
 
 from __future__ import annotations
@@ -139,11 +140,14 @@ def execution_tool_auto_passes(
 def boundary_block_message(
     boundary: WorkspaceBoundary | None,
     tool_name: str,
+    *,
+    location: str | None = None,
 ) -> str | None:
     """Deny copy when this call sits outside the conversation boundary.
 
     In-boundary calls return ``None`` and follow the normal gate. There is no
     per-step approval mode: outside the boundary the tool is refused.
+    ``full`` on a cloud/web backend does not include Host.
     """
     if boundary is None:
         return None
@@ -158,6 +162,6 @@ def boundary_block_message(
         return "这个对话的边界是只看，不能改文件。"
     if name in execution_class_tool_names() and not boundary.allows_execution:
         return "这个对话的边界是只看，不能跑命令。"
-    if name in host_class_tool_names() and not boundary.allows_host:
+    if name in host_class_tool_names() and not boundary.host_in_registry(location):
         return "这个对话的边界不包括这台电脑。"
     return None

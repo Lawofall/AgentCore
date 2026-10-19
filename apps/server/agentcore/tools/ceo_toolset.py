@@ -98,6 +98,7 @@ def _assemble_ceo_toolset(
     advertise_bind_local_folder: bool = False,
     desktop_online: bool = False,
     worker_envelope: str = "",
+    prefer_delegate: bool = False,
 ) -> tuple[DelegateTool, Any, ToolRegistry]:
     """Wire the CEO coordinator's toolset (delegate + read/retrieval + consult + …).
 
@@ -129,6 +130,7 @@ def _assemble_ceo_toolset(
         folder_id=folder_id,
         permission_axes=permission_axes,
         worker_envelope=worker_envelope,
+        prefer_delegate=prefer_delegate,
     )
     chat_tools = build_ceo_tool_registry(
         desktop_online=desktop_online,

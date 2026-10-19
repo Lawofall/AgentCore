@@ -49,15 +49,17 @@ class ToolApproval(StrEnum):
 class WorkspaceBoundary(StrEnum):
     """What this conversation may do. One value, not three axes.
 
-    ``read`` — look only. ``folder`` — change this folder and run inside it
-    (default). ``computer`` — folder plus the local Host face. Stored as
-    ``permission_axes.boundary``. Checkpoints, breakers, and always-confirm
-    commands are orthogonal.
+    ``read`` — look only. ``folder`` — change this folder and run inside it.
+    ``computer`` — folder plus the local Host face (factory default; web /
+    no local engine clamp to folder). ``full`` — skip remaining confirmation
+    cards (push / install / attach / MCP); Host only on a local engine.
+    Stored as ``permission_axes.boundary``. Breaker DENY / FORCE stay orthogonal.
     """
 
     READ = "read"
     FOLDER = "folder"
     COMPUTER = "computer"
+    FULL = "full"
 
     @property
     def allows_write(self) -> bool:
@@ -69,7 +71,25 @@ class WorkspaceBoundary(StrEnum):
 
     @property
     def allows_host(self) -> bool:
-        return self is WorkspaceBoundary.COMPUTER
+        return self in (WorkspaceBoundary.COMPUTER, WorkspaceBoundary.FULL)
+
+    @property
+    def skips_confirm(self) -> bool:
+        """Skip always-confirm and leftover GRANTABLE cards. Not DENY / FORCE."""
+        return self is WorkspaceBoundary.FULL
+
+    def host_in_registry(self, location: str | None) -> bool:
+        """Whether the Host face belongs in the tool table for this backend.
+
+        ``computer`` always claims Host (execute refuses without a channel).
+        ``full`` claims Host only on a local engine — cloud/web 完全权限
+        skips cards but does not promise the user's machine.
+        """
+        if self is WorkspaceBoundary.COMPUTER:
+            return True
+        if self is WorkspaceBoundary.FULL:
+            return location == "local"
+        return False
 
     def to_dict(self) -> dict[str, str]:
         return {"boundary": self.value}
@@ -82,7 +102,7 @@ class WorkspaceBoundary(StrEnum):
         return cls(str(raw["boundary"]))
 
 
-DEFAULT_PERMISSION_AXES = WorkspaceBoundary.FOLDER
+DEFAULT_PERMISSION_AXES = WorkspaceBoundary.COMPUTER
 
 
 class ToolFace(StrEnum):

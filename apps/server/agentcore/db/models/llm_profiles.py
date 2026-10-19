@@ -1,8 +1,8 @@
 """Account assemblies (装配): tools, envelope, plugs, 交代, and the model.
 
-A conversation pins this id only. Main / worker / background / vision,
-``reasoning_effort``, and optional ``context_budget`` live on the row. Empty
-worker / background follow main. NULL ``context_budget`` uses the model window.
+A conversation pins this id only. Main / worker, ``reasoning_effort``, and
+optional ``context_budget`` live on the row. Empty worker follows main.
+NULL ``context_budget`` uses the model window.
 """
 
 from datetime import datetime
@@ -42,7 +42,7 @@ class LlmModelProfile(Base):
             name="ck_llm_model_profiles_kind",
         ),
         CheckConstraint(
-            "recipe is null or recipe in ('chat', 'web', 'full')",
+            "recipe is null or recipe in ('chat', 'full')",
             name="ck_assemblies_recipe",
         ),
         CheckConstraint(
@@ -53,25 +53,13 @@ class LlmModelProfile(Base):
             "worker_origin is null or worker_origin in ('platform', 'byok')",
             name="ck_llm_model_profiles_worker_origin",
         ),
-        CheckConstraint(
-            "background_origin is null or background_origin in ('platform', 'byok')",
-            name="ck_llm_model_profiles_background_origin",
-        ),
-        CheckConstraint(
-            "vision_origin is null or vision_origin in ('platform', 'byok')",
-            name="ck_llm_model_profiles_vision_origin",
-        ),
         Index("ix_llm_model_profiles_user", "user_id"),
     )
 
-    id: Mapped[str] = mapped_column(
-        PG_UUID(as_uuid=False), primary_key=True, default=_new_uuid
-    )
+    id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False), primary_key=True, default=_new_uuid)
     user_id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False))
     name: Mapped[str] = mapped_column(String(200), nullable=False)
-    kind: Mapped[str] = mapped_column(
-        String(20), nullable=False, server_default=text("'user'")
-    )
+    kind: Mapped[str] = mapped_column(String(20), nullable=False, server_default=text("'user'"))
 
     disabled_tools: Mapped[list] = mapped_column(
         JSONB,
@@ -91,14 +79,14 @@ class LlmModelProfile(Base):
         default=list,
         server_default=text("'[]'::jsonb"),
     )
-    omit_factory_catalog: Mapped[bool] = mapped_column(
-        Boolean,
+    omitted_factory_skills: Mapped[list] = mapped_column(
+        JSONB,
         nullable=False,
-        default=False,
-        server_default=text("false"),
+        default=list,
+        server_default=text("'[]'::jsonb"),
     )
-    # chat / web / full while the official recipe still owns tools and envelope.
-    # Null = the stored deny lists are the record.
+    # 'full' only while a leftover owned row still carries the live recipe.
+    # Null = the stored deny lists are the record. Official 完整 is virtual.
     recipe: Mapped[str | None] = mapped_column(String(16), nullable=True)
     omit_desk_rules: Mapped[bool] = mapped_column(
         Boolean,
@@ -108,28 +96,12 @@ class LlmModelProfile(Base):
     )
 
     main_origin: Mapped[str] = mapped_column(String(20), nullable=False)
-    main_provider_id: Mapped[str | None] = mapped_column(
-        PG_UUID(as_uuid=False), nullable=True
-    )
+    main_provider_id: Mapped[str | None] = mapped_column(PG_UUID(as_uuid=False), nullable=True)
     main_model: Mapped[str] = mapped_column(String(200), nullable=False)
 
     worker_origin: Mapped[str | None] = mapped_column(String(20), nullable=True)
-    worker_provider_id: Mapped[str | None] = mapped_column(
-        PG_UUID(as_uuid=False), nullable=True
-    )
+    worker_provider_id: Mapped[str | None] = mapped_column(PG_UUID(as_uuid=False), nullable=True)
     worker_model: Mapped[str | None] = mapped_column(String(200), nullable=True)
-
-    background_origin: Mapped[str | None] = mapped_column(String(20), nullable=True)
-    background_provider_id: Mapped[str | None] = mapped_column(
-        PG_UUID(as_uuid=False), nullable=True
-    )
-    background_model: Mapped[str | None] = mapped_column(String(200), nullable=True)
-
-    vision_origin: Mapped[str | None] = mapped_column(String(20), nullable=True)
-    vision_provider_id: Mapped[str | None] = mapped_column(
-        PG_UUID(as_uuid=False), nullable=True
-    )
-    vision_model: Mapped[str | None] = mapped_column(String(200), nullable=True)
 
     reasoning_effort: Mapped[str | None] = mapped_column(String(32), nullable=True)
     # NULL = this main model's catalog window. A positive step is a shorter ceiling.

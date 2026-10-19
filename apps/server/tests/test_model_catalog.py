@@ -28,19 +28,37 @@ pytestmark = pytest.mark.anyio
 # --- helpers -----------------------------------------------------------------
 
 
+def _vendor_for_url(base_url: str) -> str:
+    key = base_url.rstrip("/").lower()
+    if "api.openai.com" in key:
+        return "openai"
+    if key.endswith("/zen/go/v1"):
+        return "opencode_go"
+    if "/zen/v1" in key:
+        return "opencode_zen"
+    if "openrouter.ai" in key:
+        return "openrouter"
+    if "deepseek.com" in key:
+        return "deepseek"
+    return "custom"
+
+
 def _prov(
     pid: str,
     *,
     default_model: str = "deepseek-v4-flash",
     label: str = "P",
     base_url: str | None = None,
+    vendor_id: str | None = None,
 ):
+    resolved_url = base_url if base_url is not None else f"http://{pid}/v1"
     return SimpleNamespace(
         id=pid,
         user_id="u1",
         label=label,
         default_model=default_model,
-        base_url=base_url if base_url is not None else f"http://{pid}/v1",
+        base_url=resolved_url,
+        vendor_id=vendor_id or _vendor_for_url(resolved_url),
         api_key_enc=b"x",
         supports_tools=None,
         status="active",
@@ -54,6 +72,7 @@ def _creds(row) -> LLMCredentials:
         default_model=row.default_model,
         source="user",
         provider_id=row.id,
+        vendor_id=getattr(row, "vendor_id", "custom"),
     )
 
 
@@ -249,6 +268,44 @@ async def test_catalog_custom_base_url_has_no_presets(monkeypatch):
     assert byok_ids == []
 
 
+async def test_catalog_synthesizes_enabled_refs_missing_from_discovery(monkeypatch):
+    """Hand-filled BYOK ids the upstream list omitted become custom catalog rows."""
+    reset_discovery_cache_for_tests()
+    row = _prov(
+        "prov-custom",
+        default_model="claude-sonnet",
+        label="Relay",
+        base_url="https://relay.example/v1",
+    )
+    monkeypatch.setattr(catalog.settings, "platform_api_key", "")
+    monkeypatch.setattr(catalog.settings, "billing_mode", "byok")
+    _mock_catalog(
+        monkeypatch,
+        providers=[row],
+        selection=ModelSelection(
+            model="claude-sonnet", origin="byok", provider_id="prov-custom"
+        ),
+        discovered={"prov-custom": ["claude-sonnet"]},
+    )
+    cat = await resolve_model_catalog(
+        None,
+        "u1",
+        enabled_refs=[
+            "@byok/prov-custom/deepseek-v4.1-flash",
+            "@byok/prov-custom/claude-sonnet",
+            "@byok/gone/ghost",
+            "@platform/glm-5.2",
+        ],
+    )
+    byok = [m for m in cat.models if m.origin == "byok"]
+    flash = next(m for m in byok if m.id == "deepseek-v4.1-flash")
+    sonnet = next(m for m in byok if m.id == "claude-sonnet")
+    assert flash.custom is True
+    assert flash.provider_id == "prov-custom"
+    assert sonnet.custom is False
+    assert all(m.id != "ghost" for m in byok)
+
+
 async def test_catalog_same_model_id_under_two_providers(monkeypatch):
     """同一模型 id 允许同时出现在多个服务商下 — (id, origin, provider_id) is the key."""
     reset_discovery_cache_for_tests()
@@ -286,6 +343,10 @@ async def test_catalog_keyless_platform_on_hides_guide_rows(monkeypatch):
     keys = {(m.id, m.origin) for m in cat.models}
     assert ("glm-5.2", "platform") in keys
     assert all(m.origin == "platform" and m.available for m in cat.models)
+    glm = next(m for m in cat.models if m.id == "glm-5.2")
+    assert glm.display_name == "GLM-5.2"
+    assert glm.vendor == "智谱 AI"
+    assert glm.badge is None
 
 
 async def test_catalog_keyless_platform_off_returns_empty(monkeypatch):
@@ -340,6 +401,56 @@ async def test_catalog_platform_allowlist_drives_rows(monkeypatch):
     assert platform_ids == ["glm-5.2", "doubao/doubao-seed-2-1-turbo-260628"]
     assert all(m.available and m.price is not None for m in cat.models if m.origin == "platform")
     assert all(m.price.get("currency") == "CNY" for m in cat.models if m.origin == "platform")
+    assert all(m.price.get("multiplier") == "1" for m in cat.models if m.origin == "platform")
+
+
+async def test_catalog_first_wave_platform_sell_cards(monkeypatch):
+    monkeypatch.setattr(catalog.settings, "platform_api_key", "sk-platform")
+    monkeypatch.setattr(catalog.settings, "billing_mode", "platform")
+    monkeypatch.setattr(catalog.settings, "platform_model", "deepseek-v4.1-flash")
+    monkeypatch.setattr(
+        catalog.settings,
+        "platform_models",
+        "deepseek-v4.1-flash,glm-5.3,glm-5.3-flash,kimi-k3",
+    )
+    _mock_catalog(
+        monkeypatch,
+        providers=[],
+        selection=ModelSelection(
+            model="deepseek-v4.1-flash", origin="platform", provider_id=None
+        ),
+    )
+    cat = await resolve_model_catalog(None, "u1")
+    platform = {m.id: m for m in cat.models if m.origin == "platform"}
+    assert list(platform) == [
+        "deepseek-v4.1-flash",
+        "glm-5.3",
+        "glm-5.3-flash",
+        "kimi-k3",
+    ]
+    assert platform["deepseek-v4.1-flash"].price["multiplier"] == "0.25"
+    assert platform["deepseek-v4.1-flash"].price["quota_multiplier"] == "1"
+    glm = platform["glm-5.3"]
+    assert glm.display_name == "GLM-5.3"
+    assert glm.price["multiplier"] == "2"
+    assert glm.price["quota_multiplier"] == "58"
+    assert glm.price["cache_miss"] == "16"
+    assert glm.price["output"] == "56"
+    flash = platform["glm-5.3-flash"]
+    assert flash.display_name == "GLM-5.3 Flash"
+    assert flash.price["multiplier"] == "2"
+    assert flash.price["quota_multiplier"] == "6"
+    assert flash.price["cache_miss"] == "1.6"
+    assert flash.price["output"] == "5.6"
+    assert "vision" in flash.capabilities
+    assert "vision" not in glm.capabilities
+    kimi = platform["kimi-k3"]
+    assert kimi.display_name == "Kimi K3"
+    assert kimi.price["multiplier"] == "2"
+    assert kimi.price["quota_multiplier"] == "192"
+    assert kimi.price["cache_miss"] == "40"
+    assert kimi.price["output"] == "200"
+    assert "vision" in kimi.capabilities
 
 
 async def test_catalog_platform_allowlist_marks_off_protocol_unselectable(monkeypatch):
@@ -376,14 +487,89 @@ async def test_catalog_platform_allowlist_marks_off_protocol_unselectable(monkey
     assert claude.unavailable_reason.code == "upstream_protocol_unsupported"
     assert claude.unavailable_reason.required_protocol == "anthropic_messages"
 
-    # Lookalike / unpriced non-map id still hard-excluded (exact id only).
-    assert "grok-4.5-fast" not in platform
+    # Family grok-* is off-protocol even when unpriced — listed grey, not dropped.
+    fast = platform["grok-4.5-fast"]
+    assert fast.available is False
+    assert fast.unavailable_reason is not None
+    assert fast.unavailable_reason.required_protocol == "openai_responses"
     assert catalog.is_platform_listable("glm-5.2") is True
     assert catalog.is_platform_listable("grok-4.5") is False
 
     assert await validate_model_choice(None, "u1", "grok-4.5", "platform") is False
     assert await validate_model_choice(None, "u1", "union-alpha", "platform") is False
     assert await validate_model_choice(None, "u1", "glm-5.2", "platform") is True
+
+
+async def test_catalog_priced_claude_gpt_are_selectable(monkeypatch):
+    """Priced Claude / GPT on the allowlist are selectable; unpriced grok stays grey."""
+    monkeypatch.setattr(catalog.settings, "platform_api_key", "sk-platform")
+    monkeypatch.setattr(catalog.settings, "billing_mode", "platform")
+    monkeypatch.setattr(catalog.settings, "platform_model", "deepseek-v4.1-flash")
+    monkeypatch.setattr(
+        catalog.settings,
+        "platform_models",
+        (
+            "deepseek-v4.1-flash,claude-opus-4-6,claude-opus-5-5,"
+            "claude-fable-5.1,gpt-6-astra,gpt-6.1-sol,grok-4.5"
+        ),
+    )
+    _mock_catalog(
+        monkeypatch,
+        providers=[],
+        selection=ModelSelection(
+            model="deepseek-v4.1-flash", origin="platform", provider_id=None
+        ),
+    )
+    cat = await resolve_model_catalog(None, "u1")
+    platform = {m.id: m for m in cat.models if m.origin == "platform"}
+
+    flash = platform["deepseek-v4.1-flash"]
+    assert flash.available is True
+    assert flash.price["quota_multiplier"] == "1"
+
+    opus = platform["claude-opus-5-5"]
+    assert opus.available is True
+    assert opus.unavailable_reason is None
+    assert opus.display_name == "Claude Opus 5.5"
+    assert opus.price["multiplier"] == "0.3"
+    assert opus.price["quota_multiplier"] == "41"
+    assert opus.price["cache_miss"] == "8.64"
+    assert opus.price["output"] == "43.2"
+    assert "vision" in opus.capabilities
+
+    opus46 = platform["claude-opus-4-6"]
+    assert opus46.available is True
+    assert opus46.price["quota_multiplier"] == "52"
+    assert opus46.price["cache_miss"] == "10.8"
+
+    fable = platform["claude-fable-5.1"]
+    assert fable.available is True
+    assert fable.price["quota_multiplier"] == "104"
+    assert fable.price["cache_miss"] == "21.6"
+    assert fable.price["cache_hit"] == "0.54"
+
+    astra = platform["gpt-6-astra"]
+    assert astra.available is True
+    assert astra.price["multiplier"] == "0.18"
+    assert astra.price["quota_multiplier"] == "62"
+    assert astra.price["cache_miss"] == "12.96"
+
+    sol = platform["gpt-6.1-sol"]
+    assert sol.available is True
+    assert sol.price["quota_multiplier"] == "12"
+    assert sol.price["cache_miss"] == "2.592"
+
+    grok = platform["grok-4.5"]
+    assert grok.available is False
+    assert grok.unavailable_reason is not None
+    assert grok.price is None or grok.price.get("quota_multiplier") is None
+
+    assert catalog.is_platform_listable("claude-opus-5-5") is True
+    assert catalog.is_platform_listable("gpt-6-astra") is True
+    assert catalog.is_platform_listable("grok-4.5") is False
+    assert await validate_model_choice(None, "u1", "claude-opus-5-5", "platform") is True
+    assert await validate_model_choice(None, "u1", "gpt-6.1-sol", "platform") is True
+    assert await validate_model_choice(None, "u1", "grok-4.5", "platform") is False
 
 
 async def test_catalog_excludes_models_without_curated_pricing(monkeypatch):
@@ -416,7 +602,7 @@ def _byok_off_protocol_row(mid: str, models: list):
     return hits[0]
 
 
-async def test_opencode_go_catalog_marks_off_protocol_unselectable(monkeypatch):
+async def test_opencode_go_catalog_lists_responses_ids_selectable(monkeypatch):
     reset_discovery_cache_for_tests()
     row = _prov(
         "prov-go",
@@ -442,20 +628,19 @@ async def test_opencode_go_catalog_marks_off_protocol_unselectable(monkeypatch):
                 "qwen3.7-max",
                 "union-alpha",
                 "claude-haiku-4-5",
+                "claude-haiku-9",
+                "grok-9",
             ]
         },
     )
     cat = await resolve_model_catalog(None, "u1")
     grok = _byok_off_protocol_row("grok-4.5", cat.models)
-    assert grok.available is False
-    assert grok.unavailable_reason is not None
-    assert grok.unavailable_reason.code == "upstream_protocol_unsupported"
-    assert grok.unavailable_reason.required_protocol == "openai_responses"
+    assert grok.available is True
+    assert grok.unavailable_reason is None
 
     luna = _byok_off_protocol_row("gpt-5.6-luna", cat.models)
-    assert luna.available is False
-    assert luna.unavailable_reason is not None
-    assert luna.unavailable_reason.required_protocol == "openai_responses"
+    assert luna.available is True
+    assert luna.unavailable_reason is None
 
     minimax = _byok_off_protocol_row("minimax-m2.7", cat.models)
     assert minimax.available is True
@@ -473,15 +658,23 @@ async def test_opencode_go_catalog_marks_off_protocol_unselectable(monkeypatch):
     assert haiku.available is True
     assert haiku.unavailable_reason is None
 
+    new_haiku = _byok_off_protocol_row("claude-haiku-9", cat.models)
+    assert new_haiku.available is True
+    assert new_haiku.unavailable_reason is None
+
+    new_grok = _byok_off_protocol_row("grok-9", cat.models)
+    assert new_grok.available is True
+    assert new_grok.unavailable_reason is None
+
     flash = _byok_off_protocol_row("deepseek-v4.1-flash", cat.models)
     assert flash.available is True
     assert flash.unavailable_reason is None
-    glm = _byok_off_protocol_row("glm-5.2", cat.models)
+    glm = _byok_off_protocol_row("glm-5.3", cat.models)
     assert glm.available is True
     assert glm.unavailable_reason is None
 
     assert (
-        await validate_model_choice(None, "u1", "grok-4.5", "byok", "prov-go") is False
+        await validate_model_choice(None, "u1", "grok-4.5", "byok", "prov-go") is True
     )
     assert (
         await validate_model_choice(None, "u1", "union-alpha", "byok", "prov-go") is True
@@ -534,7 +727,7 @@ async def test_opencode_go_hides_official_deepseek_flash_from_picker(monkeypatch
     )
 
 
-async def test_opencode_zen_catalog_marks_grok_unselectable(monkeypatch):
+async def test_opencode_zen_catalog_lists_grok_selectable(monkeypatch):
     reset_discovery_cache_for_tests()
     row = _prov(
         "prov-zen",
@@ -554,10 +747,8 @@ async def test_opencode_zen_catalog_marks_grok_unselectable(monkeypatch):
     )
     cat = await resolve_model_catalog(None, "u1")
     grok = _byok_off_protocol_row("grok-4.5", cat.models)
-    assert grok.available is False
-    assert grok.unavailable_reason is not None
-    assert grok.unavailable_reason.code == "upstream_protocol_unsupported"
-    assert grok.unavailable_reason.required_protocol == "openai_responses"
+    assert grok.available is True
+    assert grok.unavailable_reason is None
     haiku = _byok_off_protocol_row("claude-haiku-4-5", cat.models)
     assert haiku.available is True
     assert haiku.unavailable_reason is None
@@ -565,12 +756,89 @@ async def test_opencode_zen_catalog_marks_grok_unselectable(monkeypatch):
     assert kimi.available is True
     assert kimi.unavailable_reason is None
     assert (
-        await validate_model_choice(None, "u1", "grok-4.5", "byok", "prov-zen") is False
+        await validate_model_choice(None, "u1", "grok-4.5", "byok", "prov-zen") is True
     )
     assert (
         await validate_model_choice(None, "u1", "claude-haiku-4-5", "byok", "prov-zen")
         is True
     )
+
+
+async def test_official_openai_catalog_drops_non_chat_ids(monkeypatch):
+    reset_discovery_cache_for_tests()
+    row = _prov(
+        "prov-oai",
+        default_model="gpt-4o",
+        label="OpenAI",
+        base_url="https://api.openai.com/v1",
+    )
+    monkeypatch.setattr(catalog.settings, "platform_api_key", "")
+    monkeypatch.setattr(catalog.settings, "billing_mode", "byok")
+    _mock_catalog(
+        monkeypatch,
+        providers=[row],
+        selection=ModelSelection(model="gpt-4o", origin="byok", provider_id="prov-oai"),
+        discovered={
+            "prov-oai": [
+                "gpt-4o",
+                "gpt-5",
+                "whisper-1",
+                "tts-1",
+                "dall-e-3",
+                "text-embedding-3-small",
+                "gpt-4o-mini-tts",
+            ]
+        },
+    )
+    cat = await resolve_model_catalog(None, "u1")
+    ids = {m.id for m in cat.models if m.origin == "byok" and m.provider_id == "prov-oai"}
+    assert "gpt-4o" in ids
+    assert "gpt-5" in ids
+    assert "gpt-4.1" in ids
+    assert "whisper-1" not in ids
+    assert "tts-1" not in ids
+    assert "dall-e-3" not in ids
+    assert "text-embedding-3-small" not in ids
+    assert "gpt-4o-mini-tts" not in ids
+    gpt5 = _byok_off_protocol_row("gpt-5", cat.models)
+    assert gpt5.available is True
+    assert gpt5.unavailable_reason is None
+
+
+async def test_openai_vendor_relay_url_keeps_openai_seed(monkeypatch):
+    """Saved OpenAI identity uses the OpenAI seed even when base_url is a relay."""
+    reset_discovery_cache_for_tests()
+    row = _prov(
+        "prov-relay-oai",
+        default_model="gpt-4o",
+        label="OpenAI",
+        base_url="https://api.apistokens.com",
+        vendor_id="openai",
+    )
+    monkeypatch.setattr(catalog.settings, "platform_api_key", "")
+    monkeypatch.setattr(catalog.settings, "billing_mode", "byok")
+    _mock_catalog(
+        monkeypatch,
+        providers=[row],
+        selection=ModelSelection(
+            model="gpt-4o", origin="byok", provider_id="prov-relay-oai"
+        ),
+        discovered={
+            "prov-relay-oai": ["gpt-4o", "whisper-1", "gpt-6.1-sol"],
+        },
+    )
+    cat = await resolve_model_catalog(None, "u1")
+    ids = {
+        m.id
+        for m in cat.models
+        if m.origin == "byok" and m.provider_id == "prov-relay-oai"
+    }
+    assert "gpt-4o" in ids
+    assert "gpt-6.1-sol" in ids
+    assert "whisper-1" not in ids
+    gpt = _byok_off_protocol_row("gpt-4o", cat.models)
+    assert gpt.available is True
+    assert gpt.unavailable_reason is None
 
 
 async def test_non_opencode_relay_grok_stays_selectable(monkeypatch):
@@ -600,21 +868,22 @@ async def test_non_opencode_relay_grok_stays_selectable(monkeypatch):
 
 
 def test_catalog_off_protocol_filter_uses_preset_singleton():
-    """Seed exclusion and catalog filter must read the same mapping (no twin lists)."""
+    """Seed exclusion and catalog filter must read the same off_protocol_kind."""
     from agentcore.llm.byok_provider_presets import off_protocol_kind as preset_fn
 
     assert catalog.off_protocol_kind is preset_fn
-    # Lookalike ids must not be guessed at the merge layer either.
+    # BYOK speaks /messages and /responses; family ids are selectable on OpenCode.
     assert catalog._off_protocol_reason("grok-4.5-fast", "https://opencode.ai/zen/go/v1") is None
-    assert catalog._off_protocol_reason("grok-4.5", "https://opencode.ai/zen/go/v1") is not None
+    assert catalog._off_protocol_reason("grok-4.5", "https://opencode.ai/zen/go/v1") is None
     assert catalog._off_protocol_reason("grok-4.5", "https://relay.example/openai/v1") is None
     assert catalog._off_protocol_reason("union-alpha", "https://opencode.ai/zen/v1") is None
     assert catalog._off_protocol_reason("claude-haiku-4-5", "https://opencode.ai/zen/go/v1") is None
+    assert catalog._off_protocol_reason("claude-haiku-9", "https://opencode.ai/zen/go/v1") is None
     assert catalog._off_protocol_reason("union-alpha", "https://openrouter.ai/api/v1") is None
     assert catalog._off_protocol_reason("anthropic/claude-sonnet-4", "https://opencode.ai/zen/v1") is None
     # Platform path: same function object, no endpoint gate (see _platform_entry).
     assert catalog._off_protocol_unavailable("grok-4.5") is not None
-    assert catalog._off_protocol_unavailable("grok-4.5-fast") is None
+    assert catalog._off_protocol_unavailable("grok-4.5-fast") is not None
     assert catalog._off_protocol_unavailable("union-alpha") is not None
     assert (
         catalog._off_protocol_unavailable("union-alpha").required_protocol
@@ -624,6 +893,11 @@ def test_catalog_off_protocol_filter_uses_preset_singleton():
         catalog._off_protocol_unavailable("grok-4.5").required_protocol
         == preset_fn("grok-4.5")
     )
+    assert catalog._off_protocol_unavailable("claude-opus-4-6") is None
+    assert catalog._off_protocol_unavailable("claude-opus-5-5") is None
+    assert catalog._off_protocol_unavailable("claude-fable-5.1") is None
+    assert catalog._off_protocol_unavailable("gpt-6-astra") is None
+    assert catalog._off_protocol_unavailable("gpt-6.1-sol") is None
 
 
 # --- validate_model_choice ----------------------------------------------------
@@ -682,6 +956,14 @@ def test_has_curated_pricing_flags_uncurated():
     assert has_curated_pricing("deepseek-v4.1-flash")
     assert not has_curated_pricing("deepseek-v4-pro")
     assert has_curated_pricing("glm-5.2")
+    assert has_curated_pricing("glm-5.3")
+    assert has_curated_pricing("glm-5.3-flash")
+    assert has_curated_pricing("kimi-k3")
+    assert has_curated_pricing("claude-opus-4-6")
+    assert has_curated_pricing("claude-opus-5-5")
+    assert has_curated_pricing("claude-fable-5.1")
+    assert has_curated_pricing("gpt-6-astra")
+    assert has_curated_pricing("gpt-6.1-sol")
     assert not has_curated_pricing("grok-4.5")
     assert has_curated_pricing("doubao/doubao-seed-2-1-turbo-260628")
     assert not has_curated_pricing("totally-unknown-relay-model")
@@ -968,6 +1250,69 @@ async def test_patch_conversation_persists_assembly_id(monkeypatch):
     assert result.assembly_id == "prof-1"
 
 
+async def test_patch_conversation_persists_model_override(monkeypatch):
+    from datetime import datetime
+
+    from agentcore.api.routes.conversations import crud
+    from agentcore.api.schemas import ConversationModelOverride, UpdateConversationRequest
+    from agentcore.api.schemas.llm_model_profiles import ModelProfileSlot
+
+    written: dict = {}
+    conv = SimpleNamespace(
+        id="c1",
+        title="t",
+        updated_at=datetime.now(),
+        created_at=datetime.now(),
+        message_count=0,
+        folder_id=None,
+        local_container_root_id=None,
+        pinned=False,
+        archived=False,
+        permission_preset="workspace",
+        deep_research_auto=False,
+        assembly_id="asm-1",
+        model_override=None,
+    )
+    payload = {
+        "main": {"origin": "byok", "provider_id": "p1", "model": "chat-main"},
+    }
+
+    class _Repo:
+        _session = None
+
+        async def get_by_id(self, _cid, *, user_id):
+            return conv
+
+        async def preference_flags_for(self, _user_id, _ids):
+            return {}
+
+        async def set_model_override(self, _cid, model_override, *, user_id):
+            written["model_override"] = model_override
+            conv.model_override = model_override
+            return conv
+
+    monkeypatch.setattr(
+        "agentcore.llm.model_profiles.LlmModelProfileService.normalize_conversation_override",
+        AsyncMock(return_value=payload),
+    )
+    monkeypatch.setattr(
+        "agentcore.db.repositories.UserRepository.enable_picker_refs",
+        AsyncMock(return_value=()),
+    )
+    monkeypatch.setattr(crud, "_require_conversation_write", AsyncMock())
+    body = UpdateConversationRequest(
+        model_override=ConversationModelOverride(
+            main=ModelProfileSlot(origin="byok", provider_id="p1", model="chat-main")
+        )
+    )
+    result = await crud.update_conversation(
+        "c1", body, SimpleNamespace(user_id="u1"), repo=_Repo()
+    )
+    assert written == {"model_override": payload}
+    assert result.model_override is not None
+    assert result.model_override.main.model == "chat-main"
+
+
 async def test_patch_conversation_null_repins_account_default(monkeypatch):
     from datetime import datetime
 
@@ -1017,6 +1362,52 @@ async def test_patch_conversation_null_repins_account_default(monkeypatch):
     )
     assert written == {"assembly_id": "sys-default"}
     assert result.assembly_id == "sys-default"
+
+
+async def test_patch_conversation_persists_delegate_mode(monkeypatch):
+    from datetime import datetime
+
+    from agentcore.api.routes.conversations import crud
+    from agentcore.api.schemas import UpdateConversationRequest
+
+    written: dict = {}
+    conv = SimpleNamespace(
+        id="c1",
+        title="t",
+        updated_at=datetime.now(),
+        created_at=datetime.now(),
+        message_count=0,
+        folder_id=None,
+        local_container_root_id=None,
+        pinned=False,
+        archived=False,
+        permission_preset="workspace",
+        deep_research_auto=False,
+        assembly_id="asm-1",
+        delegate_mode=False,
+    )
+
+    class _Repo:
+        _session = None
+
+        async def get_by_id(self, _cid, *, user_id):
+            return conv
+
+        async def preference_flags_for(self, _user_id, _ids):
+            return {}
+
+        async def set_delegate_mode(self, _cid, enabled, *, user_id):
+            written["delegate_mode"] = enabled
+            conv.delegate_mode = enabled
+            return conv
+
+    monkeypatch.setattr(crud, "_require_conversation_write", AsyncMock())
+    body = UpdateConversationRequest(delegate_mode=True)
+    result = await crud.update_conversation(
+        "c1", body, SimpleNamespace(user_id="u1"), repo=_Repo()
+    )
+    assert written == {"delegate_mode": True}
+    assert result.delegate_mode is True
 
 
 async def test_create_conversation_snapshots_account_default(monkeypatch):
@@ -1162,7 +1553,9 @@ def test_system_preset_display_name_matches_catalog_enrichment(monkeypatch):
     )
     presets = system_presets()
     assert presets[platform_preset_id("glm-5.2")] == "glm-5.2"
-    assert _system_preset_display_name("glm-5.2") == catalog.platform_model_label("glm-5.2")
+    assert _system_preset_display_name("glm-5.2") == catalog.platform_model_display_name(
+        "glm-5.2"
+    )
 
 
 def test_platform_model_label_folds_badge_into_one_string():
@@ -1179,6 +1572,28 @@ def test_platform_model_label_folds_badge_into_one_string():
     assert catalog.platform_model_label("deepseek-v4-flash-free") != (
         catalog.platform_model_label("deepseek-v4-flash")
     )
+
+
+def test_platform_catalog_row_does_not_stamp_platform_badge():
+    flash = catalog._entry(
+        "deepseek-v4-flash",
+        origin="platform",
+        available=True,
+        credential_source="platform",
+    )
+    assert flash.display_name == "DeepSeek V4 Flash"
+    assert flash.vendor == "DeepSeek"
+    assert flash.badge is None
+    assert flash.id == "deepseek-v4-flash"
+
+    free = catalog._entry(
+        "deepseek-v4-flash-free",
+        origin="platform",
+        available=True,
+        credential_source="platform",
+    )
+    assert free.display_name == "DeepSeek V4 Flash"
+    assert free.badge == "免费额度"
 
 
 def test_catalog_entry_stamps_vendor_reasoning_effort():
@@ -1201,6 +1616,30 @@ def test_catalog_entry_stamps_vendor_reasoning_effort():
         provider_label="OpenAI",
     )
     assert gpt.reasoning_effort is None
+
+    gpt5 = catalog._entry(
+        "gpt-5",
+        origin="byok",
+        available=True,
+        credential_source="user",
+        provider_id="p1",
+        provider_label="OpenAI",
+    )
+    assert gpt5.reasoning_effort is not None
+    assert gpt5.reasoning_effort.options == ("minimal", "low", "medium", "high")
+    assert gpt5.reasoning_effort.default == "medium"
+
+    astra = catalog._entry(
+        "gpt-6-astra",
+        origin="byok",
+        available=True,
+        credential_source="user",
+        provider_id="p1",
+        provider_label="OpenAI",
+    )
+    assert astra.reasoning_effort is not None
+    assert astra.reasoning_effort.options == ("low", "medium", "high")
+    assert astra.reasoning_effort.default == "medium"
 
     hy3 = catalog._entry(
         "hy3",

@@ -173,10 +173,6 @@ class WorkspaceSettings(BaseModel):
     browser_sandbox_memory_limit_mb: int = 2048
     browser_sandbox_pids_limit: int = 512
     browser_sandbox_cpu_limit: float = 2.0
-    # Shape B (sandboxd ``net``) always passes ``--ignore-cgroups``: Docker overlay
-    # session OCI cgroup is not a supported surface. Container ``mem_limit`` still
-    # bounds memory. This flag is unused by the production argv allowlist.
-    browser_sandbox_ignore_cgroups: bool = False
     # Playwright Chromium path *inside the guest* (packed into guest-rootfs).
     # If the same path also exists on the sandboxd host, desk OCI still ro-binds
     # it as an overlay; the packed tree is the default when the host path is absent.

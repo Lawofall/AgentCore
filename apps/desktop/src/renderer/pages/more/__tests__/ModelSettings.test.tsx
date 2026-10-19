@@ -35,6 +35,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { useLlmModelProfiles } from "@/hooks/useLlmModelProfiles";
 import { useLlmProviders } from "@/hooks/useLlmProviders";
 import { useModels } from "@/hooks/useModels";
+import { resetSchemesForTests } from "@/lib/devSchemes";
 import { notifySuccess } from "@/lib/toast";
 import { ApiError } from "@/services/api";
 import type { LlmModelProfileListResponse } from "@/services/llmModelProfiles";
@@ -60,6 +61,7 @@ function providersResponse(
         id: "p1",
         label: "DeepSeek",
         base_url: "https://api.deepseek.com/v1",
+        vendor_id: "deepseek",
         status: "active",
         masked_key: "••••abcd",
         supports_tools: true,
@@ -68,6 +70,7 @@ function providersResponse(
         id: "p2",
         label: "OpenAI",
         base_url: "https://api.openai.com/v1",
+        vendor_id: "openai",
         status: "unchecked",
         masked_key: "••••wxyz",
       },
@@ -93,7 +96,6 @@ function profilesResponse(
         is_default: true,
         main: { origin: "byok", provider_id: "p1", model: "deepseek-v4-pro" },
         worker: null,
-        background: null,
       },
       {
         id: "user-mine",
@@ -102,7 +104,6 @@ function profilesResponse(
         is_default: false,
         main: { origin: "byok", provider_id: "p2", model: "gpt-4o" },
         worker: null,
-        background: null,
       },
     ],
     ...over,
@@ -126,9 +127,42 @@ function mockProfiles(data: LlmModelProfileListResponse | undefined): void {
   } as unknown as ReturnType<typeof useLlmModelProfiles>);
 }
 
+function twoEffortCatalog(
+  knobs: Record<
+    string,
+    { reasoning_effort: string | null; context_budget: number | null }
+  > = {},
+) {
+  const base = defaultCatalog();
+  return {
+    ...base,
+    enabled_refs: [...base.enabled_refs, "@byok/p1/deepseek-v4-flash"],
+    composer_model_knobs: knobs,
+    models: [
+      ...base.models,
+      {
+        id: "deepseek-v4-flash",
+        origin: "byok" as const,
+        display_name: "DeepSeek V4 Flash",
+        vendor: "DeepSeek",
+        provider_id: "p1",
+        provider_label: "DeepSeek",
+        capabilities: [] as string[],
+        available: true,
+        reasoning_effort: {
+          options: ["low", "high", "max"],
+          default: "high",
+        },
+      },
+    ],
+  };
+}
+
 function defaultCatalog() {
   return {
     byok_configured: true,
+    hidden_refs: [] as string[],
+    enabled_refs: ["@byok/p1/deepseek-v4-pro", "@byok/p2/gpt-4o"],
     current: { id: "deepseek-v4-pro", origin: "byok", provider_id: "p1" },
     models: [
       {
@@ -180,39 +214,12 @@ function openModelPicker(slotId: string) {
   return screen.getByRole("listbox");
 }
 
-function clickChannelChip(providerId: string) {
-  const chip = document.querySelector(`[data-channel-id="${providerId}"]`);
-  if (!chip) return;
-  fireEvent.click(chip);
-}
-
-/** Click「自定义 model id…」under a provider group (data-provider-group). */
-function enterCustomModelId(
-  slotId: string,
-  modelId: string,
-  providerId?: string,
-) {
-  const list = openModelPicker(slotId);
-  if (providerId) {
-    clickChannelChip(providerId);
-    const section = list.querySelector(`[data-provider-group="${providerId}"]`);
-    expect(section).toBeTruthy();
-    fireEvent.click(
-      within(section as HTMLElement).getByRole("option", {
-        name: /自定义 model id/,
-      }),
-    );
-  } else {
-    fireEvent.click(
-      within(list).getAllByRole("option", { name: /自定义 model id/ })[0],
-    );
-  }
-  const input = screen.getByLabelText("自定义 model id") as HTMLInputElement;
-  fireEvent.change(input, { target: { value: modelId } });
-  return input;
+function pickListedModel(name: RegExp | string) {
+  fireEvent.click(screen.getByRole("option", { name }));
 }
 
 beforeEach(() => {
+  resetSchemesForTests();
   useModelsMock.mockReturnValue({
     data: defaultCatalog(),
     isLoading: false,
@@ -234,8 +241,6 @@ beforeEach(() => {
     is_default: false,
     main: body.main ?? null,
     worker: body.worker ?? null,
-    background: body.background ?? null,
-    vision: body.vision ?? null,
     reasoning_effort: body.reasoning_effort ?? null,
     context_budget: body.context_budget ?? null,
     warnings: [],
@@ -253,7 +258,7 @@ describe("ModelSettings (profiles)", () => {
   it("renders model combinations without provider key cards", () => {
     mockProviders(providersResponse());
     renderPage();
-    expect(screen.getByRole("heading", { name: "装配" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "能力" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "新建" }));
     expect(screen.getByText("必填，下一回合生效")).toBeTruthy();
     expect(screen.queryByText(/多人协作（委派）对工具调用要求较高/)).toBeNull();
@@ -287,7 +292,6 @@ describe("ModelSettings (profiles)", () => {
               model: "deepseek-v4-flash",
             },
             worker: null,
-            background: null,
           },
         ],
       }),
@@ -332,6 +336,7 @@ describe("ModelSettings (profiles)", () => {
       expect(createLlmModelProfile).toHaveBeenCalledWith({
         name: "GLM-5.2 副本",
         set_as_default: false,
+        origin: "full",
       }),
     );
     expect(updateLlmModelProfile).toHaveBeenCalledWith(
@@ -382,7 +387,7 @@ describe("ModelSettings (profiles)", () => {
     expect(screen.getByText("主模型")).toBeTruthy();
     expect(screen.getByText("必填，下一回合生效")).toBeTruthy();
     expect(screen.getByText("高级 · 其他模型")).toBeTruthy();
-    expect(screen.getByText("组队/后台：跟随主模型")).toBeTruthy();
+    expect(screen.getByText("组队队员：跟随主模型")).toBeTruthy();
     expect(screen.queryByText("组队队员")).toBeNull();
     expect(screen.queryByText("后台任务")).toBeNull();
     expect(screen.queryByText("识图模型（可选）")).toBeNull();
@@ -391,14 +396,14 @@ describe("ModelSettings (profiles)", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /高级 · 其他模型/ }));
     expect(screen.getByText("组队队员")).toBeTruthy();
-    expect(screen.getByText("后台任务")).toBeTruthy();
+    expect(screen.queryByText("后台任务")).toBeNull();
     expect(screen.queryByText("识图模型（可选）")).toBeNull();
     // 空态只出现在触发器，下方不再重复裸文案。
-    expect(screen.getAllByText("跟随主模型")).toHaveLength(2);
+    expect(screen.getAllByText("跟随主模型")).toHaveLength(1);
     expect(screen.queryByText("不配置")).toBeNull();
     expect(screen.getByText("协作时队员使用")).toBeTruthy();
     expect(screen.queryByText(/辩论仍用主模型/)).toBeNull();
-    expect(screen.getByText(/标题等/)).toBeTruthy();
+    expect(screen.queryByText(/标题等/)).toBeNull();
     expect(screen.queryByText(/主模型不能看图时再配/)).toBeNull();
     expect(screen.queryByRole("button", { name: "恢复跟随" })).toBeNull();
 
@@ -416,6 +421,7 @@ describe("ModelSettings (profiles)", () => {
     useModelsMock.mockReturnValue({
       data: {
         ...defaultCatalog(),
+        enabled_refs: [...defaultCatalog().enabled_refs, "@byok/p1/grok-4.5"],
         models: [
           ...defaultCatalog().models,
           {
@@ -459,7 +465,6 @@ describe("ModelSettings (profiles)", () => {
       is_default: false,
       main: { origin: "byok", provider_id: "p2", model: "gpt-4o" },
       worker: null,
-      background: null,
     });
     mockProviders(providersResponse());
     renderPage();
@@ -494,7 +499,6 @@ describe("ModelSettings (profiles)", () => {
       is_default: false,
       main: { origin: "byok", provider_id: "p2", model: "gpt5.6" },
       worker: null,
-      background: null,
       warnings: [warning],
     });
     mockProviders(providersResponse());
@@ -525,7 +529,6 @@ describe("ModelSettings (profiles)", () => {
       is_default: false,
       main: { origin: "byok", provider_id: "p2", model: "gpt-4o" },
       worker: null,
-      background: null,
       warnings: [],
     });
     mockProviders(providersResponse());
@@ -594,14 +597,18 @@ describe("ModelSettings (profiles)", () => {
               model: "platform-flash",
             },
             worker: null,
-            background: null,
           },
         ],
       }),
     );
     renderPage();
-    expect(screen.getByRole("heading", { name: "装配" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "能力" })).toBeTruthy();
     expect(screen.getByText("GLM-5.2")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "新建" }));
+    expect(screen.getByText("新建组合", { selector: "p" })).toBeTruthy();
+    expect(document.getElementById("profile-main")?.textContent).toContain(
+      "Flash (平台)",
+    );
   });
 
   it("shows empty CTA to providers when byok has no providers or platform", () => {
@@ -613,7 +620,7 @@ describe("ModelSettings (profiles)", () => {
       }),
     );
     renderPage();
-    expect(screen.getByRole("heading", { name: "装配" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "能力" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "接入服务商" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "接入服务商" })).toBeTruthy();
     expect(screen.queryByText(/需自行接入服务商后才能对话/)).toBeNull();
@@ -638,6 +645,7 @@ describe("ModelSettings (profiles)", () => {
             id: "p1",
             label: "DeepSeek",
             base_url: "https://api.deepseek.com/v1",
+            vendor_id: "deepseek",
             status: "active",
             masked_key: "••••abcd",
             supports_tools: true,
@@ -650,10 +658,11 @@ describe("ModelSettings (profiles)", () => {
     renderPage();
     fireEvent.click(screen.getByRole("button", { name: "新建" }));
     expect(screen.getByText("新建组合", { selector: "p" })).toBeTruthy();
-    openModelPicker("profile-main");
+    expect(screen.getByLabelText("自定义 model id")).toBeTruthy();
+    expect(screen.queryByLabelText("筛选模型")).toBeNull();
     expect(
-      screen.getByRole("option", { name: /自定义 model id/ }),
-    ).toBeTruthy();
+      screen.queryByRole("option", { name: /自定义 model id/ }),
+    ).toBeNull();
     expect(screen.queryByText(/暂无可用模型/)).toBeNull();
     expect(document.querySelector("datalist")).toBeNull();
   });
@@ -704,6 +713,7 @@ describe("ModelSettings (profiles)", () => {
             id: "p1",
             label: "DeepSeek",
             base_url: "https://api.deepseek.com/v1",
+            vendor_id: "deepseek",
             status: "active",
             masked_key: "••••abcd",
             supports_tools: true,
@@ -717,15 +727,13 @@ describe("ModelSettings (profiles)", () => {
     fireEvent.click(screen.getByRole("button", { name: "新建" }));
     expect(screen.getByText("新建组合", { selector: "p" })).toBeTruthy();
     expect(screen.queryByText(/暂无可用模型/)).toBeNull();
-    openModelPicker("profile-main");
+    expect(screen.getByLabelText("自定义 model id")).toBeTruthy();
     expect(
-      screen.getAllByRole("option", { name: /自定义 model id/ }).length,
-    ).toBeGreaterThan(0);
+      screen.queryByRole("option", { name: /自定义 model id/ }),
+    ).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: /高级 · 其他模型/ }));
     expect(document.getElementById("profile-worker")).toBeTruthy();
-    expect(document.getElementById("profile-background")).toBeTruthy();
-    expect(document.getElementById("profile-vision")).toBeNull();
   });
 
   it("when groups have no models with platform_available, 新建 guides to 接入服务商", () => {
@@ -761,7 +769,7 @@ describe("ModelSettings (profiles)", () => {
     expect(screen.queryByText(/自定义 model id/)).toBeNull();
   });
 
-  it("custom entry can fill ep- and marks as custom", async () => {
+  it("empty BYOK catalog is a stacked model-id field", async () => {
     vi.mocked(updateLlmModelProfile).mockResolvedValue({
       id: "user-mine",
       name: "办公",
@@ -769,15 +777,52 @@ describe("ModelSettings (profiles)", () => {
       is_default: false,
       main: { origin: "byok", provider_id: "p1", model: "ep-volc-123" },
       worker: null,
-      background: null,
     });
-    mockProviders(providersResponse());
+    useModelsMock.mockReturnValue({
+      data: {
+        byok_configured: true,
+        current: { id: "ep-old", origin: "byok", provider_id: "p1" },
+        models: [],
+      },
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof useModels>);
+    mockProviders(
+      providersResponse({
+        providers: [
+          {
+            id: "p1",
+            label: "DeepSeek",
+            base_url: "https://api.deepseek.com/v1",
+            vendor_id: "deepseek",
+            status: "active",
+            masked_key: "••••abcd",
+            supports_tools: true,
+          },
+        ],
+      }),
+    );
+    mockProfiles(
+      profilesResponse({
+        data: [
+          {
+            id: "user-mine",
+            name: "办公",
+            kind: "user",
+            is_default: false,
+            main: { origin: "byok", provider_id: "p1", model: "ep-old" },
+            worker: null,
+          },
+        ],
+      }),
+    );
     renderPage();
     fireEvent.click(screen.getByRole("button", { name: "编辑" }));
-
-    enterCustomModelId("profile-main", "ep-volc-123", "p1");
-    expect(screen.getByText("自定义")).toBeTruthy();
-    expect(screen.getByText("DeepSeek")).toBeTruthy();
+    const input = screen.getByLabelText("自定义 model id") as HTMLInputElement;
+    expect(input.id).toBe("profile-main");
+    fireEvent.change(input, { target: { value: "ep-volc-123" } });
+    expect(input.value).toBe("ep-volc-123");
 
     fireEvent.click(screen.getByRole("button", { name: "保存" }));
     await waitFor(() =>
@@ -810,7 +855,6 @@ describe("ModelSettings (profiles)", () => {
               model: "ep-already-saved",
             },
             worker: null,
-            background: null,
           },
         ],
       }),
@@ -818,10 +862,15 @@ describe("ModelSettings (profiles)", () => {
     renderPage();
     fireEvent.click(screen.getByRole("button", { name: "编辑" }));
     expect(document.getElementById("profile-main-provider")).toBeNull();
+    const trigger = document.getElementById("profile-main") as HTMLElement;
+    expect(trigger.textContent).toContain("ep-already-saved");
+    fireEvent.click(trigger);
+    const row = screen.getByRole("option", { name: /ep-already-saved/ });
+    expect(row.getAttribute("aria-selected")).toBe("true");
+    expect(screen.queryByLabelText("自定义 model id")).toBeNull();
+    fireEvent.click(row);
     const input = screen.getByLabelText("自定义 model id") as HTMLInputElement;
     expect(input.value).toBe("ep-already-saved");
-    expect(screen.getByText("自定义")).toBeTruthy();
-    expect(screen.getByText("DeepSeek")).toBeTruthy();
     expect(document.querySelector("datalist")).toBeNull();
   });
 
@@ -867,7 +916,6 @@ describe("ModelSettings (profiles)", () => {
               model: "platform-flash",
             },
             worker: null,
-            background: null,
           },
         ],
       }),
@@ -882,10 +930,12 @@ describe("ModelSettings (profiles)", () => {
     expect(screen.queryByPlaceholderText(/model id/)).toBeNull();
   });
 
-  it("does not offer platform SKUs in the assembly picker", () => {
+  it("lists platform and BYOK rows in the same list", () => {
     useModelsMock.mockReturnValue({
       data: {
         byok_configured: true,
+        hidden_refs: [],
+        enabled_refs: ["@byok/p1/deepseek-v4-flash"],
         current: { id: "deepseek-v4-flash", origin: "byok", provider_id: "p1" },
         models: [
           {
@@ -921,6 +971,7 @@ describe("ModelSettings (profiles)", () => {
             id: "p1",
             label: "DeepSeek",
             base_url: "https://api.deepseek.com/v1",
+            vendor_id: "deepseek",
             status: "active",
             masked_key: "••••abcd",
           },
@@ -943,7 +994,6 @@ describe("ModelSettings (profiles)", () => {
               model: "deepseek-v4-flash",
             },
             worker: null,
-            background: null,
           },
           {
             id: "user-b",
@@ -956,7 +1006,6 @@ describe("ModelSettings (profiles)", () => {
               model: "deepseek-v4-flash-free",
             },
             worker: null,
-            background: null,
           },
         ],
       }),
@@ -964,20 +1013,15 @@ describe("ModelSettings (profiles)", () => {
     renderPage();
     fireEvent.click(screen.getAllByRole("button", { name: "编辑" })[0]);
     const list = openModelPicker("profile-main");
-    const deepseek = list.querySelector('[data-provider-group="p1"]');
-    expect(deepseek).toBeTruthy();
+    expect(screen.queryByRole("group", { name: "渠道" })).toBeNull();
     expect(
-      within(deepseek as HTMLElement).getByText("DeepSeek V4 Flash"),
+      within(list).getByRole("option", { name: /DeepSeek V4 Flash/ }),
     ).toBeTruthy();
     expect(
-      within(deepseek as HTMLElement).queryByText("Flash Free"),
-    ).toBeNull();
-    expect(
-      within(deepseek as HTMLElement).queryByText("deepseek-v4-flash-free"),
-    ).toBeNull();
-    expect(within(list).queryByText("Flash Free")).toBeNull();
-    expect(screen.queryByRole("button", { name: "平台额度" })).toBeNull();
-    expect(within(list).queryByText("DeepSeek V4 Flash")).toBeTruthy();
+      within(list).getByRole("option", { name: /Flash Free/ }),
+    ).toBeTruthy();
+    expect(within(list).getByText("免费额度")).toBeTruthy();
+    expect(within(list).queryByText("deepseek-v4-flash-free")).toBeNull();
   });
 
   it("picking a row from another channel updates both channel and model", async () => {
@@ -988,19 +1032,15 @@ describe("ModelSettings (profiles)", () => {
       is_default: false,
       main: { origin: "byok", provider_id: "p1", model: "deepseek-v4-pro" },
       worker: null,
-      background: null,
     });
     mockProviders(providersResponse());
     renderPage();
     fireEvent.click(screen.getByRole("button", { name: "编辑" }));
-    // 办公 starts on p2 / gpt-4o — switch to DeepSeek chip then pick Pro
+    // 办公 starts on p2 / gpt-4o — pick DeepSeek from the flat list
     const trigger = document.getElementById("profile-main");
     expect(trigger?.textContent).toMatch(/GPT-4o/);
-    const list = openModelPicker("profile-main");
-    clickChannelChip("p1");
-    fireEvent.click(
-      within(list).getByRole("option", { name: /DeepSeek V4 Pro/ }),
-    );
+    openModelPicker("profile-main");
+    pickListedModel(/DeepSeek V4 Pro/);
     expect(document.getElementById("profile-main")?.textContent).toMatch(
       /DeepSeek V4 Pro/,
     );
@@ -1036,7 +1076,6 @@ describe("ModelSettings (profiles)", () => {
               model: "old-model",
             },
             worker: null,
-            background: null,
           },
         ],
       }),
@@ -1046,13 +1085,9 @@ describe("ModelSettings (profiles)", () => {
     expect(document.getElementById("profile-main-provider")).toBeNull();
     expect(screen.getByText(/原服务商已移除/)).toBeTruthy();
     expect(screen.getByText(/已移除的服务商/)).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "从目录选择" }));
-    const list = screen.getByRole("listbox");
-    expect(
-      screen.getByRole("button", { name: /已移除的服务商（需改选）/ }),
-    ).toBeTruthy();
-    clickChannelChip("p2");
-    fireEvent.click(within(list).getByRole("option", { name: /GPT-4o/ }));
+    openModelPicker("profile-main");
+    expect(screen.queryByRole("group", { name: "渠道" })).toBeNull();
+    pickListedModel(/GPT-4o/);
     expect(screen.queryByText(/原服务商已移除/)).toBeNull();
   });
 
@@ -1092,48 +1127,6 @@ describe("ModelSettings (profiles)", () => {
     expect(screen.queryByText("加载失败，请重试")).toBeNull();
   });
 
-  it("copies vision slot when duplicating a profile", async () => {
-    vi.mocked(createLlmModelProfile).mockResolvedValue({
-      id: "user-copy",
-      name: "办公 副本",
-      kind: "user",
-      is_default: false,
-      main: { origin: "byok", provider_id: "p2", model: "gpt-4o" },
-      vision: { origin: "byok", provider_id: "p2", model: "gpt-4o" },
-    });
-    mockProviders(providersResponse());
-    mockProfiles(
-      profilesResponse({
-        data: [
-          {
-            id: "user-mine",
-            name: "办公",
-            kind: "user",
-            is_default: false,
-            main: { origin: "byok", provider_id: "p2", model: "gpt-4o" },
-            worker: null,
-            background: null,
-            vision: { origin: "byok", provider_id: "p2", model: "gpt-4o" },
-          },
-        ],
-      }),
-    );
-    renderPage();
-    fireEvent.click(screen.getByRole("button", { name: "复制" }));
-    await waitFor(() =>
-      expect(createLlmModelProfile).toHaveBeenCalledWith({
-        name: "办公 副本",
-        set_as_default: false,
-      }),
-    );
-    expect(updateLlmModelProfile).toHaveBeenCalledWith(
-      "user-copy",
-      expect.objectContaining({
-        vision: { origin: "byok", provider_id: "p2", model: "gpt-4o" },
-      }),
-    );
-  });
-
   it("lists vendor effort tokens for DeepSeek main and hides them for gpt-4o", async () => {
     vi.mocked(createLlmModelProfile).mockResolvedValue({
       id: "user-new",
@@ -1146,13 +1139,13 @@ describe("ModelSettings (profiles)", () => {
     mockProviders(providersResponse());
     renderPage();
     fireEvent.click(screen.getByRole("button", { name: "新建" }));
-    expect(screen.getByRole("tablist", { name: "思考强度" })).toBeTruthy();
-    expect(screen.getByRole("tab", { name: "low" })).toBeTruthy();
-    expect(screen.getByRole("tab", { name: "high" })).toBeTruthy();
-    expect(screen.getByRole("tab", { name: "max" })).toBeTruthy();
-    expect(screen.queryByRole("tab", { name: "medium" })).toBeNull();
-    expect(screen.queryByRole("tab", { name: "xhigh" })).toBeNull();
-    fireEvent.click(screen.getByRole("tab", { name: "low" }));
+    const effort = screen.getByRole("combobox", { name: "思考强度" });
+    expect(within(effort).getByRole("option", { name: "low" })).toBeTruthy();
+    expect(within(effort).getByRole("option", { name: "high" })).toBeTruthy();
+    expect(within(effort).getByRole("option", { name: "max" })).toBeTruthy();
+    expect(within(effort).queryByRole("option", { name: "medium" })).toBeNull();
+    expect(within(effort).queryByRole("option", { name: "xhigh" })).toBeNull();
+    fireEvent.change(effort, { target: { value: "low" } });
     fireEvent.click(screen.getByRole("button", { name: "保存" }));
     await waitFor(() =>
       expect(updateLlmModelProfile).toHaveBeenCalledWith(
@@ -1166,7 +1159,7 @@ describe("ModelSettings (profiles)", () => {
     mockProfiles(profilesResponse());
     renderPage();
     fireEvent.click(screen.getByRole("button", { name: "编辑" }));
-    expect(screen.queryByRole("tablist", { name: "思考强度" })).toBeNull();
+    expect(screen.queryByRole("combobox", { name: "思考强度" })).toBeNull();
   });
 
   it("resets effort when the new main model has no vendor tokens", async () => {
@@ -1193,7 +1186,6 @@ describe("ModelSettings (profiles)", () => {
               model: "deepseek-v4-pro",
             },
             worker: null,
-            background: null,
             reasoning_effort: "low",
           },
         ],
@@ -1202,12 +1194,12 @@ describe("ModelSettings (profiles)", () => {
     renderPage();
     fireEvent.click(screen.getByRole("button", { name: "编辑" }));
     expect(
-      screen.getByRole("tab", { name: "low" }).getAttribute("aria-selected"),
-    ).toBe("true");
-    const list = openModelPicker("profile-main");
-    clickChannelChip("p2");
-    fireEvent.click(within(list).getByRole("option", { name: /GPT-4o/ }));
-    expect(screen.queryByRole("tablist", { name: "思考强度" })).toBeNull();
+      (screen.getByRole("combobox", { name: "思考强度" }) as HTMLSelectElement)
+        .value,
+    ).toBe("low");
+    openModelPicker("profile-main");
+    pickListedModel(/GPT-4o/);
+    expect(screen.queryByRole("combobox", { name: "思考强度" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "保存" }));
     await waitFor(() =>
       expect(updateLlmModelProfile).toHaveBeenCalledWith(
@@ -1237,11 +1229,9 @@ describe("ModelSettings (profiles)", () => {
     mockProviders(providersResponse());
     renderPage();
     fireEvent.click(screen.getByRole("button", { name: "新建" }));
-    expect(screen.getByRole("tablist", { name: "上下文长度" })).toBeTruthy();
-    expect(
-      screen.getByRole("tab", { name: "1M" }).getAttribute("aria-selected"),
-    ).toBe("true");
-    fireEvent.click(screen.getByRole("tab", { name: "128K" }));
+    const budget = screen.getByRole("combobox", { name: "上下文长度" });
+    expect((budget as HTMLSelectElement).value).toBe(String(1_000_000));
+    fireEvent.change(budget, { target: { value: String(128_000) } });
     fireEvent.click(screen.getByRole("button", { name: "保存" }));
     await waitFor(() =>
       expect(updateLlmModelProfile).toHaveBeenCalledWith(
@@ -1261,7 +1251,7 @@ describe("ModelSettings (profiles)", () => {
     mockProfiles(profilesResponse());
     renderPage();
     fireEvent.click(screen.getByRole("button", { name: "编辑" }));
-    expect(screen.queryByRole("tablist", { name: "上下文长度" })).toBeNull();
+    expect(screen.queryByRole("combobox", { name: "上下文长度" })).toBeNull();
   });
 
   it("copies reasoning_effort with the combination", async () => {
@@ -1288,7 +1278,6 @@ describe("ModelSettings (profiles)", () => {
               model: "deepseek-v4-pro",
             },
             worker: null,
-            background: null,
             reasoning_effort: "max",
           },
         ],
@@ -1307,7 +1296,7 @@ describe("ModelSettings (profiles)", () => {
     );
   });
 
-  it("shelf surface lays knobs in rows and saves a context step without a button", async () => {
+  it("shelf detail card segments effort and budget and saves a context step in place", async () => {
     const catalog = {
       ...defaultCatalog(),
       models: defaultCatalog().models.map((model) =>
@@ -1315,6 +1304,8 @@ describe("ModelSettings (profiles)", () => {
           ? {
               ...model,
               context_length: 1_000_000,
+              capabilities: ["tools", "vision", "reasoning"],
+              price: { cache_miss: "1", output: "4", currency: "CNY" },
               reasoning_effort: {
                 options: ["low", "high", "max"],
                 default: "high",
@@ -1344,8 +1335,6 @@ describe("ModelSettings (profiles)", () => {
                 model: "deepseek-v4-pro",
               },
               worker: { origin: "byok", provider_id: "p2", model: "gpt-4o" },
-              background: null,
-              vision: null,
               reasoning_effort: null,
               context_budget: null,
             }}
@@ -1365,41 +1354,263 @@ describe("ModelSettings (profiles)", () => {
     expect(screen.queryByRole("button", { name: "恢复跟随" })).toBeNull();
     expect(screen.queryByRole("button", { name: "保存" })).toBeNull();
     const row = screen.getByTestId("assembly-model-row");
-    expect(row.className).toContain("flex-wrap");
-    const mainTrigger = document.getElementById("profile-main");
-    expect(mainTrigger?.textContent).toContain("DeepSeek V4 Pro");
-    expect(mainTrigger?.textContent).not.toContain("1M");
-    const shorts = screen.getByTestId("assembly-model-shorts");
-    expect(shorts.className).toContain("w-max");
-    expect(shorts.className).toContain("max-w-full");
-    expect(shorts.className).toContain("shrink-0");
+    expect(row.getAttribute("data-shelf-layout")).toBe("columns");
+    expect(row.className).toContain("w-52");
+    expect(row.className).not.toContain("grid-cols-2");
+    expect(screen.queryByTestId("assembly-model-shorts")).toBeNull();
+    const detail = screen.getByTestId("composer-model-detail");
+    expect(detail.getAttribute("data-side")).toBe("right");
+    expect(detail.className).toContain("w-52");
+    expect(detail.className).not.toContain("left-full");
     expect(
-      within(shorts).queryByRole("tablist", { name: "思考强度" }),
+      screen.queryByRole("option", { name: /自定义 model id/ }),
     ).toBeNull();
-    expect(
-      within(shorts).getByRole("combobox", { name: "思考强度" }),
-    ).toBeTruthy();
-    expect(
-      within(shorts).queryByRole("tablist", { name: "上下文长度" }),
-    ).toBeNull();
-    expect(
-      within(shorts).getByRole("combobox", { name: "上下文长度" }),
-    ).toBeTruthy();
-    expect(screen.queryByText("调低后，窗口环和较早内容按这个数。")).toBeNull();
-    expect(within(shorts).getByText("组队队员")).toBeTruthy();
-    expect(within(shorts).getByText("后台任务")).toBeTruthy();
-    expect(within(shorts).queryByText("辩论仍用主模型")).toBeNull();
-    fireEvent.change(screen.getByRole("combobox", { name: "上下文长度" }), {
-      target: { value: "128000" },
+    expect(screen.queryByTestId("model-custom-divider")).toBeNull();
+    expect(screen.queryByLabelText("自定义 model id")).toBeNull();
+    const selected = within(row).getByRole("option", {
+      name: /DeepSeek V4 Pro/,
     });
+    expect(selected.getAttribute("aria-selected")).toBe("true");
+    expect(selected.textContent).not.toContain("1M");
+    expect(selected.textContent).not.toContain("¥");
+    fireEvent.mouseEnter(selected);
+    expect(detail.className).toContain("w-52");
+    expect(detail.textContent).toContain("¥1 / ¥4");
+    expect(detail.textContent).not.toContain("tools");
+    expect(detail.textContent).not.toContain("vision");
+    expect(detail.textContent).not.toContain("reasoning");
+    const mainTitle = document.getElementById("profile-main");
+    expect(mainTitle?.textContent).toContain("DeepSeek V4 Pro");
+    expect(mainTitle?.textContent).not.toContain("1M");
+    expect(mainTitle?.className).not.toContain("truncate");
+    expect(mainTitle?.nextElementSibling?.textContent).toBe("¥1 / ¥4");
+    expect(
+      within(detail).getByRole("button", { name: "思考强度" }),
+    ).toBeTruthy();
+    expect(
+      within(detail).getByRole("button", { name: "上下文长度" }),
+    ).toBeTruthy();
+    fireEvent.click(within(detail).getByRole("button", { name: "思考强度" }));
+    fireEvent.click(within(detail).getByRole("button", { name: "low" }));
+    await waitFor(() =>
+      expect(onSave).toHaveBeenCalledWith(
+        expect.objectContaining({ reasoning_effort: "low" }),
+      ),
+    );
+    expect(screen.queryByText("调低后，窗口环和较早内容按这个数。")).toBeNull();
+    const workerLabel = within(detail).getByText("组队队员");
+    expect(workerLabel.className).toContain("shrink-0");
+    expect(workerLabel.className).not.toContain("truncate");
+    const workerBtn = within(detail).getByRole("button", { name: "组队队员" });
+    expect(workerBtn.textContent).toContain("GPT-4o");
+    const workerValue = workerBtn.querySelector("span");
+    expect(workerValue?.className).toContain("truncate");
+    expect(workerValue?.getAttribute("title")).toBe("GPT-4o");
+    const budgetLabel = within(detail).getByText("上下文长度");
+    expect(budgetLabel.className).toContain("shrink-0");
+    expect(budgetLabel.className).not.toContain("truncate");
+    expect(
+      within(detail).queryByRole("button", { name: "后台任务" }),
+    ).toBeNull();
+    expect(within(detail).queryByText("辩论仍用主模型")).toBeNull();
+    fireEvent.click(within(detail).getByRole("button", { name: "上下文长度" }));
+    fireEvent.click(within(detail).getByRole("button", { name: "128K" }));
     await waitFor(() =>
       expect(onSave).toHaveBeenCalledWith(
         expect.objectContaining({ context_budget: 128_000 }),
       ),
     );
+    pickListedModel(/GPT-4o/);
+    await waitFor(() =>
+      expect(onSave).toHaveBeenCalledWith(
+        expect.objectContaining({
+          main: { origin: "byok", provider_id: "p2", model: "gpt-4o" },
+        }),
+      ),
+    );
   });
 
-  it("shelf short slots open a 24rem menu and 跟随主模型 clears the worker", async () => {
+  it("shelf puts official rate after the catalog name; spend rate in the guide", () => {
+    const catalog = {
+      ...defaultCatalog(),
+      enabled_refs: [
+        ...defaultCatalog().enabled_refs,
+        "@platform/deepseek-v4-flash",
+      ],
+      models: [
+        {
+          id: "deepseek-v4-flash",
+          origin: "platform" as const,
+          display_name: "DeepSeek V4.1 Flash",
+          vendor: "DeepSeek",
+          capabilities: [] as string[],
+          available: true,
+          price: {
+            cache_miss: "0.25",
+            output: "1",
+            currency: "CNY",
+            multiplier: "0.25",
+            quota_multiplier: "1",
+          },
+        },
+        ...defaultCatalog().models,
+      ],
+    };
+    render(
+      <MemoryRouter>
+        <TooltipProvider>
+          <ProfileEditor
+            surface="shelf"
+            title=""
+            showTitle={false}
+            showCancel={false}
+            framed={false}
+            providers={providersResponse().providers}
+            catalog={catalog as never}
+            catalogModels={catalog.models as never}
+            initial={{
+              name: "办公",
+              main: {
+                origin: "platform",
+                provider_id: null,
+                model: "deepseek-v4-flash",
+              },
+              worker: null,
+              reasoning_effort: null,
+              context_budget: null,
+            }}
+            pending={false}
+            onCancel={() => undefined}
+            onSave={vi.fn(async () => undefined)}
+          />
+        </TooltipProvider>
+      </MemoryRouter>,
+    );
+    const row = screen.getByTestId("assembly-model-row");
+    const selected = within(row).getByRole("option", {
+      name: /DeepSeek V4.1 Flash/,
+    });
+    expect(selected.textContent).toContain("0.25x");
+    expect(selected.textContent).not.toContain("0.25 / 1");
+    const detail = screen.getByTestId("composer-model-detail");
+    expect(detail.textContent).toContain("DeepSeek V4.1 Flash");
+    expect(detail.textContent).not.toContain("默认最省");
+    expect(detail.textContent).not.toContain("消耗积分以此为 1");
+    expect(detail.textContent).not.toContain("0.25x");
+    expect(detail.textContent).not.toContain("0.25 / 1");
+    expect(within(row).getByText("此倍率相对该模型官网价")).toBeTruthy();
+    fireEvent.click(
+      within(row).getByRole("button", { name: "各模型积分价目" }),
+    );
+    const table = screen.getByRole("table", { name: "各模型积分价目" });
+    expect(table.textContent).toContain("以此为 1");
+    expect(table.textContent).toContain("0.25");
+    expect(document.getElementById("profile-main")?.textContent).toBe(
+      "DeepSeek V4.1 Flash",
+    );
+  });
+
+  it("shelf stack puts the checked model above the catalog", () => {
+    const catalog = defaultCatalog();
+    render(
+      <MemoryRouter>
+        <TooltipProvider>
+          <ProfileEditor
+            surface="shelf"
+            shelfLayout="stack"
+            title=""
+            showTitle={false}
+            showCancel={false}
+            framed={false}
+            providers={providersResponse().providers}
+            catalog={catalog as never}
+            catalogModels={catalog.models as never}
+            initial={{
+              name: "办公",
+              main: {
+                origin: "byok",
+                provider_id: "p1",
+                model: "deepseek-v4-pro",
+              },
+              worker: null,
+              reasoning_effort: null,
+              context_budget: null,
+            }}
+            pending={false}
+            onCancel={() => undefined}
+            onSave={vi.fn(async () => undefined)}
+          />
+        </TooltipProvider>
+      </MemoryRouter>,
+    );
+    const row = screen.getByTestId("assembly-model-row");
+    expect(row.getAttribute("data-shelf-layout")).toBe("stack");
+    expect(row.className).not.toContain("w-52");
+    const list = screen.getByRole("listbox", { name: "模型" });
+    const detail = screen.getByTestId("composer-model-detail");
+    expect(detail.firstElementChild?.className).toContain("w-full");
+    const worker = within(detail).getByRole("button", { name: "组队队员" });
+    expect(worker.textContent).toContain("跟随主模型");
+    expect(
+      list.compareDocumentPosition(detail) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(detail.contains(worker)).toBe(true);
+  });
+
+  it("shelf custom model id edits the checked row in place", async () => {
+    const onSave = vi.fn(async () => undefined);
+    const catalog = defaultCatalog();
+    render(
+      <MemoryRouter>
+        <TooltipProvider>
+          <ProfileEditor
+            surface="shelf"
+            title=""
+            showTitle={false}
+            showCancel={false}
+            framed={false}
+            providers={providersResponse().providers}
+            catalog={catalog as never}
+            catalogModels={catalog.models as never}
+            initial={{
+              name: "办公",
+              main: {
+                origin: "byok",
+                provider_id: "p1",
+                model: "ep-already-saved",
+              },
+              worker: null,
+              reasoning_effort: null,
+              context_budget: null,
+            }}
+            pending={false}
+            onCancel={() => undefined}
+            onSave={onSave}
+          />
+        </TooltipProvider>
+      </MemoryRouter>,
+    );
+    const row = screen.getByRole("option", { name: /ep-already-saved/ });
+    expect(row.getAttribute("aria-selected")).toBe("true");
+    expect(screen.queryByLabelText("自定义 model id")).toBeNull();
+    fireEvent.click(row);
+    const input = screen.getByLabelText("自定义 model id") as HTMLInputElement;
+    expect(input.value).toBe("ep-already-saved");
+    fireEvent.change(input, { target: { value: "ep-volc-123" } });
+    await waitFor(() =>
+      expect(onSave).toHaveBeenCalledWith(
+        expect.objectContaining({
+          main: {
+            origin: "byok",
+            provider_id: "p1",
+            model: "ep-volc-123",
+          },
+        }),
+      ),
+    );
+  });
+
+  it("shelf 组队队员 reuses the catalog and 跟随主模型 clears the worker", async () => {
     const onSave = vi.fn(async () => undefined);
     const catalog = defaultCatalog();
     render(
@@ -1422,8 +1633,6 @@ describe("ModelSettings (profiles)", () => {
                 model: "deepseek-v4-pro",
               },
               worker: { origin: "byok", provider_id: "p2", model: "gpt-4o" },
-              background: null,
-              vision: null,
               reasoning_effort: null,
               context_budget: null,
             }}
@@ -1435,36 +1644,26 @@ describe("ModelSettings (profiles)", () => {
       </MemoryRouter>,
     );
 
-    fireEvent.click(
-      document.getElementById("profile-background") as HTMLElement,
+    fireEvent.mouseEnter(
+      screen.getByRole("option", { name: /DeepSeek V4 Pro/ }),
     );
-    const backgroundPanel = screen.getByTestId("model-picker-panel");
-    expect(backgroundPanel.className).toContain("w-96");
-    expect(backgroundPanel.className).toContain("right-0");
-    expect(
-      within(backgroundPanel)
-        .getByRole("option", { name: "跟随主模型" })
-        .getAttribute("aria-selected"),
-    ).toBe("true");
-    fireEvent.click(
-      document.getElementById("profile-background") as HTMLElement,
-    );
-
+    const row = screen.getByTestId("assembly-model-row");
     fireEvent.click(document.getElementById("profile-worker") as HTMLElement);
-    const workerPanel = screen.getByTestId("model-picker-panel");
-    expect(workerPanel.className).toContain("w-96");
-    const follow = within(workerPanel).getByRole("option", {
+    expect(row.getAttribute("data-catalog-pane")).toBe("worker");
+    expect(screen.queryByTestId("model-picker-panel")).toBeNull();
+    const teamList = screen.getByRole("listbox", { name: "组队队员" });
+    const follow = within(teamList).getByRole("option", {
       name: "跟随主模型",
     });
     expect(follow.getAttribute("aria-selected")).toBe("false");
-    fireEvent.change(within(workerPanel).getByLabelText("筛选模型"), {
+    fireEvent.change(screen.getByLabelText("筛选模型"), {
       target: { value: "没有这个模型" },
     });
     expect(
-      within(workerPanel).queryByRole("option", { name: /GPT-4o/ }),
+      within(teamList).queryByRole("option", { name: /GPT-4o/ }),
     ).toBeNull();
     fireEvent.click(
-      within(workerPanel).getByRole("option", { name: "跟随主模型" }),
+      within(teamList).getByRole("option", { name: "跟随主模型" }),
     );
     await waitFor(() =>
       expect(onSave).toHaveBeenCalledWith(
@@ -1478,5 +1677,212 @@ describe("ModelSettings (profiles)", () => {
         }),
       ),
     );
+    expect(row.getAttribute("data-catalog-pane")).toBe("main");
+  });
+
+  it("shelf 组队队员 pick writes the worker and returns to the main catalog", async () => {
+    const onSave = vi.fn(async () => undefined);
+    const catalog = defaultCatalog();
+    render(
+      <MemoryRouter>
+        <TooltipProvider>
+          <ProfileEditor
+            surface="shelf"
+            title=""
+            showTitle={false}
+            showCancel={false}
+            framed={false}
+            providers={providersResponse().providers}
+            catalog={catalog as never}
+            catalogModels={catalog.models as never}
+            initial={{
+              name: "办公",
+              main: {
+                origin: "byok",
+                provider_id: "p1",
+                model: "deepseek-v4-pro",
+              },
+              worker: { origin: "byok", provider_id: "p2", model: "gpt-4o" },
+              reasoning_effort: null,
+              context_budget: null,
+            }}
+            pending={false}
+            onCancel={() => undefined}
+            onSave={onSave}
+          />
+        </TooltipProvider>
+      </MemoryRouter>,
+    );
+
+    const row = screen.getByTestId("assembly-model-row");
+    const detail = screen.getByTestId("composer-model-detail");
+    fireEvent.click(within(detail).getByRole("button", { name: "组队队员" }));
+    expect(row.getAttribute("data-catalog-pane")).toBe("worker");
+    expect(screen.getByRole("button", { name: "返回" })).toBeTruthy();
+    const teamList = screen.getByRole("listbox", { name: "组队队员" });
+    fireEvent.click(
+      within(teamList).getByRole("option", { name: /DeepSeek V4 Pro/ }),
+    );
+    await waitFor(() =>
+      expect(onSave).toHaveBeenCalledWith(
+        expect.objectContaining({
+          worker: {
+            origin: "byok",
+            provider_id: "p1",
+            model: "deepseek-v4-pro",
+          },
+        }),
+      ),
+    );
+    expect(row.getAttribute("data-catalog-pane")).toBe("main");
+    expect(screen.getByRole("listbox", { name: "模型" })).toBeTruthy();
+  });
+
+  it("shelf pick restores that model's last knobs instead of carrying the previous", async () => {
+    const onSave = vi.fn(async () => undefined);
+    const catalog = twoEffortCatalog({
+      "@byok/p1/deepseek-v4-flash": {
+        reasoning_effort: "max",
+        context_budget: null,
+      },
+    });
+    render(
+      <MemoryRouter>
+        <TooltipProvider>
+          <ProfileEditor
+            surface="shelf"
+            title=""
+            showTitle={false}
+            showCancel={false}
+            framed={false}
+            providers={providersResponse().providers}
+            catalog={catalog as never}
+            catalogModels={catalog.models as never}
+            initial={{
+              name: "办公",
+              main: {
+                origin: "byok",
+                provider_id: "p1",
+                model: "deepseek-v4-pro",
+              },
+              worker: null,
+              reasoning_effort: "low",
+              context_budget: null,
+            }}
+            pending={false}
+            onCancel={() => undefined}
+            onSave={onSave}
+          />
+        </TooltipProvider>
+      </MemoryRouter>,
+    );
+    fireEvent.click(screen.getByRole("option", { name: /DeepSeek V4 Flash/ }));
+    await waitFor(() =>
+      expect(onSave).toHaveBeenCalledWith(
+        expect.objectContaining({
+          main: {
+            origin: "byok",
+            provider_id: "p1",
+            model: "deepseek-v4-flash",
+          },
+          reasoning_effort: "max",
+        }),
+      ),
+    );
+  });
+
+  it("shelf pick of an unused model uses vendor default, not the previous leaf", async () => {
+    const onSave = vi.fn(async () => undefined);
+    const catalog = twoEffortCatalog();
+    render(
+      <MemoryRouter>
+        <TooltipProvider>
+          <ProfileEditor
+            surface="shelf"
+            title=""
+            showTitle={false}
+            showCancel={false}
+            framed={false}
+            providers={providersResponse().providers}
+            catalog={catalog as never}
+            catalogModels={catalog.models as never}
+            initial={{
+              name: "办公",
+              main: {
+                origin: "byok",
+                provider_id: "p1",
+                model: "deepseek-v4-pro",
+              },
+              worker: null,
+              reasoning_effort: "low",
+              context_budget: null,
+            }}
+            pending={false}
+            onCancel={() => undefined}
+            onSave={onSave}
+          />
+        </TooltipProvider>
+      </MemoryRouter>,
+    );
+    fireEvent.click(screen.getByRole("option", { name: /DeepSeek V4 Flash/ }));
+    await waitFor(() =>
+      expect(onSave).toHaveBeenCalledWith(
+        expect.objectContaining({
+          main: {
+            origin: "byok",
+            provider_id: "p1",
+            model: "deepseek-v4-flash",
+          },
+          reasoning_effort: null,
+        }),
+      ),
+    );
+  });
+
+  it("shelf hover of another model shows that leaf's last knobs", () => {
+    const catalog = twoEffortCatalog({
+      "@byok/p1/deepseek-v4-flash": {
+        reasoning_effort: "max",
+        context_budget: null,
+      },
+    });
+    render(
+      <MemoryRouter>
+        <TooltipProvider>
+          <ProfileEditor
+            surface="shelf"
+            title=""
+            showTitle={false}
+            showCancel={false}
+            framed={false}
+            providers={providersResponse().providers}
+            catalog={catalog as never}
+            catalogModels={catalog.models as never}
+            initial={{
+              name: "办公",
+              main: {
+                origin: "byok",
+                provider_id: "p1",
+                model: "deepseek-v4-pro",
+              },
+              worker: null,
+              reasoning_effort: "low",
+              context_budget: null,
+            }}
+            pending={false}
+            onCancel={() => undefined}
+            onSave={vi.fn(async () => undefined)}
+          />
+        </TooltipProvider>
+      </MemoryRouter>,
+    );
+    fireEvent.mouseEnter(
+      screen.getByRole("option", { name: /DeepSeek V4 Flash/ }),
+    );
+    expect(
+      within(screen.getByTestId("composer-model-detail")).getByRole("button", {
+        name: "思考强度",
+      }).textContent,
+    ).toContain("max");
   });
 });

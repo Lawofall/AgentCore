@@ -78,7 +78,7 @@ const PAGES = [
   { id: "07-general", hash: "/more/general", heading: "通用" },
   { id: "08-shortcuts", hash: "/more/shortcuts", heading: "快捷键" },
   { id: "09-about", hash: "/more/about", heading: "关于 AgentCore" },
-  { id: "10-sponsor", hash: "/more/sponsor", heading: "赞助" },
+  { id: "10-subscription", hash: "/more/subscription", heading: "订阅" },
 ];
 
 // ---------------------------------------------------------------------------
@@ -114,6 +114,7 @@ const PROVIDERS = {
       id: "prov_deepseek",
       label: "DeepSeek",
       base_url: "https://api.deepseek.com",
+      vendor_id: "deepseek",
       masked_key: "sk-****3f9a",
       message: "连通正常",
       status: "active",
@@ -125,6 +126,7 @@ const PROVIDERS = {
       id: "prov_zen",
       label: "OpenCode Zen",
       base_url: "https://opencode.ai/zen/v1",
+      vendor_id: "opencode_zen",
       masked_key: "sk-****7b21",
       message: "上次测试失败：401 未授权",
       status: "error",
@@ -274,6 +276,13 @@ const USAGE_SUMMARY = {
     { date: "2026-07-31", cost_total: 2_410_000_000 },
     { date: "2026-08-01", cost_total: 2_360_000_000 },
   ],
+  seat: {
+    plan: "basic",
+    until: null,
+    pending_plan: null,
+    store_plus_url: "https://wzyp.cn/shop/AgentCore",
+    store_flagship_url: "https://wzyp.cn/shop/AgentCore",
+  },
 };
 
 const SESSIONS = {

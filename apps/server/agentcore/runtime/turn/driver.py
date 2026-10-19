@@ -41,7 +41,6 @@ class TurnDriver(Protocol):
         x_client_platform: str | None = None,
         agent_mentions: list[dict[str, Any]] | None = None,
         existing_user_message_id: str | None = None,
-        table_selection: list[str] | None = None,
     ) -> None: ...
 
     async def resume_turn(

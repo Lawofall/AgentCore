@@ -83,69 +83,6 @@ describe("streamConversation — 发送即有流（恒 SSE）", () => {
     );
   });
 
-  it("puts table_selection on the message payload when row ids are given", async () => {
-    const fetchMock = vi.fn<typeof fetch>(() =>
-      Promise.resolve(
-        sseResponse([
-          'data: {"type":"message_start","timestamp":"","payload":{"message_id":"m1"}}\n\n',
-          'data: {"type":"message_end","timestamp":"","payload":{"finish_reason":"end_turn"}}\n\n',
-        ]),
-      ),
-    );
-    vi.stubGlobal("fetch", fetchMock);
-    useConversationStore.getState().switchConversation("c1");
-    useConversationStore.getState().createAssistantMessage("c1");
-    useConversationStore.getState().setTurnPhase("streaming", "c1");
-
-    await streamConversation({
-      conversationId: "c1",
-      content: "把这些标成完成",
-      delivery: "steer",
-      tableSelection: ["r1", "r2"],
-    });
-    const body = JSON.parse(
-      String(fetchMock.mock.calls[0]?.[1]?.body ?? "{}"),
-    ) as { table_selection?: string[] };
-    expect(body.table_selection).toEqual(["r1", "r2"]);
-    expect(fetchMock.mock.calls[0]?.[1]).toEqual(
-      expect.objectContaining({
-        headers: expect.objectContaining({
-          Accept: "text/event-stream",
-          "X-Client-Platform": expect.any(String),
-          "X-Client-Version": expect.any(String),
-        }),
-      }),
-    );
-  });
-
-  it("truncates table_selection to 40 unique ids", async () => {
-    const fetchMock = vi.fn<typeof fetch>(() =>
-      Promise.resolve(
-        sseResponse([
-          'data: {"type":"message_start","timestamp":"","payload":{"message_id":"m1"}}\n\n',
-          'data: {"type":"message_end","timestamp":"","payload":{"finish_reason":"end_turn"}}\n\n',
-        ]),
-      ),
-    );
-    vi.stubGlobal("fetch", fetchMock);
-    useConversationStore.getState().switchConversation("c1");
-    useConversationStore.getState().createAssistantMessage("c1");
-    useConversationStore.getState().setTurnPhase("streaming", "c1");
-
-    await streamConversation({
-      conversationId: "c1",
-      content: "全选",
-      delivery: "steer",
-      tableSelection: Array.from({ length: 50 }, (_, i) => `r${i}`),
-    });
-    const body = JSON.parse(
-      String(fetchMock.mock.calls[0]?.[1]?.body ?? "{}"),
-    ) as { table_selection?: string[] };
-    expect(body.table_selection).toHaveLength(40);
-    expect(body.table_selection?.[0]).toBe("r0");
-    expect(body.table_selection?.[39]).toBe("r39");
-  });
-
   it("历史 202 JSON 受理显式失败（契约已退役，不走 queued 分支）", async () => {
     const fetchMock = vi.fn(() =>
       Promise.resolve(

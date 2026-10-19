@@ -313,15 +313,24 @@ async def _check_safety_and_approval_gates(
     else:
         args_for_gate = args
 
-    # 恒确认 (git push / create_pr · host install_package): the truth source lives
-    # in ``runtime.always_confirm`` — above BOTH the gate and every pre-authorize
-    # skip below — because it used to be private to ``ApprovalGate.authorize`` and
-    # anything short-circuiting earlier silently published to the remote.
+    # 恒确认 (git push / create_pr · host install_package / attach): the truth
+    # source lives in ``runtime.always_confirm`` — above BOTH the gate and every
+    # pre-authorize skip below — because it used to be private to
+    # ``ApprovalGate.authorize`` and anything short-circuiting earlier silently
+    # published to the remote. ``full`` is the one boundary that drops these
+    # cards (and leftover GRANTABLE / MCP). DENY / FORCE still bind.
+    axes = approval_gate.permission_axes if approval_gate is not None else None
     always_confirm = isinstance(args, dict) and requires_always_confirm(name, args)
+    if always_confirm and axes is not None and axes.skips_confirm:
+        always_confirm = False
     if approval_gate is not None:
         from agentcore.runtime.sandbox_approval import boundary_block_message
 
-        blocked = boundary_block_message(approval_gate.permission_axes, name)
+        blocked = boundary_block_message(
+            approval_gate.permission_axes,
+            name,
+            location=getattr(context.backend, "location", None),
+        )
         if blocked:
             sink.emit(
                 tool_use_end(
@@ -387,9 +396,16 @@ async def _check_safety_and_approval_gates(
         ):
             needs_approval = False
     # Re-assert after every downgrade above: a 恒确认 call keeps its card no matter
-    # which skip a future branch adds here.
+    # which skip a future branch adds here. ``full`` already cleared the flag.
     if always_confirm:
         needs_approval = True
+    if (
+        needs_approval
+        and not force_breaker
+        and axes is not None
+        and axes.skips_confirm
+    ):
+        needs_approval = False
     if needs_approval:
         from agentcore.runtime.sandbox_approval import execution_tool_auto_passes
 

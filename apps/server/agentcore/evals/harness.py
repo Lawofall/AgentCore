@@ -60,6 +60,7 @@ from agentcore.runtime.pipeline import run_chat_pipeline
 from agentcore.runtime.plan_only import PLAN_ONLY_CEO_MAX_ROUNDS, use_plan_only
 from agentcore.runtime.resolve.profile import use_profile
 from agentcore.runtime.runs.executor.shared import resolve_finish_override
+from agentcore.runtime.turn.snapshot import ConversationSnapshot
 from agentcore.tools.builtin import build_ceo_tool_registry, build_worker_registry
 from agentcore.tools.protocol import ToolContext
 from agentcore.tools.sandbox.subprocess import SubprocessSandbox
@@ -545,6 +546,7 @@ class EvalHarness:
             sink=sink,
             user_id=_EVAL_USER_ID,
             backend=backend,
+            conversation=ConversationSnapshot.default(),
             approvals_enabled=False,
             profile_set=profiles,
             llm_credentials=llm_credentials or await eval_credentials(),

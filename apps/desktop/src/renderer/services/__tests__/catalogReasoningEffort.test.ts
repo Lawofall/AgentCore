@@ -14,6 +14,7 @@ const flash: ModelCatalogItem = {
   provider_id: "p1",
   capabilities: [],
   available: true,
+  custom: false,
   reasoning_effort: { options: ["low", "high", "max"], default: "high" },
 };
 
@@ -26,6 +27,7 @@ const gpt: ModelCatalogItem = {
   provider_id: "p2",
   capabilities: [],
   available: true,
+  custom: false,
 };
 
 describe("catalogReasoningEffort", () => {

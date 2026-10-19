@@ -35,6 +35,9 @@ describe("LegalSettingsPage", () => {
     expect(screen.getAllByText(`更新日期：${doc.updatedAt}`)).toHaveLength(1);
     // 正文仍在：章节标题是 h2。
     expect(container.querySelectorAll("h2").length).toBe(doc.sections.length);
+    expect(
+      screen.getByRole("heading", { name: "九、订阅与额度" }),
+    ).toBeTruthy();
   });
 
   it("falls back to 关于 for an unknown doc id", () => {

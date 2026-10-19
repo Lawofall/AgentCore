@@ -33,22 +33,6 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-function usageWindow(cnyTotal: number, requests: number): UsageWindow {
-  return {
-    cost: {
-      cached: 0,
-      cny_total: cnyTotal,
-      currency: "CNY",
-      input: 0,
-      output: 0,
-      total: 0,
-      pricing_source: "curated",
-    },
-    usage: { cache_hit: 0, cache_miss: 0, input: 0, output: 0, reasoning: 0 },
-    requests,
-  };
-}
-
 function goWindows(p?: Partial<AdminGoWindows>): AdminGoWindows {
   return {
     as_of: "2026-08-18T12:00:00Z",
@@ -81,6 +65,22 @@ function goWindows(p?: Partial<AdminGoWindows>): AdminGoWindows {
     },
     members: [],
     ...p,
+  };
+}
+
+function usageWindow(cnyTotal: number, requests: number): UsageWindow {
+  return {
+    cost: {
+      cached: 0,
+      cny_total: cnyTotal,
+      currency: "CNY",
+      input: 0,
+      output: 0,
+      total: 0,
+      pricing_source: "curated",
+    },
+    usage: { cache_hit: 0, cache_miss: 0, input: 0, output: 0, reasoning: 0 },
+    requests,
   };
 }
 

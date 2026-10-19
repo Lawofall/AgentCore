@@ -35,6 +35,7 @@ def _row(**kwargs):
         "label": "DeepSeek",
         "api_key_enc": b"cipher",
         "base_url": settings.platform_base_url,
+        "vendor_id": "deepseek",
         "default_model": DEEPSEEK_V4_FLASH,
         "supports_tools": None,
         "status": "unchecked",
@@ -84,7 +85,7 @@ def _enc():
 
 
 async def test_create_provider_first_seeds_current_config_profile(service):
-    from agentcore.llm.byok_provider_presets import seed_model_for_base_url
+    from agentcore.llm.byok_provider_presets import seed_model_for_vendor
 
     with (
         patch.object(service, "_encryptor", return_value=_enc()),
@@ -98,7 +99,10 @@ async def test_create_provider_first_seeds_current_config_profile(service):
         ) as update_profile,
     ):
         view = await service.create_provider(
-            "u1", label="DeepSeek", api_key="sk-secret-1234"
+            "u1",
+            label="DeepSeek",
+            api_key="sk-secret-1234",
+            vendor_id="deepseek",
         )
     snapshot.assert_awaited_once()
     update_profile.assert_awaited_once()
@@ -106,9 +110,9 @@ async def test_create_provider_first_seeds_current_config_profile(service):
     assert kwargs["fields_set"] == {"main"}
     assert kwargs["main"].origin == "byok"
     assert kwargs["main"].provider_id == "prov-1"
-    assert kwargs["main"].model == seed_model_for_base_url(settings.platform_base_url)
+    assert kwargs["main"].model == seed_model_for_vendor("deepseek")
     assert view.id == "prov-1"
-    assert view.masked_key == "••••1234"
+    assert view.masked_key == "sk-sec...1234"
     assert not hasattr(view, "default_model")
 
 
@@ -127,6 +131,7 @@ async def test_create_provider_custom_url_does_not_seed_profile(service):
             "u1",
             label="Gateway",
             api_key="sk-secret-1234",
+            vendor_id="custom",
             base_url="https://my-proxy.example/v1",
         )
     create_profile.assert_not_awaited()
@@ -141,13 +146,17 @@ async def test_create_provider_second_does_not_seed_profile(service):
             new=AsyncMock(),
         ) as create_profile,
     ):
-        await service.create_provider("u1", label="Kimi", api_key="sk-second-key")
+        await service.create_provider(
+            "u1", label="Kimi", api_key="sk-second-key", vendor_id="moonshot"
+        )
     create_profile.assert_not_awaited()
 
 
 async def test_create_provider_rejects_empty_key(service):
     with pytest.raises(ValidationError):
-        await service.create_provider("u1", label="X", api_key="   ")
+        await service.create_provider(
+            "u1", label="X", api_key="   ", vendor_id="custom"
+        )
 
 
 async def test_create_provider_rejects_fullwidth_in_key(service):
@@ -157,7 +166,7 @@ async def test_create_provider_rejects_fullwidth_in_key(service):
         pytest.raises(ValidationError, match="全角|中文符号"),
     ):
         await service.create_provider(
-            "u1", label="X", api_key="sk-test（revoked）"
+            "u1", label="X", api_key="sk-test（revoked）", vendor_id="custom"
         )
 
 
@@ -179,7 +188,43 @@ async def test_create_provider_without_master_key_raises(service):
         patch.object(service, "_encryptor", return_value=None),
         pytest.raises(KeyStorageUnavailableError),
     ):
-        await service.create_provider("u1", label="X", api_key="sk-x")
+        await service.create_provider(
+            "u1", label="X", api_key="sk-x", vendor_id="custom"
+        )
+
+
+async def test_create_provider_rejects_unknown_vendor(service):
+    with (
+        patch.object(service, "_encryptor", return_value=_enc()),
+        pytest.raises(ValidationError, match="未知的厂商预设"),
+    ):
+        await service.create_provider(
+            "u1", label="X", api_key="sk-x", vendor_id="https://api.openai.com/v1"
+        )
+
+
+async def test_create_openai_vendor_keeps_identity_with_custom_url(service):
+    service._repo.count_for_user = AsyncMock(return_value=1)
+    service._repo.create = AsyncMock(
+        return_value=_row(
+            vendor_id="openai",
+            base_url="https://api.apistokens.com",
+            default_model="gpt-4o",
+            label="OpenAI",
+        )
+    )
+    with patch.object(service, "_encryptor", return_value=_enc()):
+        view = await service.create_provider(
+            "u1",
+            label="OpenAI",
+            api_key="sk-x",
+            vendor_id="openai",
+            base_url="https://api.apistokens.com",
+        )
+    kwargs = service._repo.create.await_args.kwargs
+    assert kwargs["vendor_id"] == "openai"
+    assert kwargs["base_url"] == "https://api.apistokens.com/v1"
+    assert view.vendor_id == "openai"
 
 
 async def test_list_providers_reports_profile_id_and_platform(service, monkeypatch):
@@ -287,7 +332,7 @@ async def test_test_provider_records_active_and_tools(service):
     assert fake.probe_called is False
     assert view.status == "active"
     assert view.message is not None
-    assert "连通" in view.message and "装配" in view.message
+    assert "连通" in view.message and "输入框" in view.message
     service._repo.update_status.assert_awaited_once_with("prov-1", "active")
     service._repo.update_supports_tools.assert_awaited_once_with("prov-1", True)
     start = next(c for c in caps if c.get("event") == "llm_provider.test.start")
@@ -296,6 +341,29 @@ async def test_test_provider_records_active_and_tools(service):
     assert start["base_url"] == "https://api.openai.com/v1"
     ok = next(c for c in caps if c.get("event") == "llm_provider.test.ok")
     assert ok["supports_tools"] is True
+
+
+async def test_create_custom_origin_url_persists_v1(service):
+    service._repo.count_for_user = AsyncMock(return_value=1)
+    service._repo.create = AsyncMock(
+        return_value=_row(
+            vendor_id="custom",
+            base_url="https://omyai.vip/v1",
+            default_model="",
+            label="中转",
+        )
+    )
+    with patch.object(service, "_encryptor", return_value=_enc()):
+        view = await service.create_provider(
+            "u1",
+            label="中转",
+            api_key="sk-x",
+            vendor_id="custom",
+            base_url="https://omyai.vip",
+        )
+    kwargs = service._repo.create.await_args.kwargs
+    assert kwargs["base_url"] == "https://omyai.vip/v1"
+    assert view.base_url == "https://omyai.vip/v1"
 
 
 async def test_test_provider_empty_models_list_without_profile_is_not_green(service):
@@ -323,7 +391,38 @@ async def test_test_provider_empty_models_list_without_profile_is_not_green(serv
     assert fake.probe_called is False
     assert view.status == "error"
     assert "未列出模型" in (view.message or "")
-    assert "装配" in (view.message or "")
+    assert "输入框" in (view.message or "")
+    assert "后再测" not in (view.message or "")
+
+
+async def test_test_provider_invalid_models_body_is_not_catalog_missing(service):
+    service._repo.get = AsyncMock(
+        side_effect=[
+            _row(api_key_enc=b"x"),
+            _row(api_key_enc=b"x", status="error"),
+        ]
+    )
+    creds = LLMCredentials(
+        api_key="sk-abc", base_url="https://gw.example/v1", default_model=""
+    )
+    fake = _FakeProbeProvider(
+        list_models_error=LLMError("Gateway 模型列表响应格式无效"),
+        supports_tools=None,
+    )
+    with (
+        patch(
+            "agentcore.llm.provider_service.resolve_provider_credentials",
+            AsyncMock(return_value=creds),
+        ),
+        patch("agentcore.llm.provider_service.build_provider", return_value=fake),
+        patch.object(service, "_encryptor", return_value=_enc()),
+    ):
+        view = await service.test_provider("u1", "prov-1")
+    assert fake.list_models_called is True
+    assert fake.probe_called is False
+    assert view.status == "error"
+    assert "像是网页" in (view.message or "")
+    assert "未列出模型" not in (view.message or "")
 
 
 async def test_test_provider_nonempty_list_does_not_probe_unlisted_seed(service):
@@ -352,7 +451,7 @@ async def test_test_provider_nonempty_list_does_not_probe_unlisted_seed(service)
     assert fake.probe_called is False
     assert view.status == "active"
     assert view.message is not None
-    assert "连通" in view.message and "装配" in view.message
+    assert "连通" in view.message and "输入框" in view.message
     service._repo.update_status.assert_awaited_once_with("prov-1", "active")
 
 
@@ -366,7 +465,7 @@ async def test_test_provider_profile_model_missing_from_list_probe_failure_is_er
         ]
     )
     service._profiles.list_for_user = AsyncMock(
-        return_value=[_profile_row_ref(background_model="stale-model")]
+        return_value=[_profile_row_ref(worker_model="stale-model")]
     )
     creds = LLMCredentials(
         api_key="sk-abc", base_url="https://gw.example/v1", default_model=""
@@ -388,7 +487,7 @@ async def test_test_provider_profile_model_missing_from_list_probe_failure_is_er
     assert "stale-model" in fake.probe_models
     assert view.status == "error"
     assert "stale-model" in (view.message or "")
-    assert "装配" in (view.message or "")
+    assert "能力" in (view.message or "")
 
 
 async def test_test_provider_profile_ark_ep_missing_from_list_still_active_via_combo(
@@ -403,7 +502,7 @@ async def test_test_provider_profile_ark_ep_missing_from_list_still_active_via_c
         ]
     )
     service._profiles.list_for_user = AsyncMock(
-        return_value=[_profile_row_ref(background_model=ep)]
+        return_value=[_profile_row_ref(worker_model=ep)]
     )
     creds = LLMCredentials(
         api_key="sk-abc",
@@ -428,7 +527,7 @@ async def test_test_provider_profile_ark_ep_missing_from_list_still_active_via_c
     assert ep in fake.probe_models
     assert view.status == "active"
     assert view.message is not None
-    assert "连通" in view.message and "装配" in view.message
+    assert "连通" in view.message and "输入框" in view.message
     service._repo.update_status.assert_awaited_once_with("prov-1", "active")
 
 
@@ -474,7 +573,7 @@ async def test_test_provider_list_ok_profile_probe_401_blames_combo_model_not_ke
         ]
     )
     service._profiles.list_for_user = AsyncMock(
-        return_value=[_profile_row_ref(main_model="DeepSeek1", background_model=None)]
+        return_value=[_profile_row_ref(main_model="DeepSeek1", worker_model=None)]
     )
     creds = LLMCredentials(
         api_key="sk-abc",
@@ -505,7 +604,7 @@ async def test_test_provider_list_ok_profile_probe_401_blames_combo_model_not_ke
     assert "模型「DeepSeek1」" in msg
     assert "不被上游接受" in msg
     assert "列出模型" in msg
-    assert "装配" in msg
+    assert "输入框" in msg
     assert "API Key 无效" not in msg
     assert "连接测试用模型" not in msg
 
@@ -571,7 +670,7 @@ async def test_test_provider_list_unproven_profile_probe_401_mentions_key_and_mo
         ]
     )
     service._profiles.list_for_user = AsyncMock(
-        return_value=[_profile_row_ref(main_model="DeepSeek1", background_model=None)]
+        return_value=[_profile_row_ref(main_model="DeepSeek1", worker_model=None)]
     )
     creds = LLMCredentials(
         api_key="sk-abc",
@@ -704,7 +803,7 @@ async def test_test_provider_tools_failure_does_not_error_status(service):
         view = await service.test_provider("u1", "prov-1")
     assert view.status == "active"
     assert view.message is not None
-    assert "连通" in view.message and "装配" in view.message
+    assert "连通" in view.message and "输入框" in view.message
     service._repo.update_supports_tools.assert_awaited_once_with("prov-1", None)
 
 
@@ -716,7 +815,7 @@ async def test_test_provider_logs_probe_failure(service):
         ]
     )
     service._profiles.list_for_user = AsyncMock(
-        return_value=[_profile_row_ref(background_model=DEEPSEEK_V4_FLASH)]
+        return_value=[_profile_row_ref(worker_model=DEEPSEEK_V4_FLASH)]
     )
     creds = LLMCredentials(
         api_key="sk-bad", base_url="https://api.deepseek.com", default_model=""
@@ -737,7 +836,7 @@ async def test_test_provider_logs_probe_failure(service):
     ):
         view = await service.test_provider("u1", "prov-1")
     assert view.status == "error"
-    assert "装配" in (view.message or "")
+    assert "能力" in (view.message or "")
     failed = next(c for c in caps if c.get("event") == "llm_provider.test.failed")
     assert failed["provider_id"] == "prov-1"
     assert "bad key" in failed["error"] or DEEPSEEK_V4_FLASH in failed["error"]
@@ -779,7 +878,11 @@ async def test_test_provider_missing_raises(service):
 
 async def test_delete_provider_retargets_main_to_fallback(service):
     service._repo.first_for_user = AsyncMock(
-        return_value=_row(id="prov-2", base_url="https://api.openai.com/v1")
+        return_value=_row(
+            id="prov-2",
+            base_url="https://api.openai.com/v1",
+            vendor_id="openai",
+        )
     )
     await service.delete_provider("u1", "prov-1")
     service._profiles.retarget_main_provider.assert_awaited_once_with(
@@ -794,7 +897,11 @@ async def test_delete_provider_retargets_main_to_fallback(service):
 
 async def test_delete_provider_custom_fallback_keeps_existing_model(service):
     service._repo.first_for_user = AsyncMock(
-        return_value=_row(id="prov-2", base_url="https://my-proxy.example/v1")
+        return_value=_row(
+            id="prov-2",
+            base_url="https://my-proxy.example/v1",
+            vendor_id="custom",
+        )
     )
     await service.delete_provider("u1", "prov-1")
     service._profiles.retarget_main_provider.assert_awaited_once_with(
@@ -828,22 +935,16 @@ def _profile_row_ref(
     *,
     provider_id: str = "prov-1",
     main_model: str = "gpt-4o",
-    background_model: str | None = "gpt5.6",
+    worker_model: str | None = "gpt5.6",
 ):
-    has_bg = bool((background_model or "").strip())
+    has_worker = bool((worker_model or "").strip())
     return SimpleNamespace(
         main_origin="byok",
         main_provider_id=provider_id,
         main_model=main_model,
-        worker_origin=None,
-        worker_provider_id=None,
-        worker_model=None,
-        background_origin="byok" if has_bg else None,
-        background_provider_id=provider_id if has_bg else None,
-        background_model=background_model if has_bg else None,
-        vision_origin=None,
-        vision_provider_id=None,
-        vision_model=None,
+        worker_origin="byok" if has_worker else None,
+        worker_provider_id=provider_id if has_worker else None,
+        worker_model=worker_model if has_worker else None,
     )
 
 
@@ -856,7 +957,7 @@ async def test_test_provider_fails_naming_bad_profile_model(service):
         ]
     )
     service._profiles.list_for_user = AsyncMock(
-        return_value=[_profile_row_ref(background_model="gpt5.6")]
+        return_value=[_profile_row_ref(worker_model="gpt5.6")]
     )
     creds = LLMCredentials(
         api_key="sk-abc", base_url="https://api.openai.com/v1", default_model="gpt-4o"
@@ -873,7 +974,7 @@ async def test_test_provider_fails_naming_bad_profile_model(service):
         view = await service.test_provider("u1", "prov-1")
     assert view.status == "error"
     assert "gpt5.6" in (view.message or "")
-    assert "装配" in (view.message or "")
+    assert "能力" in (view.message or "")
     assert "gpt5.6" in fake.probe_models
     service._repo.update_status.assert_awaited_once_with("prov-1", "error")
 
@@ -888,7 +989,7 @@ async def test_test_provider_profile_ark_ep_missing_from_list_still_active(servi
         ]
     )
     service._profiles.list_for_user = AsyncMock(
-        return_value=[_profile_row_ref(background_model=ep)]
+        return_value=[_profile_row_ref(worker_model=ep)]
     )
     creds = LLMCredentials(
         api_key="sk-abc", base_url="https://ark.example/api/v3", default_model="gpt-4o"

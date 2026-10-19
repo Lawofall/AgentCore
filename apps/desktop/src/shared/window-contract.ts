@@ -1,6 +1,7 @@
 /**
  * 主窗口拍摄比例 IPC 契约 —— 供 OBS / 系统录屏时一键跳到 16:9、4:3 标准尺寸并锁定比例。
  *
+ * 渲染层入口在命令面板「开发」（仅 Vite DEV）；标题栏不画。
  * 与 minimize/maximize/close 同属 `windowApi`，但走 invoke/handle（需返回值与校验）。
  */
 
@@ -15,7 +16,7 @@ export interface WindowFramePresetInfo {
   aspect: number;
 }
 
-/** 渲染层菜单展示用；尺寸与主进程 `window-frame.ts` 保持同步。 */
+/** 命令面板展示用；尺寸与主进程 `window-frame.ts` 保持同步。 */
 export const WINDOW_FRAME_PRESETS: readonly WindowFramePresetInfo[] = [
   {
     id: "16:9-1080",

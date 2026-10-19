@@ -181,8 +181,6 @@ export function UserDetail({
               已配服务商：{fmtInt(data.provider_count ?? 0)}
               {" · 默认对话模型："}
               {data.default_model ?? "未配置"}
-              {" · 默认后台模型："}
-              {data.background_model ?? "未配置"}
             </p>
           </header>
 

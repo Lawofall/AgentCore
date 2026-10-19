@@ -7,8 +7,17 @@
  * the import block so organizeImports keeps it file-leading.
  */
 
-import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { fetchWorkspaceFileBlob } from "@/services/workspace";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import { type ToolResultData, ToolResultView } from "../ToolResultView";
 import {
   GENERIC_TOOL_FAILURE_MESSAGE,
@@ -28,10 +37,25 @@ vi.mock("react-router-dom", async () => {
   };
 });
 
+vi.mock("@/services/workspace", () => ({
+  fetchWorkspaceFileBlob: vi.fn(),
+}));
+
 afterEach(cleanup);
+
+beforeAll(() => {
+  URL.createObjectURL = vi.fn(
+    () => "blob:mock-host-frame",
+  ) as unknown as typeof URL.createObjectURL;
+  URL.revokeObjectURL = vi.fn() as unknown as typeof URL.revokeObjectURL;
+});
 
 beforeEach(() => {
   navigate.mockClear();
+  vi.mocked(fetchWorkspaceFileBlob).mockReset();
+  vi.mocked(fetchWorkspaceFileBlob).mockResolvedValue(
+    new Blob(["jpeg"], { type: "image/jpeg" }),
+  );
 });
 
 function data(p: Partial<ToolResultData>): ToolResultData {
@@ -647,8 +671,10 @@ describe("ToolResultView · write-family cards have no path header", () => {
     expect(screen.queryByText("src/lib/store.ts")).toBeNull();
     expect(screen.queryByText("+1")).toBeNull();
     expect(screen.queryByText("-1")).toBeNull();
-    expect(screen.getByText("a")).toBeTruthy();
-    expect(screen.getByText("b")).toBeTruthy();
+    const delRow = screen.getByText("a").closest("div");
+    const addRow = screen.getByText("b").closest("div");
+    expect(delRow?.className).toContain("bg-diff-del");
+    expect(addRow?.className).toContain("bg-diff-add");
   });
 
   it("renders a write preview without path / 字 chrome", () => {
@@ -773,5 +799,32 @@ describe("ToolResultView · host", () => {
     );
     expect(screen.getByText(/"ok":true/)).toBeTruthy();
     expect(screen.queryByText(/不可信内容/)).toBeNull();
+  });
+
+  it("lazy-loads a GUI key-frame from the conversation workspace", async () => {
+    render(
+      <ToolResultView
+        data={data({
+          toolName: "host",
+          conversationId: "c1",
+          result: '{"action":"snapshot"}',
+          display: {
+            kind: "host",
+            action: "snapshot",
+            body: "读了「记事本」的控件",
+            title: "记事本",
+            frame: "host/step-0001.jpg",
+          },
+        })}
+      />,
+    );
+    expect(screen.getByText(/读了「记事本」的控件/)).toBeTruthy();
+    await waitFor(() => {
+      expect(fetchWorkspaceFileBlob).toHaveBeenCalledWith(
+        "c1",
+        "host/step-0001.jpg",
+      );
+    });
+    expect(screen.getByAltText("记事本")).toBeTruthy();
   });
 });

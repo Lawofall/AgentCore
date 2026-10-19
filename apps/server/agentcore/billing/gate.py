@@ -11,19 +11,18 @@ quota defence: :mod:`agentcore.billing.call_quota` re-checks before every upstre
 call, which is what stops concurrent turns and worker fan-out from overselling one
 stale reading (成本配额与计费 §一).
 
-Background product chrome (title / memory) resolves
-platform-first via ``resolve_and_gate_background``: platform spend always passes
-``enforce_quota`` (no BYOK freeload); quota exhaustion yields no credentials so
-best-effort callers degrade instead of 429-ing the user turn. ``run_background_llm``
-keeps that contract when the per-call gate refuses mid-flight. An account that
-explicitly pointed its background slot at its own key resolves BYOK up front (its
-own spend — nothing to freeload), so it never sees the platform cap at all.
+Background product chrome (title) resolves platform-first via
+``resolve_and_gate_background``: the pinned ``PLATFORM_BACKGROUND_MODEL``
+(default Flash) always passes ``enforce_quota``; quota exhaustion yields no
+credentials so best-effort callers degrade instead of 429-ing the user turn.
+``run_background_llm`` keeps that contract when the per-call gate refuses
+mid-flight. Combination background slots are not read.
 
 Long-conversation compaction is **continuity, not chrome**. It follows this
-conversation's chat payer via ``run_compaction_llm`` (explicit background-slot
-BYOK still wins). Platform chat still ``enforce_quota``; BYOK chat never hits
-the platform ¥ cap. Quota / missing keys still skip rather than 429 a finished
-turn; near-ceiling refuse is a separate gate on the send path.
+conversation's chat payer via ``run_compaction_llm``. Platform chat still
+``enforce_quota``; BYOK chat never hits the platform ¥ cap. Quota / missing
+keys still skip rather than 429 a finished turn; near-ceiling refuse is a
+separate gate on the send path.
 
 A refusal is returned, not raised, and it **says why**: ``run_background_llm``
 answers with :class:`BackgroundLlmResult` or :class:`BackgroundLlmSkip`, never a
@@ -80,7 +79,6 @@ from agentcore.llm.resolve import (
     platform_llm_credentials,
     resolve_background_user_fallback,
     resolve_conversation_model_selection,
-    resolve_explicit_background_byok,
     resolve_model_config,
     resolve_user_llm_credentials,
 )
@@ -283,17 +281,18 @@ async def resolve_and_gate_background(
     purpose: ModelPurpose = "title",
     conversation_id: str | None = None,
 ) -> BackgroundGateResolve:
-    """Resolve background credentials and gate spend.
+    """Resolve title chrome credentials and gate spend.
 
-    Title: empty slot follows the conversation assembly's main model. An explicit
-    BYOK background slot wins. An explicit platform slot stays platform-first.
+    Platform catalog visible → pinned ``PLATFORM_BACKGROUND_MODEL`` (Flash) and
+    ``enforce_quota``. Catalog closed → follow this conversation's main.
+    Combination background slots are not read.
 
     Returns credentials to pass to ``build_provider``, or a skip with
     ``quota_skipped_at_admission`` when platform quota blocked admission. Never raises
     quota errors — background paths are best-effort product chrome.
 
     When ``source=platform``, ``enforce_quota`` always runs (even if the account
-    has a BYOK key) so background cannot freeload past the platform cap. A resolve
+    has a BYOK key) so title cannot freeload past the platform cap. A resolve
     that already landed on the user's own key skips the quota gate — that is their
     spend, not the platform's.
 
@@ -310,7 +309,7 @@ async def resolve_and_gate_background(
     # Dormant / credentials gated off: same as main chat — BYOK or skip.
     if cfg.source == "platform" and not platform_catalog_visible():
         fallback = await resolve_and_gate_background_user_fallback(
-            session, user_id, purpose=purpose
+            session, user_id, purpose=purpose, conversation_id=conversation_id
         )
         return BackgroundGateResolve(credentials=fallback)
 
@@ -344,13 +343,16 @@ async def resolve_and_gate_background_user_fallback(
     user_id: str,
     *,
     purpose: ModelPurpose = "title",
+    conversation_id: str | None = None,
 ) -> LLMCredentials | None:
-    """Resolve user BYOK for background chrome after platform is unavailable / auth-rejected.
+    """Resolve user BYOK follow-main after platform is unavailable / auth-rejected.
 
     ``source=user`` — no platform quota. Returns ``None`` when the account has no
-    usable BYOK key (including combo slots that only point at platform).
+    usable BYOK key.
     """
-    cfg = await resolve_background_user_fallback(session, user_id, purpose)
+    cfg = await resolve_background_user_fallback(
+        session, user_id, purpose, conversation_id=conversation_id
+    )
     if cfg is None:
         return None
     return _creds_from_cfg(cfg)
@@ -361,16 +363,12 @@ async def resolve_and_gate_compaction(
     user_id: str,
     conversation_id: str,
 ) -> BackgroundGateResolve:
-    """Continuity-fold credentials: explicit background BYOK slot, else this chat's payer.
+    """Continuity-fold credentials: this conversation's chat payer.
 
     Compaction is not product chrome. A BYOK conversation must fold on the user's
     key even when the platform ¥ cap is spent. Platform chat still runs
     ``enforce_quota``. Quota / missing keys skip rather than 429 the caller.
     """
-    explicit = await resolve_explicit_background_byok(session, user_id, "compaction")
-    if explicit is not None:
-        return BackgroundGateResolve(credentials=_creds_from_cfg(explicit))
-
     conv = await ConversationRepository(session).get_by_id_unscoped(conversation_id)
     if conv is None:
         return BackgroundGateResolve()
@@ -396,7 +394,7 @@ async def resolve_and_gate_compaction(
         return BackgroundGateResolve(quota_skipped_at_admission=True)
     except (BYOKKeyMissingError, PlatformBillingUnavailableError):
         fallback = await resolve_and_gate_background_user_fallback(
-            session, user_id, purpose="compaction"
+            session, user_id, purpose="compaction", conversation_id=conversation_id
         )
         return BackgroundGateResolve(credentials=fallback)
     return BackgroundGateResolve(credentials=credentials)
@@ -408,6 +406,7 @@ async def _invoke_background_runner[T](
     purpose: ModelPurpose,
     runner: Callable[[LLMCredentials], Awaitable[T]],
     resolved: BackgroundGateResolve,
+    conversation_id: str | None = None,
 ) -> BackgroundLlmOutcome[T]:
     """Run ``runner`` after admission: skip / one platform→BYOK auth or balance retry."""
     from agentcore.llm.turn_auth_dead import is_turn_auth_dead
@@ -464,7 +463,7 @@ async def _invoke_background_runner[T](
     )
     async with async_session_factory() as session:
         fallback = await resolve_and_gate_background_user_fallback(
-            session, user_id, purpose=purpose
+            session, user_id, purpose=purpose, conversation_id=conversation_id
         )
     if fallback is None:
         return BackgroundLlmSkip(reason=skip_reason)
@@ -508,9 +507,8 @@ async def run_background_llm[T](
     """Background LLM with one BYOK retry when the platform payer is rejected.
 
     Flow:
-    1. ``resolve_and_gate_background`` (title: empty slot follows this
-       conversation's main; explicit BYOK slot wins; explicit platform slot
-       stays platform-first; platform source still passes quota).
+    1. ``resolve_and_gate_background`` (title: platform catalog → pinned
+       Flash chrome + quota; catalog closed → follow this conversation's main).
     2. Run ``runner(credentials)``.
     3. On ``LLMAuthError`` / ``LLMInsufficientBalanceError`` **and**
        ``credentials.source == "platform"``: resolve user BYOK once via
@@ -536,8 +534,7 @@ async def run_background_llm[T](
     Turn-scoped exception: when **this call's** payer is latched dead
     (``llm.turn_auth_dead``), skip immediately — that is per-turn short-circuit
     for that ``credential_source`` only, not a process TTL cache. Checked after
-    resolve so the skip uses the actual source (this call's payer vs an
-    own-key background slot), not an assumed payer. Does not widen
+    resolve so the skip uses the actual source, not an assumed payer. Does not widen
     platform→BYOK fallback: a dead platform resolve still returns here instead
     of taking the auth-fallback path.
     """
@@ -546,7 +543,11 @@ async def run_background_llm[T](
             session, user_id, purpose=purpose, conversation_id=conversation_id
         )
     return await _invoke_background_runner(
-        user_id, purpose=purpose, runner=runner, resolved=resolved
+        user_id,
+        purpose=purpose,
+        runner=runner,
+        resolved=resolved,
+        conversation_id=conversation_id,
     )
 
 
@@ -564,6 +565,10 @@ async def run_compaction_llm[T](
     async with async_session_factory() as session:
         resolved = await resolve_and_gate_compaction(session, user_id, conversation_id)
     return await _invoke_background_runner(
-        user_id, purpose="compaction", runner=runner, resolved=resolved
+        user_id,
+        purpose="compaction",
+        runner=runner,
+        resolved=resolved,
+        conversation_id=conversation_id,
     )
 

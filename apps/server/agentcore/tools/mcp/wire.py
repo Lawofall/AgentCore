@@ -31,6 +31,7 @@ class McpToolSpec:
     mcp_tool_name: str
     description: str
     input_schema: dict[str, Any] | None
+    transport: str = "stdio"
 
 
 @dataclass(frozen=True)
@@ -223,6 +224,7 @@ def parse_mcp_list_payload(value: Any) -> McpDiscoverResult:
                     mcp_tool_name=mcp_name,
                     description=str(tool.get("description") or ""),
                     input_schema=input_schema,
+                    transport="stdio",
                 )
             )
 
@@ -239,6 +241,26 @@ def parse_mcp_list_payload(value: Any) -> McpDiscoverResult:
 
 def _duration_ms(started: float) -> int:
     return int((time.monotonic() - started) * 1000)
+
+
+async def _merge_remote(
+    desktop: McpDiscoverResult, cache_scope: str | None
+) -> McpDiscoverResult:
+    """Attach account-level Streamable HTTP tools without disturbing desktop cache."""
+    from agentcore.mcp.remote import discover_remote_mcp_tools
+
+    remote = await discover_remote_mcp_tools(cache_scope)
+    if remote.tool_count == 0 and remote.ready_servers == 0:
+        return desktop
+    return McpDiscoverResult(
+        ready_servers=desktop.ready_servers + remote.ready_servers,
+        failed_servers=desktop.failed_servers + remote.failed_servers,
+        tool_count=desktop.tool_count + remote.tool_count,
+        server_labels=desktop.server_labels + remote.server_labels,
+        specs=desktop.specs + remote.specs,
+        degraded=False,
+        detail="",
+    )
 
 
 def _cache_miss_origin_fields() -> dict[str, str]:
@@ -270,7 +292,8 @@ async def discover_mcp_tools(
     global key without user/conversation dimension.
     """
     if channel is None:
-        return McpDiscoverResult(detail="no_desktop_channel")
+        desktop = McpDiscoverResult(detail="no_desktop_channel")
+        return await _merge_remote(desktop, cache_scope)
 
     started = time.monotonic()
     cache_key_conv = channel.conversation_id
@@ -286,7 +309,7 @@ async def discover_mcp_tools(
             tool_count=cached.tool_count,
             duration_ms=_duration_ms(started),
         )
-        return cached
+        return await _merge_remote(cached, cache_scope)
 
     if cache_only:
         origin_fields = _cache_miss_origin_fields()
@@ -299,7 +322,9 @@ async def discover_mcp_tools(
             tool_count=0,
             **origin_fields,
         )
-        return McpDiscoverResult(detail="cache_miss")
+        return await _merge_remote(
+            McpDiscoverResult(detail="cache_miss"), cache_scope
+        )
 
     try:
         value = await channel.request_mcp(
@@ -317,7 +342,7 @@ async def discover_mcp_tools(
         )
         result = McpDiscoverResult(degraded=True, detail=str(e))
         _cache_put(cache_key_conv, result, cache_scope=cache_scope)
-        return result
+        return await _merge_remote(result, cache_scope)
     except Exception as e:  # noqa: BLE001 — never block a chat turn on MCP
         duration_ms = _duration_ms(started)
         logger.info(
@@ -328,7 +353,7 @@ async def discover_mcp_tools(
         )
         result = McpDiscoverResult(degraded=True, detail=str(e))
         _cache_put(cache_key_conv, result, cache_scope=cache_scope)
-        return result
+        return await _merge_remote(result, cache_scope)
 
     result = parse_mcp_list_payload(value)
     duration_ms = _duration_ms(started)
@@ -340,7 +365,7 @@ async def discover_mcp_tools(
             tool_count=0,
         )
         _cache_put(cache_key_conv, result, cache_scope=cache_scope)
-        return result
+        return await _merge_remote(result, cache_scope)
     if result.degraded:
         logger.info(
             "desktop.mcp_list_degraded",
@@ -358,7 +383,7 @@ async def discover_mcp_tools(
             failed_servers=result.failed_servers,
         )
     _cache_put(cache_key_conv, result, cache_scope=cache_scope)
-    return result
+    return await _merge_remote(result, cache_scope)
 
 
 def register_mcp_tools(registry: ToolRegistry, result: McpDiscoverResult) -> int:
@@ -391,6 +416,7 @@ def register_mcp_tools(registry: ToolRegistry, result: McpDiscoverResult) -> int
                 mcp_tool_name=spec.mcp_tool_name,
                 description=spec.description,
                 input_schema=spec.input_schema,
+                transport=spec.transport,
             )
         )
         count += 1

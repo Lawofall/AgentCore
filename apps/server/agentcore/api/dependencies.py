@@ -32,8 +32,6 @@ from agentcore.db.repositories import (
     ConversationShareRepository,
     CostEventRepository,
     CredentialsRepository,
-    DocRepository,
-    DocShareRepository,
     DocumentRepository,
     EmailChallengeRepository,
     FolderMemberRepository,
@@ -170,12 +168,6 @@ def get_conversation_share_repo(
     return ConversationShareRepository(session)
 
 
-def get_doc_share_repo(
-    session: AsyncSession = Depends(get_db),
-) -> DocShareRepository:
-    return DocShareRepository(session)
-
-
 def get_user_llm_provider_repo(
     session: AsyncSession = Depends(get_db),
 ) -> UserLlmProviderRepository:
@@ -206,10 +198,6 @@ def get_memory_store(session: AsyncSession = Depends(get_db)) -> "DocumentMemory
     from agentcore.memory import DocumentMemoryStore
 
     return DocumentMemoryStore(session=session)
-
-
-def get_doc_repo(session: AsyncSession = Depends(get_db)) -> DocRepository:
-    return DocRepository(session)
 
 
 def get_message_repo(session: AsyncSession = Depends(get_db)) -> MessageRepository:

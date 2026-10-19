@@ -4,7 +4,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { ChevronLeft, Plus } from "lucide-react";
+import { ChevronLeft, MoreVertical, Plus } from "lucide-react";
 import {
   type ReactNode,
   createContext,
@@ -50,7 +50,7 @@ export type PlusRow =
 const PlusHostContext = createContext<PlusHost | null>(null);
 const ComposerPlusCloseContext = createContext<(() => void) | null>(null);
 
-/** Close the open bar「＋」menu (no-op outside the menu). */
+/** Close the open bar「更多」menu (no-op outside the menu). */
 export function useComposerPlusClose(): (() => void) | null {
   return useContext(ComposerPlusCloseContext);
 }
@@ -59,7 +59,7 @@ export function useComposerPlusHost(): PlusHost | null {
   return useContext(PlusHostContext);
 }
 
-/** Chip inside「＋」: row on the list, in-place panel when drilled, hidden otherwise. */
+/** Chip inside「更多」: row on the list, in-place panel when drilled, hidden otherwise. */
 export function useComposerPlusRow(id: PlusDrillId): PlusRow {
   const host = useComposerPlusHost();
   return useMemo(() => {
@@ -84,7 +84,7 @@ export function useComposerPlusRow(id: PlusDrillId): PlusRow {
   }, [host, id]);
 }
 
-/** Back row for a drilled「＋」panel — same chrome as workspace nested views. */
+/** Back row for a drilled「更多」panel — same chrome as workspace nested views. */
 export function ComposerPlusBackHeader({
   title,
   onBack,
@@ -112,8 +112,8 @@ export function ComposerPlusBackHeader({
 }
 
 /**
- * 底栏 bar 的「＋」外壳：低频/绑定后少改的会话配置由调用方塞进菜单。
- * 工作区 / 模型 / 权限 / 工具在同一面板内展开（返回 + 列表），不再叠第二层 Popover。
+ * 有会话后底栏「更多」（三点图标）：第一行添加引用目录，下面是这场的世界。
+ * 工作区 / 权限 / 能力在同一面板内展开（返回 + 列表），不再叠第二层 Popover。
  */
 export function ComposerPlusMenu({
   children,
@@ -163,11 +163,11 @@ export function ComposerPlusMenu({
         <IconButton
           size="md"
           disabled={disabled}
-          aria-label="更多选项"
-          aria-expanded={open}
+          aria-label="更多"
+          title="更多"
           data-testid="composer-plus-trigger"
         >
-          <Plus size={16} />
+          <MoreVertical size={16} aria-hidden />
         </IconButton>
       </PopoverTrigger>
       <PopoverContent
@@ -175,7 +175,9 @@ export function ComposerPlusMenu({
         side="top"
         avoidCollisions={false}
         className={
-          panel === "list" ? "w-max p-2" : "min-w-64 w-max max-w-80 p-0"
+          panel === "list"
+            ? "w-max min-w-56 p-2"
+            : "min-w-64 w-max max-w-80 p-0"
         }
         onCloseAutoFocus={(e) => e.preventDefault()}
         onInteractOutside={(e) => {
@@ -195,5 +197,29 @@ export function ComposerPlusMenu({
         </PlusHostContext.Provider>
       </PopoverContent>
     </Popover>
+  );
+}
+
+/** 「更多」第一行：关掉菜单，打开引用目录。钻进子面板时不画。 */
+export function ComposerMoreAddRow({ onBrowse }: { onBrowse: () => void }) {
+  const host = useComposerPlusHost();
+  const close = useComposerPlusClose();
+  if (host && host.panel !== "list") return null;
+  return (
+    <>
+      <button
+        type="button"
+        data-testid="composer-more-add"
+        className="inline-flex h-8 w-full items-center gap-2 rounded-lg px-2 text-left text-sm text-foreground hover:bg-accent/60"
+        onClick={() => {
+          close?.();
+          onBrowse();
+        }}
+      >
+        <Plus size={14} className="shrink-0" aria-hidden />
+        添加文件、文件夹或引用
+      </button>
+      <div className="my-0.5 h-px bg-border" />
+    </>
   );
 }

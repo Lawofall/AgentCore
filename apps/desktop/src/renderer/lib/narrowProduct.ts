@@ -1,11 +1,12 @@
 /**
  * Viewport policy for narrow / Capacitor chrome — not physical capabilities.
  * 权威 → 前端技术 §五：窄屏不上工具箱 / 手册 / 快捷键设置…
+ * 通用露出字号与发送方式（页内藏主题 / 缩放 / 系统通知 / 开发者模式）。
+ * 联网搜索是独立设置页，窄屏仍在。
  */
 
 export const NARROW_HIDDEN_SETTINGS_PATHS = new Set([
   "/more/git",
-  "/more/general",
   "/more/shortcuts",
   "/more/appearance",
 ]);
@@ -26,9 +27,11 @@ export const NARROW_HIDDEN_PALETTE_IDS = new Set([
   "nav-store",
   "nav-manual",
   "nav-mechanism",
-  "nav-settings-general",
   "nav-settings-shortcuts",
   "nav-preview",
+  "zoom-in",
+  "zoom-out",
+  "zoom-reset",
 ]);
 
 const NARROW_HIDDEN_THEME_IDS = new Set(["theme-dark", "theme-system"]);

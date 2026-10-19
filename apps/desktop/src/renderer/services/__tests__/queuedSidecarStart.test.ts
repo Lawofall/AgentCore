@@ -127,9 +127,11 @@ describe("startQueuedSidecarTurn", () => {
         userMessageId: "u-queued",
         userMessage: "好的",
         inference,
-        folderId: null,
-        localRootId: null,
-        localSubpath: null,
+        session: expect.objectContaining({
+          folderId: null,
+          localRootId: null,
+          localSubpath: null,
+        }),
       }),
     );
     expect(getRuntime(CID).messages.filter((m) => m.role === "user")).toEqual([
@@ -154,9 +156,11 @@ describe("startQueuedSidecarTurn", () => {
     });
     expect(vi.mocked(window.sidecarApi.startTurn)).toHaveBeenCalledWith(
       expect.objectContaining({
-        folderId: "f1",
-        localRootId: "root-a",
-        localSubpath: "src",
+        session: expect.objectContaining({
+          folderId: "f1",
+          localRootId: "root-a",
+          localSubpath: "src",
+        }),
       }),
     );
   });

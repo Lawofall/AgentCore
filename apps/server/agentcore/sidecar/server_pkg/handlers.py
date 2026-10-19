@@ -574,25 +574,33 @@ class HandlerMixin:
                 return None
         return None
 
-    def _refresh_permission_axes(
-        self, params: dict[str, Any], conversation_id: str = ""
-    ) -> None:
-        """Adopt the conversation's CURRENT permission axes from per-turn params.
+    def _commit_turn_session(self, conversation_id: str, snapshot: Any) -> None:
+        """Stamp a parsed RPC ``session`` for this conversation.
 
-        Permission axes stay client-pushed — the desktop re-sends them on every
-        startTurn / resume so a mid-session switch applies to the next turn.
-        (``folderId`` is required on startTurn — null = bare; missing key fails.)
-        Absent / invalid ⇒ keep the current bag / initialize default.
-        Per-conversation bag is stamped so harvest never reads another conv's last write.
+        Sidecar has no session DB. Call only when this RPC will actually run
+        (startTurn spawn, resume claim / busy peek). A leftover unknown-kind
+        resume that 404s must not rewrite folder / 统筹 / axes.
         """
-        parsed = self._parse_permission_axes(params)
-        if parsed is not None:
-            self._permission_axes = parsed
-        cid = (conversation_id or "").strip()
-        if cid:
-            self._permission_axes_by_conv[cid] = (
-                parsed if parsed is not None else self._permission_axes
+        self.stamp_conversation_snapshot(conversation_id, snapshot)
+        self._declare_fulfill_root(snapshot)
+
+    async def _reject_if_session_invalid(
+        self, request_id: Any, params: dict[str, Any]
+    ):
+        from agentcore.runtime.turn.snapshot import (
+            SessionRequiredError,
+            parse_sidecar_session,
+        )
+
+        try:
+            return parse_sidecar_session(params)
+        except SessionRequiredError as exc:
+            await self._send(
+                protocol.make_error(
+                    request_id, protocol.INVALID_PARAMS, str(exc)
+                )
             )
+            return None
 
     def _refresh_user_id(self, params: dict[str, Any]) -> None:
         """Adopt per-turn ``userId`` when present (mirrors permissionAxes / inference).
@@ -700,10 +708,17 @@ class HandlerMixin:
             return
 
         # Adopt this turn's cloud-proxy token before it runs (refreshes a rotated TTL).
+        snapshot = await self._reject_if_session_invalid(request_id, params)
+        if snapshot is None:
+            mid = str(params.get("messageId") or "").strip()
+            if mid:
+                self._resolve_fifo_desktop_start(
+                    mid, RuntimeError("startTurn missing session")
+                )
+            return
+        self._commit_turn_session(conversation_id, snapshot)
         self._refresh_creds(params)
-        self._refresh_permission_axes(params, conversation_id)
         self._refresh_user_id(params)
-        self._declare_fulfill_root(params)
 
         # The response to startTurn is DEFERRED until the turn completes (it carries)
         # the final result); the live events flow as ``turn/event`` notifications in
@@ -713,7 +728,7 @@ class HandlerMixin:
         from agentcore.sidecar.server_pkg.turns import schedule_with_context_budget
 
         task = schedule_with_context_budget(
-            params.get("contextBudget"),
+            snapshot.context_budget,
             self._run_turn(request_id, turn_id, params),
         )
         self._register_turn(turn_id, task, conversation_id=conversation_id)
@@ -861,6 +876,10 @@ class HandlerMixin:
         if parsed is None:
             return
 
+        snapshot = await self._reject_if_session_invalid(request_id, params)
+        if snapshot is None:
+            return
+
         busy_reason = self.busy_reason_for_resume(conversation_id, message_id)
         if busy_reason is not None:
             await self._on_resume_when_busy(
@@ -870,15 +889,14 @@ class HandlerMixin:
                 conversation_id=conversation_id,
                 busy_reason=busy_reason,
                 parsed=parsed,
+                snapshot=snapshot,
             )
             return
 
         # Refresh + gate BEFORE claim so a missing JWT never consumes the pause frame
         # (desktop remints and retries; RESUME_RETRYABLE-class keep-card semantics).
         self._refresh_creds(params)
-        self._refresh_permission_axes(params, conversation_id)
         self._refresh_user_id(params)
-        self._declare_fulfill_root(params)
         if await self._reject_if_missing_inference(request_id, op="resume"):
             return
 
@@ -893,6 +911,7 @@ class HandlerMixin:
             )
             return
 
+        self._commit_turn_session(conversation_id, snapshot)
         decision = parsed["decision"]
         note = parsed["note"]
         selected = parsed["selected"]
@@ -902,24 +921,14 @@ class HandlerMixin:
         # initialized as local; login mid-session must not leave ToolContext on the
         # alias UUID).
         suspension.user_id = self._user_id
-        # Prefer resume RPC folderId / localRootId/localSubpath when the desktop
-        # re-sends them; else keep frame-stamped scope/bind from the pause card.
-        from agentcore.sidecar.server_pkg.turns import apply_rpc_folder_binding_to_suspension
+        from agentcore.runtime.turn.snapshot import apply_snapshot_to_suspension
 
-        apply_rpc_folder_binding_to_suspension(suspension, params)
-        folder_cid = str(getattr(suspension, "conversation_id", "") or "")
-        self.stamp_folder_scope(
-            folder_cid,
-            folder_id=getattr(suspension, "folder_id", None),
-            binding_injected=bool(getattr(suspension, "folder_binding_injected", False)),
-            local_root_id=getattr(suspension, "folder_local_root_id", None),
-            local_subpath=str(getattr(suspension, "folder_local_subpath", "") or ""),
-        )
+        apply_snapshot_to_suspension(suspension, snapshot)
 
         from agentcore.sidecar.server_pkg.turns import schedule_with_context_budget
 
         task = schedule_with_context_budget(
-            params.get("contextBudget"),
+            snapshot.context_budget,
             self._run_resume(
                 request_id,
                 suspension,
@@ -965,6 +974,7 @@ class HandlerMixin:
         conversation_id: str,
         busy_reason: str,
         parsed: dict[str, Any],
+        snapshot: Any,
     ) -> None:
         """Busy cold resume: prewrite → ``resume_deferred`` → wait → claim → run.
 
@@ -977,7 +987,6 @@ class HandlerMixin:
         from agentcore.runtime.events import resume_deferred
         from agentcore.sidecar.server_pkg.core import SidecarResumeDeferredWaiter
         from agentcore.sidecar.server_pkg.turns import (
-            apply_rpc_folder_binding_to_suspension,
             resolve_resume_user_message_id,
         )
 
@@ -1022,20 +1031,14 @@ class HandlerMixin:
         user_message_id = parsed["user_message_id"]
 
         self._refresh_creds(params)
-        self._refresh_permission_axes(params, conversation_id)
         self._refresh_user_id(params)
-        self._declare_fulfill_root(params)
         if await self._reject_if_missing_inference(request_id, op="resume"):
             return
+        self._commit_turn_session(conversation_id, snapshot)
         peeked.user_id = self._user_id
-        apply_rpc_folder_binding_to_suspension(peeked, params)
-        self.stamp_folder_scope(
-            conversation_id,
-            folder_id=getattr(peeked, "folder_id", None),
-            binding_injected=bool(getattr(peeked, "folder_binding_injected", False)),
-            local_root_id=getattr(peeked, "folder_local_root_id", None),
-            local_subpath=str(getattr(peeked, "folder_local_subpath", "") or ""),
-        )
+        from agentcore.runtime.turn.snapshot import apply_snapshot_to_suspension
+
+        apply_snapshot_to_suspension(peeked, snapshot)
 
         umid = resolve_resume_user_message_id(
             user_message_id,
@@ -1154,22 +1157,15 @@ class HandlerMixin:
                 # Peeked frame already carries settlement in journal_entries (prewrite);
                 # keep that stream for pipeline dedupe. Claim only consumed the file.
                 peeked.user_id = self._user_id
-                apply_rpc_folder_binding_to_suspension(peeked, params)
-                self.stamp_folder_scope(
-                    conversation_id,
-                    folder_id=getattr(peeked, "folder_id", None),
-                    binding_injected=bool(
-                        getattr(peeked, "folder_binding_injected", False)
-                    ),
-                    local_root_id=getattr(peeked, "folder_local_root_id", None),
-                    local_subpath=str(
-                        getattr(peeked, "folder_local_subpath", "") or ""
-                    ),
-                )
+                snapshot = self.conversation_snapshot_for(conversation_id)
+                if snapshot is not None:
+                    from agentcore.runtime.turn.snapshot import apply_snapshot_to_suspension
+
+                    apply_snapshot_to_suspension(peeked, snapshot)
                 from agentcore.sidecar.server_pkg.turns import schedule_with_context_budget
 
                 task = schedule_with_context_budget(
-                    params.get("contextBudget"),
+                    None if snapshot is None else snapshot.context_budget,
                     self._run_resume(
                         request_id,
                         peeked,

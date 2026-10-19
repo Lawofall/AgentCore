@@ -67,6 +67,26 @@ describe("performHostOp", () => {
     expect(window.hostApi?.runOp).toHaveBeenCalledTimes(1);
     expect(resolveInteraction).toHaveBeenCalledTimes(1);
   });
+
+  it("does not run host IPC in the web runtime even if hostApi exists", async () => {
+    vi.stubGlobal("window", {
+      __WEB__: true,
+      hostApi: {
+        runOp: vi.fn().mockResolvedValue({ ok: true, value: { code: 0 } }),
+      },
+    });
+    await performHostOp(payload({ request_id: "host-web" }), CID, "cloud");
+    expect(window.hostApi?.runOp).not.toHaveBeenCalled();
+    expect(resolveInteraction).toHaveBeenCalledWith(
+      CID,
+      "host-web",
+      expect.objectContaining({
+        kind: "client_tool",
+        ok: false,
+      }),
+      "cloud",
+    );
+  });
 });
 
 describe("dispatch ignores cloud conversation-SSE host_op_required", () => {

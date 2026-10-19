@@ -3,9 +3,8 @@
 Hard-deletes every member conversation (cascade messages / runs / journal / …),
 purges the shared cloud ``folder:<id>`` workspace directory + server snapshots,
 unbinds bare-chat ``auto_desk_folder_id`` when the folder row goes
-(``fk_conversations_auto_desk_folder_id``), revokes public 文档 links, then removes
-the folder rows. Membership, creation drafts, and desk settings go with those
-rows.
+(``fk_conversations_auto_desk_folder_id``), then removes the folder rows.
+Membership and desk settings go with those rows.
 
 Two entry points, same member-chat semantics (弹窗勾选 = 最近删除里再确认):
 
@@ -33,7 +32,6 @@ from agentcore.db.base import async_session_factory
 from agentcore.db.repositories import (
     ConversationRepository,
     ConversationShareRepository,
-    DocShareRepository,
     FolderRepository,
 )
 from agentcore.workspace import grant_store
@@ -73,9 +71,6 @@ async def _collect_member_conv_ids(subtree_ids: list[str], *, user_id: str) -> l
 
 async def _finish_folder_rows(*, user_id: str, subtree_ids: list[str]) -> None:
     async with async_session_factory() as session:
-        await DocShareRepository(session).revoke_all_for_folder_ids(
-            subtree_ids, commit=False
-        )
         await FolderRepository(session).hard_delete_many(subtree_ids)
     from agentcore.memory.account_prepare_cache import hibernate_folder_injection_cache
 

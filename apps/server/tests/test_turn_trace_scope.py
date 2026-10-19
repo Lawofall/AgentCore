@@ -13,6 +13,7 @@ import structlog
 
 from agentcore.conversation import turn_runner
 from agentcore.runtime.events import EventSink, FinishReason
+from agentcore.runtime.turn.snapshot import ConversationSnapshot
 
 
 class _FakeBackend:
@@ -51,7 +52,7 @@ async def test_persist_tail_runs_inside_trace_scope(monkeypatch):
         conversation_id="c-scope",
         user_message="go",
         user_id="u1",
-        folder_id=None,
+        conversation=ConversationSnapshot.default(),
         sink=EventSink(),
         history=[],
         attachments=None,

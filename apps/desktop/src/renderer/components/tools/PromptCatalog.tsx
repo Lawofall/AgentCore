@@ -16,8 +16,8 @@ import {
   PromptOverview,
 } from "@/components/tools/PromptOverview";
 import { PromptReadDialog } from "@/components/tools/PromptReadDialog";
+import { SwitchboardBulkRow } from "@/components/tools/SwitchboardBulkRow";
 import { Button, ConfirmDialog } from "@/components/ui";
-import { Switch } from "@/components/ui/Switch";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -27,6 +27,10 @@ import {
 import { patchConversationCache } from "@/hooks/useConversations";
 import { useLlmProviders } from "@/hooks/useLlmProviders";
 import { useModels } from "@/hooks/useModels";
+import {
+  officialSkillNames,
+  omittedFactoryAfterToggle,
+} from "@/lib/factoryCatalog";
 import {
   TOOLS_GATE_HINT,
   TOOL_CALLING_TOOL_NAMES,
@@ -81,7 +85,7 @@ import {
   writeDocument,
 } from "@/services/documents";
 import {
-  setDefaultLlmModelProfile,
+  rememberAssemblySelection,
   updateLlmModelProfile,
 } from "@/services/llmModelProfiles";
 import { defaultChatSupportsTools } from "@/services/llmProviders";
@@ -727,31 +731,29 @@ export function PromptCatalog({ data }: { data: Capabilities }) {
     setDropDest(null);
   }
 
-  async function toggleFactoryCatalog(present: boolean) {
-    if (
-      !profile ||
-      (profile.kind !== "user" && profile.kind !== "system") ||
-      factoryPending
-    ) {
+  async function commitFactoryOmitted(omitted: readonly string[]) {
+    if (!profile || profile.kind !== "user" || factoryPending) {
       return;
     }
     setFactoryPending(true);
     setError(null);
     try {
-      let id = profile.id;
-      if (profile.kind === "system") {
-        const materialized = await setDefaultLlmModelProfile(profile.id);
-        id = materialized.id;
+      const updated = await updateLlmModelProfile(profile.id, {
+        omitted_factory_skills: [...omitted],
+      });
+      if (updated.id !== profile.id) {
         if (conversationId) {
-          const saved = await setConversationModelProfile(conversationId, id);
+          const saved = await setConversationModelProfile(
+            conversationId,
+            updated.id,
+          );
           patchConversationCache(conversationId, {
-            assemblyId: saved.assemblyId ?? id,
+            assemblyId: saved.assemblyId ?? updated.id,
           });
+        } else {
+          await rememberAssemblySelection(updated.id);
         }
       }
-      await updateLlmModelProfile(id, {
-        omit_factory_catalog: !present,
-      });
       await queryClient.invalidateQueries({
         queryKey: llmModelProfileKeys.list,
       });
@@ -1003,10 +1005,17 @@ export function PromptCatalog({ data }: { data: Capabilities }) {
           listings={listings}
           installedListings={installedListings}
           factoryControl={{
-            present: !profile?.omit_factory_catalog,
-            canToggle: profile?.kind === "user" || profile?.kind === "system",
+            omitted: profile?.omitted_factory_skills ?? [],
+            canToggle: profile?.kind === "user",
             pending: factoryPending || assemblyPending,
-            onPresentChange: (present) => void toggleFactoryCatalog(present),
+            onToggle: (name, on) =>
+              void commitFactoryOmitted(
+                omittedFactoryAfterToggle(
+                  profile?.omitted_factory_skills ?? [],
+                  name,
+                  on,
+                ),
+              ),
           }}
           dragging={promptDragging}
           openFolderId={openFolderId}
@@ -1125,23 +1134,25 @@ export function PromptCatalog({ data }: { data: Capabilities }) {
       />
     </>
   );
-  const showFactorySwitch =
-    profile?.kind === "user" || profile?.kind === "system";
+  const factoryNames = officialSkillNames(rail.official);
+  const factoryOmitted = new Set(profile?.omitted_factory_skills ?? []);
+  const factoryOffCount = factoryNames.filter((name) =>
+    factoryOmitted.has(name),
+  ).length;
+  const showFactoryBulk = profile?.kind === "user" && factoryNames.length > 0;
   return (
     <div className="w-full" data-testid="prompt-catalog">
       <div className="mb-3 flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
           <h2 className="shrink-0 text-sm font-medium text-foreground">交代</h2>
-          {showFactorySwitch ? (
-            <div className="flex shrink-0 items-center gap-1.5">
-              <span className="text-xs text-muted-foreground">出厂</span>
-              <Switch
-                checked={!profile?.omit_factory_catalog}
-                disabled={factoryPending || assemblyPending}
-                label="出厂"
-                onCheckedChange={(on) => void toggleFactoryCatalog(on)}
-              />
-            </div>
+          {showFactoryBulk ? (
+            <SwitchboardBulkRow
+              offCount={factoryOffCount}
+              total={factoryNames.length}
+              disabled={factoryPending || assemblyPending}
+              onOpen={() => void commitFactoryOmitted([])}
+              onClose={() => void commitFactoryOmitted(factoryNames)}
+            />
           ) : null}
         </div>
         <div className="flex shrink-0 items-center gap-3">{catalogActions}</div>

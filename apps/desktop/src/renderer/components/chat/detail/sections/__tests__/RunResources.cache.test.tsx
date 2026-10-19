@@ -223,6 +223,37 @@ describe("ResourceSection live spend", () => {
         keyBase="live"
       />,
     );
+    expect(screen.getByText("1.00 积分 至今")).toBeTruthy();
+  });
+
+  it("BYOK 有价目时出 ¥ 至今", () => {
+    render(
+      <ResourceSection
+        run={runWithUsage(
+          {
+            input: 100,
+            output: 20,
+            reasoning: 0,
+            cache_hit: 0,
+            cache_miss: 0,
+          },
+          {
+            status: "running",
+            cost: {
+              input: 1_000_000_000,
+              output: 0,
+              cached: 0,
+              total: 1_000_000_000,
+              estimated_total: 1_000_000_000,
+              currency: "CNY",
+            },
+          },
+        )}
+        agent={agent}
+        keyBase="byok"
+      />,
+    );
     expect(screen.getByText("¥1.00 至今")).toBeTruthy();
+    expect(screen.queryByText("1.00 积分 至今")).toBeNull();
   });
 });

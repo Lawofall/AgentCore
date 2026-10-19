@@ -43,12 +43,11 @@ export interface FoldReplaySource {
 }
 
 function eventType(ev: Record<string, unknown>): string {
-  return String(ev.type ?? ev.kind ?? "");
+  return String(ev.type ?? "");
 }
 
 function eventTimestamp(ev: Record<string, unknown>): string | null {
   if (typeof ev.timestamp === "string") return ev.timestamp;
-  if (typeof ev.ts === "string") return ev.ts;
   return null;
 }
 

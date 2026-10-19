@@ -10,10 +10,10 @@ import { getFolders, useFolders } from "@/hooks/useFolders";
 import { isNativeRuntime } from "@/lib/capabilities";
 import { useNarrowLayoutState } from "@/lib/narrowLayout";
 import {
-  COMMAND_CATEGORY_ORDER,
   type PaletteCommand,
   buildPaletteCommands,
   commandMatches,
+  paletteCategoryOrder,
 } from "@/lib/paletteCommands";
 import { queryClient } from "@/lib/queryClient";
 import { conversationKeys } from "@/lib/queryKeys";
@@ -36,6 +36,7 @@ import {
 import { useConversationStore } from "@/stores/conversation";
 import { useSidebarStore } from "@/stores/sidebar";
 import { useUIStore } from "@/stores/ui";
+import type { WindowFramePreset } from "@shared/window-contract";
 import { useQuery } from "@tanstack/react-query";
 import { Command } from "cmdk";
 import {
@@ -226,6 +227,7 @@ export function CommandPalette() {
   >([]);
   const [loading, setLoading] = useState(false);
   const [errored, setErrored] = useState(false);
+  const [framePreset, setFramePreset] = useState<WindowFramePreset>("free");
   const inputRef = useRef<HTMLInputElement>(null);
   // Guards against out-of-order responses: only the latest keystroke's result
   // is adopted (debounce keeps the request count low, so no abort needed).
@@ -240,6 +242,15 @@ export function CommandPalette() {
     enabled: open,
   });
   const demoTapes = demoTapeCatalog?.tapes;
+
+  useEffect(() => {
+    if (!open || !import.meta.env.DEV) return;
+    const get = window.windowApi?.getFramePreset;
+    if (typeof get !== "function") return;
+    void get()
+      .then(setFramePreset)
+      .catch(() => undefined);
+  }, [open]);
 
   // Each open adopts an optional prefilled query (e.g. FindBar → global search);
   // otherwise starts empty. Filters reset each open so a session starts unscoped.
@@ -321,8 +332,17 @@ export function CommandPalette() {
         demoTapes,
         restrictNarrow: isNarrow,
         forceLightTheme,
+        framePreset,
       }),
-    [navigate, theme, sidebarCollapsed, demoTapes, isNarrow, forceLightTheme],
+    [
+      navigate,
+      theme,
+      sidebarCollapsed,
+      demoTapes,
+      isNarrow,
+      forceLightTheme,
+      framePreset,
+    ],
   );
   const matchedCommands = useMemo(
     () => commands.filter((c) => commandMatches(c, query)),
@@ -331,13 +351,15 @@ export function CommandPalette() {
 
   const commandGroups = useMemo<RenderGroup[]>(
     () =>
-      COMMAND_CATEGORY_ORDER.map((cat) => ({
-        key: `cmd:${cat}`,
-        heading: cat,
-        rows: matchedCommands
-          .filter((c) => c.category === cat)
-          .map((c) => ({ kind: "command", cmd: c }) as Row),
-      })).filter((g) => g.rows.length > 0),
+      paletteCategoryOrder()
+        .map((cat) => ({
+          key: `cmd:${cat}`,
+          heading: cat,
+          rows: matchedCommands
+            .filter((c) => c.category === cat)
+            .map((c) => ({ kind: "command", cmd: c }) as Row),
+        }))
+        .filter((g) => g.rows.length > 0),
     [matchedCommands],
   );
 

@@ -7,15 +7,22 @@ type ProfileRow = {
   is_default: boolean;
   main: { origin: "byok"; provider_id: string; model: string };
   worker: null;
-  background: null;
-  vision: { origin: "byok"; provider_id: string; model: string } | null;
+  reasoning_effort?: string | null;
+  context_budget?: number | null;
 };
 import { describe, expect, it } from "vitest";
 import {
+  byokVisionDeclareRef,
+  catalogComposerKnobs,
+  completeModelOverride,
   draftHasImageAttachment,
   lookupComposerProfile,
+  overlayProfileModel,
   profileCanSeeImages,
+  resolveComposerOverride,
   resolveComposerProfileId,
+  restoreComposerKnobs,
+  shouldOfferComposerVisionDeclare,
   shouldShowComposerVisionHint,
 } from "../composerModelProfile";
 
@@ -26,8 +33,6 @@ const textMain: ProfileRow = {
   is_default: true,
   main: { origin: "byok", provider_id: "p1", model: "deepseek-v4-flash" },
   worker: null,
-  background: null,
-  vision: null,
 };
 
 const visionMain: ProfileRow = {
@@ -37,15 +42,6 @@ const visionMain: ProfileRow = {
   kind: "user",
   is_default: false,
   main: { origin: "byok", provider_id: "p2", model: "gpt-4o" },
-};
-
-const slotted: ProfileRow = {
-  ...textMain,
-  id: "user-slot",
-  name: "识图槽",
-  kind: "user",
-  is_default: false,
-  vision: { origin: "byok", provider_id: "p2", model: "gpt-4o" },
 };
 
 const catalog: ModelCatalogItem[] = [
@@ -58,6 +54,7 @@ const catalog: ModelCatalogItem[] = [
     ref: "@byok/p1/deepseek-v4-flash",
     capabilities: [],
     available: true,
+    custom: false,
   },
   {
     id: "gpt-4o",
@@ -68,6 +65,7 @@ const catalog: ModelCatalogItem[] = [
     ref: "@byok/p2/gpt-4o",
     capabilities: ["vision"],
     available: true,
+    custom: false,
   },
 ];
 
@@ -144,9 +142,8 @@ describe("lookupComposerProfile", () => {
 });
 
 describe("profileCanSeeImages / vision hint", () => {
-  it("true when catalog main has vision; vision slot does not count", () => {
+  it("true when catalog main has vision", () => {
     expect(profileCanSeeImages(visionMain, catalog)).toBe(true);
-    expect(profileCanSeeImages(slotted, catalog)).toBe(false);
     expect(profileCanSeeImages(textMain, catalog)).toBe(false);
   });
 
@@ -165,13 +162,6 @@ describe("profileCanSeeImages / vision hint", () => {
         catalogModels: catalog,
       }),
     ).toBe(false);
-    expect(
-      shouldShowComposerVisionHint({
-        hasImage: true,
-        profile: slotted,
-        catalogModels: catalog,
-      }),
-    ).toBe(true);
     expect(
       shouldShowComposerVisionHint({
         hasImage: false,
@@ -195,9 +185,188 @@ describe("profileCanSeeImages / vision hint", () => {
     ).toBe(false);
   });
 
+  it("BYOK unknown main can declare; platform / seeing main cannot", () => {
+    expect(byokVisionDeclareRef(textMain)).toBe("@byok/p1/deepseek-v4-flash");
+    expect(
+      shouldOfferComposerVisionDeclare({
+        hasImage: true,
+        profile: textMain,
+        catalogModels: catalog,
+      }),
+    ).toBe(true);
+    expect(
+      shouldOfferComposerVisionDeclare({
+        hasImage: true,
+        profile: visionMain,
+        catalogModels: catalog,
+      }),
+    ).toBe(false);
+    expect(
+      byokVisionDeclareRef({
+        main: { origin: "platform", model: "glm-5.3" },
+      }),
+    ).toBeNull();
+  });
+
   it("detects raster filenames, not pdf", () => {
     expect(draftHasImageAttachment([{ name: "shot.png" }])).toBe(true);
     expect(draftHasImageAttachment([{ name: "notes.pdf" }])).toBe(false);
     expect(draftHasImageAttachment([])).toBe(false);
+  });
+});
+
+describe("overlayProfileModel", () => {
+  it("keeps the assembly when there is no override", () => {
+    expect(overlayProfileModel(textMain, null)?.main.model).toBe(
+      "deepseek-v4-flash",
+    );
+  });
+
+  it("writes this conversation's main over the assembly", () => {
+    const next = overlayProfileModel(textMain, {
+      main: { origin: "byok", provider_id: "p2", model: "gpt-4o" },
+    });
+    expect(next?.main.model).toBe("gpt-4o");
+    expect(next?.id).toBe("sys-52");
+  });
+
+  it("does not inherit assembly effort when the snapshot leaves it null", () => {
+    const base = { ...textMain, reasoning_effort: "low" as const };
+    const next = overlayProfileModel(base, {
+      main: { origin: "byok", provider_id: "p1", model: "deepseek-v4-flash" },
+    });
+    expect(next?.reasoning_effort).toBeNull();
+    expect(next?.worker).toBeNull();
+    expect(next?.context_budget).toBeNull();
+  });
+});
+
+describe("resolveComposerOverride", () => {
+  const snap = completeModelOverride({
+    main: { origin: "byok", provider_id: "p2", model: "gpt-4o" },
+    reasoning_effort: "low",
+  });
+
+  it("existing chat uses the conversation pin, not the account last-used", () => {
+    expect(
+      resolveComposerOverride({
+        conversationId: "c1",
+        conversationOverride: snap,
+        draftOverride: null,
+        accountComposer: completeModelOverride({
+          main: {
+            origin: "byok",
+            provider_id: "p1",
+            model: "deepseek-v4-flash",
+          },
+        }),
+      }),
+    ).toEqual(snap);
+    expect(
+      resolveComposerOverride({
+        conversationId: "c1",
+        conversationOverride: null,
+        draftOverride: snap,
+        accountComposer: snap,
+      }),
+    ).toBeNull();
+  });
+
+  it("new chat uses draft then account last-used", () => {
+    expect(
+      resolveComposerOverride({
+        conversationId: null,
+        conversationOverride: null,
+        draftOverride: snap,
+        accountComposer: null,
+      }),
+    ).toEqual(snap);
+    expect(
+      resolveComposerOverride({
+        conversationId: null,
+        conversationOverride: null,
+        draftOverride: null,
+        accountComposer: snap,
+      }),
+    ).toEqual(snap);
+  });
+});
+
+describe("completeModelOverride", () => {
+  it("fills every knob so omitted keys cannot inherit assembly", () => {
+    expect(
+      completeModelOverride({
+        main: { origin: "platform", provider_id: null, model: "glm-5.2" },
+      }),
+    ).toEqual({
+      main: { origin: "platform", provider_id: null, model: "glm-5.2" },
+      worker: null,
+      reasoning_effort: null,
+      context_budget: null,
+    });
+  });
+});
+
+describe("restoreComposerKnobs", () => {
+  const effortCatalog: ModelCatalogItem[] = [
+    {
+      ...catalog[0],
+      id: "deepseek-v4-pro",
+      ref: "@byok/p1/deepseek-v4-pro",
+      reasoning_effort: { options: ["low", "high", "max"], default: "high" },
+      context_length: 1_000_000,
+    },
+    catalog[1],
+  ];
+
+  it("restores that leaf's last knobs", () => {
+    expect(
+      restoreComposerKnobs(
+        { origin: "byok", provider_id: "p1", model: "deepseek-v4-pro" },
+        {
+          "@byok/p1/deepseek-v4-pro": {
+            reasoning_effort: "low",
+            context_budget: 128_000,
+          },
+        },
+        effortCatalog,
+      ),
+    ).toEqual({ reasoning_effort: "low", context_budget: 128_000 });
+  });
+
+  it("unused leaf is vendor default, not the previous model's knobs", () => {
+    expect(
+      restoreComposerKnobs(
+        { origin: "byok", provider_id: "p1", model: "deepseek-v4-pro" },
+        {
+          "@byok/p2/gpt-4o": {
+            reasoning_effort: "low",
+            context_budget: 128_000,
+          },
+        },
+        effortCatalog,
+      ),
+    ).toEqual({ reasoning_effort: null, context_budget: null });
+  });
+
+  it("seeds the current snapshot when the map has not stored that leaf yet", () => {
+    expect(
+      catalogComposerKnobs({
+        composer_model: {
+          main: {
+            origin: "byok",
+            provider_id: "p1",
+            model: "deepseek-v4-flash",
+          },
+          reasoning_effort: "low",
+          context_budget: null,
+        },
+      } as never),
+    ).toEqual({
+      "@byok/p1/deepseek-v4-flash": {
+        reasoning_effort: "low",
+        context_budget: null,
+      },
+    });
   });
 });

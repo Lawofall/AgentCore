@@ -8,13 +8,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from agentcore.core.errors import ValidationError
-from agentcore.core.net import EgressError
-from agentcore.tools.builtin.web.cloud_fallback import inference_search_failure_url
-from agentcore.tools.builtin.web.provider_service import (
+from agentcore.search.choice import SearchTarget
+from agentcore.search.connection import (
     SearchConnectionService,
     record_provider_search_failure,
 )
-from agentcore.tools.builtin.web.search_choice import SearchTarget
 from agentcore.tools.builtin.web.search_quota import SearchQuotaSnapshot
 
 pytestmark = pytest.mark.anyio
@@ -27,12 +25,6 @@ QUOTA = SearchQuotaSnapshot(
     daily_reset_at="2026-10-17T00:00:00Z",
     monthly_reset_at="2026-11-01T00:00:00Z",
 )
-
-
-def _enc():
-    enc = MagicMock()
-    enc.encrypt.return_value = b"cipher"
-    return enc
 
 
 @pytest.fixture
@@ -53,6 +45,7 @@ def service():
             status=kwargs["status"],
             detail=kwargs.get("detail"),
             label=kwargs["label"],
+            source=kwargs.get("source", "provider"),
         )
         stored.append(row)
         return row
@@ -74,45 +67,13 @@ def service():
     return svc
 
 
-def test_inference_failure_url_sits_beside_web_search():
-    assert (
-        inference_search_failure_url("https://api.example/v1/inference/v1")
-        == "https://api.example/v1/inference/search_connection/failure"
-    )
+async def test_connect_from_provider_saves_without_pasted_key(service):
+    from agentcore.llm.provider_service import OfficialDeepSeekProvider
 
-
-async def test_connect_cleversee_rejects_without_writing(service):
-    class _Bad:
-        def __init__(self, api_key, base_url=None):
-            del api_key, base_url
-
-        async def search(self, *args, **kwargs):
-            del args, kwargs
-            raise EgressError("API Key 不正确。到开析控制台核对或新建")
-
-        async def aclose(self):
-            return None
-
-    with (
-        patch(
-            "agentcore.tools.builtin.web.provider_service.search_encryptor",
-            return_value=_enc(),
-        ),
-        patch(
-            "agentcore.tools.builtin.web.provider_service.CleverSeeBackend",
-            _Bad,
-        ),
-        pytest.raises(ValidationError, match="API Key 不正确"),
-    ):
-        await service.connect_cleversee("u1", "bad-key")
-    service._repo.create.assert_not_called()
-    service._session.commit.assert_not_called()
-
-
-async def test_connect_cleversee_saves_and_selects_after_probe(service):
     class _Ok:
         def __init__(self, api_key, base_url=None):
-            del api_key, base_url
+            self.api_key = api_key
+            del base_url
 
         async def search(self, *args, **kwargs):
             del args, kwargs
@@ -123,63 +84,78 @@ async def test_connect_cleversee_saves_and_selects_after_probe(service):
 
     with (
         patch(
-            "agentcore.tools.builtin.web.provider_service.search_encryptor",
-            return_value=_enc(),
+            "agentcore.search.connection.load_official_deepseek_provider",
+            AsyncMock(
+                return_value=OfficialDeepSeekProvider(
+                    provider_id="llm-p",
+                    api_key="sk-model",
+                    label="DeepSeek",
+                )
+            ),
         ),
         patch(
-            "agentcore.tools.builtin.web.provider_service.CleverSeeBackend",
+            "agentcore.search.connection.DeepSeekBackend",
             _Ok,
         ),
         patch(
-            "agentcore.tools.builtin.web.provider_service.search_quota_snapshot",
+            "agentcore.search.connection.search_quota_snapshot",
             AsyncMock(return_value=QUOTA),
         ),
         patch(
-            "agentcore.tools.builtin.web.provider_service.decrypt_search_key",
-            return_value="secret-key-abcd",
+            "agentcore.search.connection.official_deepseek_provider_label",
+            AsyncMock(return_value="DeepSeek"),
         ),
     ):
-        view = await service.connect_cleversee("u1", "secret-key-abcd")
-    service._repo.create.assert_awaited()
-    service._users.set_search_provider.assert_awaited()
-    assert view.selected == "cleversee"
-    assert view.cleversee is not None
-    assert view.cleversee.status == "connected"
-    assert view.cleversee.masked_key == "••••abcd"
+        view = await service.connect_deepseek("u1")
+    kwargs = service._repo.create.await_args.kwargs
+    assert kwargs["source"] == "provider"
+    assert kwargs["api_key_enc"] is None
+    assert view.selected == "deepseek"
+    assert view.deepseek is not None
+    assert view.deepseek.source == "provider"
+    assert view.deepseek.masked_key is None
+    assert view.official_provider_label == "DeepSeek"
+
+
+async def test_connect_from_provider_rejects_without_service(service):
+    with (
+        patch(
+            "agentcore.search.connection.load_official_deepseek_provider",
+            AsyncMock(return_value=None),
+        ),
+        pytest.raises(ValidationError, match="还没有连接官方 DeepSeek 服务商"),
+    ):
+        await service.connect_deepseek("u1")
+    service._repo.create.assert_not_called()
+    service._session.commit.assert_not_called()
 
 
 async def test_mark_selected_failed_keeps_the_selection(service):
-    row = SimpleNamespace(id="p1", protocol="cleversee")
+    row = SimpleNamespace(id="p1", protocol="deepseek")
     service._user.search_provider_id = "p1"
     service._repo.get = AsyncMock(return_value=row)
-    await service.mark_selected_failed("u1", "开析账户欠费")
+    await service.mark_selected_failed("u1", "DeepSeek 账户余额不足")
     service._repo.mark_needs_reconnect.assert_awaited()
     kwargs = service._repo.mark_needs_reconnect.await_args.kwargs
-    assert kwargs["detail"] == "开析账户欠费"
+    assert kwargs["detail"] == "DeepSeek 账户余额不足"
     service._users.set_search_provider.assert_not_called()
 
 
 async def test_proxied_failure_is_not_reported_again():
     target = SearchTarget(
         kind="provider",
-        protocol="cleversee",
+        protocol="deepseek",
         provider_id="p1",
-        proxy=True,
     )
     with (
         patch(
-            "agentcore.tools.builtin.web.provider_service.get_inference_search_credentials",
+            "agentcore.search.connection.get_inference_search_credentials",
             return_value=SimpleNamespace(),
         ),
         patch(
-            "agentcore.tools.builtin.web.provider_service.note_own_search_failure",
+            "agentcore.search.connection.note_own_search_failure",
             AsyncMock(),
         ) as note,
-        patch(
-            "agentcore.tools.builtin.web.provider_service.report_search_connection_failure",
-            AsyncMock(),
-        ) as report,
     ):
-        await record_provider_search_failure(target, "u1", "开析账户欠费")
+        await record_provider_search_failure(target, "u1", "DeepSeek 账户余额不足")
     note.assert_not_called()
-    report.assert_not_called()

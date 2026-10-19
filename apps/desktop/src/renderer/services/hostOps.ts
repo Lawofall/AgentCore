@@ -1,3 +1,4 @@
+import { hasHostOps } from "@/lib/capabilities";
 import { fulfillClientToolOnce } from "@/services/clientToolFulfill";
 import type { InteractionSettleOrigin } from "@/services/interaction";
 import type { HostOpRequiredPayload } from "@/types/events";
@@ -29,8 +30,7 @@ export async function performHostOp(
 async function runHostOp(
   payload: HostOpRequiredPayload,
 ): Promise<HostOpResult> {
-  const api = typeof window !== "undefined" ? window.hostApi : undefined;
-  if (!api?.runOp) {
+  if (!hasHostOps() || !window.hostApi?.runOp) {
     return {
       ok: false,
       error: {
@@ -40,7 +40,7 @@ async function runHostOp(
     };
   }
   try {
-    return await api.runOp({
+    return await window.hostApi.runOp({
       op: payload.op,
       args: (payload.args ?? {}) as Record<string, unknown>,
     });

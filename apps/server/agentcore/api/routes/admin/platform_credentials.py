@@ -111,7 +111,7 @@ async def list_platform_credentials(
     _admin: AdminUser,
     service: PlatformCredentialService = Depends(get_platform_credential_service),
 ) -> PlatformCredentialListResponse:
-    """List platform-pool members. Ciphertext only; ``masked_key`` is last-4."""
+    """List platform-pool members. Ciphertext only; ``masked_key`` is a fingerprint."""
     rows = await service.list_credentials()
     picked = _picked_id()
     return PlatformCredentialListResponse(

@@ -1,4 +1,4 @@
-"""Per-model platform credential overrides (运营中转「一 key 一模型」, 成本配额与计费 §〇·六 F3).
+"""Per-model platform credential overrides (「一 key 一模型」, 成本配额与计费 §〇·六 F3).
 
 The platform catalog may list several models; each may carry its own api_key / base_url
 (``PLATFORM_MODEL_CREDENTIALS``). ``platform_llm_credentials(model=…)`` is the single point
@@ -331,10 +331,10 @@ async def test_resolve_model_config_platform_chat_uses_per_model_key(monkeypatch
 
 
 @pytest.mark.asyncio
-async def test_resolve_model_config_title_follow_main_uses_main_model_key(
+async def test_resolve_model_config_title_catalog_open_uses_chrome_key(
     monkeypatch,
 ):
-    """空后台槽跟随平台主模型，用主模型自己的 key，不降到 PLATFORM_BACKGROUND_MODEL。"""
+    """代付开着：标题用 PLATFORM_BACKGROUND_MODEL 自己的 key，不跟主模型。"""
     from agentcore.llm.model_profiles import ExpandedProfile
     from agentcore.llm.resolve import ModelSelection
 
@@ -359,14 +359,14 @@ async def test_resolve_model_config_title_follow_main_uses_main_model_key(
     cfg = await resolve_model_config(MagicMock(), "u1", "title")
     assert cfg is not None
     assert cfg.source == "platform"
-    assert cfg.model == "glm-5.2"
-    assert cfg.api_key == "sk-default"
+    assert cfg.model == "relay-b"
+    assert cfg.api_key == "sk-relay-b-key"
 
 
-async def test_resolve_model_config_explicit_platform_slot_uses_background_model_key(
+async def test_resolve_model_config_leftover_platform_slot_still_uses_chrome_key(
     monkeypatch,
 ):
-    """显式平台后台槽仍降到 platform_background_model，并用该模型自己的 key。"""
+    """遗留后台槽不再参与解析；标题仍钉 chrome 模型自己的 key。"""
     from agentcore.llm.model_profiles import ExpandedProfile
     from agentcore.llm.resolve import ModelSelection
 
@@ -385,9 +385,6 @@ async def test_resolve_model_config_explicit_platform_slot_uses_background_model
                 name="平台预置",
                 kind="system",
                 main=ModelSelection(model="glm-5.2", origin="platform", provider_id=None),
-                background=ModelSelection(
-                    model="glm-5.2", origin="platform", provider_id=None
-                ),
             )
         ),
     )

@@ -10,9 +10,8 @@ from typing import Any
 # ``debate_arguments`` so ``is_demo_tape_frame`` can divert without scanning journal.
 DEMO_TAPE_FRAME_KEY = "__demo_tape__"
 
-# v2: event elements use SSE contract fields ``type`` + ``timestamp`` (plus pacing
-# supersets like ``t_ms``). v1 on disk used the dialect ``kind`` + ``ts``; readers
-# alias-compat at load/play time and never rewrite stock tape files.
+# Event elements use SSE contract fields ``type`` + ``timestamp`` (plus pacing
+# supersets like ``t_ms``). v1 ``kind``/``ts`` 方言已硬切，读时不再别名。
 TAPE_FORMAT_VERSION = 2
 RECORDING_FORMAT_VERSION = 2
 LEGACY_TAPE_FORMAT_VERSION = 1
@@ -98,10 +97,10 @@ TAPE_EXCLUDED_KINDS = PAUSE_RESOLVED_KINDS | CLIENT_TOOL_REQUIRED_KINDS | frozen
 def event_type(ev: dict[str, Any]) -> str:
     """SSE event type from a tape/recording element.
 
-    Contract field ``type`` is authoritative; legacy ``kind`` is a read-time alias.
-    (Payload keys like ``payload.kind == "captain"`` are unrelated.)
+    Contract field ``type`` only. Payload keys like ``payload.kind == "captain"``
+    are unrelated.
     """
-    return str(ev.get("type") or ev.get("kind") or "")
+    return str(ev.get("type") or "")
 
 
 def persisted_captain_content_from_events(events: list[dict[str, Any]]) -> str:
@@ -132,11 +131,8 @@ def persisted_captain_content_from_events(events: list[dict[str, Any]]) -> str:
 
 
 def event_timestamp(ev: dict[str, Any]) -> str | None:
-    """Wall-clock ISO timestamp; prefer ``timestamp``, fall back to legacy ``ts``."""
+    """Wall-clock ISO timestamp from contract field ``timestamp``."""
     raw = ev.get("timestamp")
-    if isinstance(raw, str):
-        return raw
-    raw = ev.get("ts")
     if isinstance(raw, str):
         return raw
     return None
@@ -145,18 +141,15 @@ def event_timestamp(ev: dict[str, Any]) -> str | None:
 def normalize_tape_event(ev: dict[str, Any]) -> dict[str, Any]:
     """Copy an event element onto contract fields (``type`` / ``timestamp``).
 
-    Drops legacy aliases ``kind`` / ``ts``. Preserves pacing supersets (``t_ms``)
-    and any other keys. Does not mutate the input.
+    Drops leftover top-level ``kind`` / ``ts`` keys. Preserves pacing supersets
+    (``t_ms``) and any other keys. Does not mutate the input.
     """
     out = {
         k: v for k, v in ev.items() if k not in ("kind", "ts", "type", "timestamp")
     }
     out["type"] = event_type(ev)
-    # Preserve explicit null timestamps from either dialect.
     if "timestamp" in ev:
         out["timestamp"] = ev.get("timestamp")
-    elif "ts" in ev:
-        out["timestamp"] = ev.get("ts")
     else:
         out["timestamp"] = None
     return out

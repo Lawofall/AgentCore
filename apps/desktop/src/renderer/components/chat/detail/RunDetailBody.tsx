@@ -113,7 +113,6 @@ export function RunDetailBody({
     conversationId != null ? conversationId : null,
     messageId,
   );
-
   if (!execution || !viewedRun || !viewedAgent) return null;
 
   const seatChain = hotfixSeatChain(execution, viewedRun.id);

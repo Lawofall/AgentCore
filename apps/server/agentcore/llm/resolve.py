@@ -25,7 +25,10 @@ if TYPE_CHECKING:
 from agentcore.config import settings
 from agentcore.config.platform import parse_platform_model_credentials
 from agentcore.core.logging import get_logger
-from agentcore.llm.byok_provider_presets import seed_model_for_base_url
+from agentcore.llm.byok_provider_presets import (
+    canonicalize_byok_api_root,
+    seed_model_for_vendor,
+)
 from agentcore.llm.credentials import LLMCredentials, derive_platform_credential_id
 
 logger = get_logger(__name__)
@@ -46,7 +49,6 @@ __all__ = [
     "resolve_background_user_fallback",
     "resolve_conversation_model_selection",
     "resolve_credentials",
-    "resolve_explicit_background_byok",
     "resolve_model_config",
     "resolve_provider_credentials",
     "resolve_turn_model",
@@ -95,7 +97,7 @@ def _encryptor():
 def platform_llm_credentials(model: str | None = None) -> LLMCredentials | None:
     """Platform upstream credentials — the single point of per-model resolution.
 
-    ``model`` selects a per-model override (运营中转「一 key 一模型」, 成本配额与计费
+    ``model`` selects a per-model override (「一 key 一模型」, 成本配额与计费
     §〇·六 F3): when the id has an entry in ``platform_model_credentials`` **with its
     own api_key**, that pair wins (missing ``base_url`` falls back to the shared
     default). Otherwise the operator pool is fill-first among schedulable members
@@ -177,13 +179,17 @@ def platform_wire_model(model: str) -> str:
 
 def _credentials_from_provider(row: UserLlmProvider, api_key: str) -> LLMCredentials:
     label = (row.label or "").strip() or None
+    vendor_id = (getattr(row, "vendor_id", None) or "").strip() or "custom"
     return LLMCredentials(
         api_key=api_key,
-        base_url=row.base_url or settings.platform_base_url,
-        default_model=seed_model_for_base_url(row.base_url or ""),
+        base_url=canonicalize_byok_api_root(
+            row.base_url or settings.platform_base_url
+        ),
+        default_model=seed_model_for_vendor(vendor_id),
         source="user",
         provider_id=row.id,
         label=label,
+        vendor_id=vendor_id,
     )
 
 
@@ -316,8 +322,9 @@ async def resolve_conversation_model_selection(
 ) -> ModelSelection:
     """Resolve main model + origin + provider for a user-facing turn (profile expand).
 
-    ``conversations.assembly_id`` when set; else account ``default_assembly_id``;
-    else system glm-5.2 preset. Live expand — dangling provider pins fall back silently.
+    Conversation ``model_override`` wins when present; else the pinned
+    assembly; else account ``default_assembly_id``; else system glm-5.2
+    preset. Live expand — dangling provider pins fall back silently.
     """
     from agentcore.llm.model_profiles import LlmModelProfileService
 
@@ -345,38 +352,6 @@ async def resolve_account_worker_selection(
     return expanded.worker
 
 
-async def _resolve_background(
-    session: AsyncSession, user_id: str, *, allow_platform_origin: bool = True
-) -> tuple[LLMCredentials, str] | None:
-    """Account default profile's background slot → ``(creds, model)``, or None (follow).
-
-    When ``allow_platform_origin`` is False, a combo background slot that points at
-    platform is treated as absent (user-BYOK auth-fallback path).
-    """
-    from agentcore.llm.model_profiles import LlmModelProfileService
-
-    expanded = await LlmModelProfileService(session).expand(user_id, None)
-    bg = expanded.background
-    if bg is None:
-        return None
-    if bg.origin == "platform":
-        if not allow_platform_origin:
-            return None
-        creds = platform_llm_credentials(model=bg.model)
-        if creds is None:
-            return None
-        return creds, bg.model
-    if not bg.provider_id:
-        return None
-    row = await _load_provider(session, user_id, bg.provider_id)
-    if row is None:
-        return None
-    creds = _decrypt_provider(row, user_id)
-    if creds is None:
-        return None
-    return creds, bg.model
-
-
 def _model_config_from_creds(creds: LLMCredentials, model: str, purpose: str) -> ModelConfig:
     return ModelConfig(
         model=model,
@@ -389,41 +364,33 @@ def _model_config_from_creds(creds: LLMCredentials, model: str, purpose: str) ->
     )
 
 
-async def resolve_explicit_background_byok(
-    session: AsyncSession,
-    user_id: str,
-    purpose: ModelPurpose = "title",
-) -> ModelConfig | None:
-    """The account combo's background slot when the user pointed it at their own key.
-
-    ``None`` means there is no such slot to honour: unset (follow_main), pointing at
-    platform, or its 服务商 has since been deleted / no longer decrypts. Callers keep
-    their own default path in that case. Model id is passed through as configured.
-    """
-    bg = await _resolve_background(session, user_id, allow_platform_origin=False)
-    if bg is None:
-        return None
-    creds, model = bg
-    return _model_config_from_creds(creds, model, purpose)
-
-
 async def resolve_background_user_fallback(
     session: AsyncSession,
     user_id: str,
     purpose: ModelPurpose = "title",
+    *,
+    conversation_id: str | None = None,
 ) -> ModelConfig | None:
-    """BYOK-only background resolve after platform is unavailable or auth-rejected.
+    """BYOK follow-main after platform chrome is unavailable or auth-rejected.
 
-    Skips the platform key and any combination-profile background slot with
-    ``origin=platform``. The model id is the account's already-resolved chat
-    model (after a dormant catalog rewrite, that endpoint's seed) — never
-    ``PLATFORM_BACKGROUND_MODEL``, which is a platform-catalog id and is not
-    valid on the user's endpoint. Never an authorization path — pair with
+    Never reads a combination background slot. A conversation id uses that
+    conversation's main; otherwise the account star. The model id is the
+    already-resolved chat model (after a dormant catalog rewrite, that
+    endpoint's seed) — never ``PLATFORM_BACKGROUND_MODEL``. Pair with
     ``resolve_and_gate_background_user_fallback`` (source=user, no platform quota).
     """
-    explicit = await resolve_explicit_background_byok(session, user_id, purpose)
-    if explicit is not None:
-        return explicit
+    from agentcore.llm.model_profiles import LlmModelProfileService
+
+    expanded = await LlmModelProfileService(session).expand_for_conversation_id(
+        user_id, conversation_id
+    )
+    main = expanded.main
+    if main.origin == "byok" and main.provider_id:
+        row = await _load_provider(session, user_id, main.provider_id)
+        if row is not None:
+            creds = _decrypt_provider(row, user_id)
+            if creds is not None and main.model.strip():
+                return _model_config_from_creds(creds, main.model, purpose)
     row, chat_model, _origin = await _account_default(session, user_id)
     if row is not None:
         creds = _decrypt_provider(row, user_id)

@@ -13,10 +13,6 @@ from agentcore.replay import (
     open_event_document,
     prepare_replay_source,
 )
-from agentcore.replay.legacy import (
-    apply_legacy_captain_tool_run_id_strip,
-    captain_run_id_from_events,
-)
 
 
 def test_open_turn_fixture_normalizes_contract_fields():
@@ -25,7 +21,7 @@ def test_open_turn_fixture_normalizes_contract_fields():
             "name": "single_agent_text",
             "description": "d",
             "events": [
-                {"kind": "content_delta", "payload": {"delta": "hi"}, "ts": "2026-01-01T00:00:00.000Z"},
+                {"type": "content_delta", "payload": {"delta": "hi"}, "timestamp": "2026-01-01T00:00:00.000Z"},
             ],
             "projected": {"status": "completed", "messages": [], "runs": [], "pendingInteraction": None, "cost": None},
         }
@@ -73,7 +69,7 @@ def test_open_recording_stitches_segments():
                 {
                     "wall_t0_ms": 1000,
                     "events": [
-                        {"kind": "content_delta", "payload": {"delta": "a"}, "ts": None, "t_ms": 10},
+                        {"type": "content_delta", "payload": {"delta": "a"}, "timestamp": None, "t_ms": 10},
                     ],
                 },
             ],
@@ -140,35 +136,8 @@ def test_ab_mutual_exclusion_asserts():
         assert_fold_consumer(sink)
 
 
-def test_legacy_captain_tool_run_id_strip_only_captain_tools():
-    events = [
-        {"type": "run_started", "payload": {"run_id": "cap1", "kind": "captain"}},
-        {
-            "type": "tool_use_start",
-            "payload": {
-                "tool_call_id": "t1",
-                "tool_name": "web_search",
-                "run_id": "cap1",
-            },
-        },
-        {
-            "type": "tool_use_start",
-            "payload": {
-                "tool_call_id": "t2",
-                "tool_name": "web_fetch",
-                "run_id": "w1",
-            },
-        },
-    ]
-    assert captain_run_id_from_events(events) == "cap1"
-    out = apply_legacy_captain_tool_run_id_strip(events)
-    assert "run_id" not in out[1]["payload"]
-    assert out[2]["payload"]["run_id"] == "w1"
-    # Input not mutated.
-    assert events[1]["payload"]["run_id"] == "cap1"
-
-
-def test_sink_prepare_applies_legacy_strip():
+def test_sink_prepare_keeps_tool_run_id():
+    """SINK remints interaction ids; tool run_id stays as recorded (no v1 captain strip)."""
     events = [
         {"type": "run_started", "payload": {"run_id": "cap1", "kind": "captain"}, "t_ms": 0},
         {
@@ -187,11 +156,11 @@ def test_sink_prepare_applies_legacy_strip():
         message_id="m",
     )
     tool = next(ev for ev in source.events if ev["type"] == "tool_use_start")
-    assert "run_id" not in tool["payload"]
+    assert tool["payload"]["run_id"] == "cap1"
 
 
-def test_fold_prepare_does_not_apply_legacy_strip():
-    """A 路不重铸、也不做旧磁带投影特判——向量/深链保持录制面。"""
+def test_fold_prepare_keeps_tool_run_id():
+    """A 路不重铸、不改 run_id——向量/深链保持录制面。"""
     events = [
         {"type": "run_started", "payload": {"run_id": "cap1", "kind": "captain"}},
         {

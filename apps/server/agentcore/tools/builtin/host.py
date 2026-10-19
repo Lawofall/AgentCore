@@ -1,10 +1,11 @@
-"""Single builtin ``host`` — a short command on the user's machine.
+"""Single builtin ``host`` — a short command, or GUI attach/snapshot/click/type.
 
-Orthogonal to workspace ``run``. Transport is ``DesktopClientChannel.request_host``
-(``HostOp.SHELL``). The model surface is one required ``command``. Catastrophic
-shapes and silent installers are fuse-denied; package-manager installs always
-confirm (see ``command_policy``). ``host_ping`` is transport-only and is not
-registered.
+Orthogonal to workspace ``run``. Transport is ``DesktopClientChannel.request_host``.
+Omit ``action`` (or ``action=shell``) → required ``command``. GUI actions
+``attach`` / ``snapshot`` / ``click`` / ``type`` are the Computer Use face.
+Catastrophic shell shapes and silent installers are fuse-denied; package-manager
+installs and ``attach`` always confirm. ``host_ping`` is transport-only and is
+not registered.
 """
 
 from __future__ import annotations
@@ -18,6 +19,11 @@ from agentcore.core.logging import get_logger
 from agentcore.core.types import ToolApproval, ToolFace
 from agentcore.desktop.channel import HostOp, HostOpError
 from agentcore.runtime.command_policy import is_package_install_command
+from agentcore.tools.builtin.host_gui import (
+    GUI_ACTIONS,
+    execute_gui,
+    host_gui_timeout_seconds,
+)
 from agentcore.tools.builtin.long_running import long_running_command_match
 from agentcore.tools.protocol import ToolContext, ToolResult, ToolSchema
 from agentcore.tools.registration import (
@@ -76,26 +82,69 @@ _SHELL_SILENT_INSTALL_REASON = (
     "装包请写 winget / brew / apt 的 install 命令，该命令会请人确认。"
 )
 
+_ACTION_ENUM = sorted(GUI_ACTIONS | {"shell"})
+
 HOST_TOOL_PARAMETERS: dict[str, Any] = {
     "type": "object",
     "properties": {
+        "action": {
+            "type": "string",
+            "enum": _ACTION_ENUM,
+            "description": (
+                "省略或 shell = 短命令。attach 选一扇窗；snapshot 读控件树；"
+                "click/type 用 snapshot 的 ref。"
+            ),
+        },
         "command": {
             "type": "string",
-            "description": "本机短命令（非空）。",
+            "description": "省略 action 时必填的本机短命令。",
+        },
+        "ref": {
+            "type": "string",
+            "description": "click/type：snapshot 返回的控件 ref。",
+        },
+        "text": {
+            "type": "string",
+            "description": "type：要填入的文本。密码框硬拒。",
+        },
+        "snapshot_version": {
+            "type": "integer",
+            "description": "click/type：该 ref 的 snapshot 版本。",
         },
     },
-    "required": ["command"],
 }
 
 
+def host_action_name(arguments: dict[str, Any] | None) -> str:
+    """Canonical action: ``shell`` when omitted, else the GUI verb or the raw token."""
+    raw = str((arguments or {}).get("action") or "").strip().lower()
+    if raw in GUI_ACTIONS:
+        return raw
+    if raw in {"", "shell"}:
+        return "shell"
+    return raw
+
+
 def host_call_is_shell(arguments: dict[str, Any] | None) -> bool:
-    """True when this host call carries a command (the only model shape)."""
-    return bool(str((arguments or {}).get("command") or "").strip())
+    """True when this host call is the short-command face (fuse / git scan apply)."""
+    return host_action_name(arguments) == "shell"
+
+
+def host_call_is_gui_attach(arguments: dict[str, Any] | None) -> bool:
+    return host_action_name(arguments) == "attach"
 
 
 def host_call_requires_approval(arguments: dict[str, Any] | None) -> bool:
-    """Every host command is on the host axis (installs also always-confirm)."""
-    return host_call_is_shell(arguments)
+    """Shell commands and attach hit the host axis; snapshot/click/type do not.
+
+    Attach is also always-confirm (session trust cannot eat it).
+    """
+    action = host_action_name(arguments)
+    if action == "attach":
+        return True
+    if action == "shell":
+        return bool(str((arguments or {}).get("command") or "").strip())
+    return False
 
 
 def shell_fuse_blocks(command: str) -> str | None:
@@ -143,6 +192,9 @@ def shell_cmd_env_blocks(command: str) -> str | None:
 
 def host_tool_timeout_seconds(arguments: dict[str, Any] | None = None) -> float:
     """Engine wall-clock ceiling for one ``host`` call (must outlive channel + slack)."""
+    action = host_action_name(arguments)
+    if action in GUI_ACTIONS:
+        return host_gui_timeout_seconds(action)
     command = str((arguments or {}).get("command") or "")
     if is_package_install_command(command):
         return float(_PACKAGE_TIMEOUT_DEFAULT) + _PACKAGE_CHANNEL_SLACK_SECONDS
@@ -310,21 +362,21 @@ async def _execute_shell(
 
 
 class HostTool:
-    """本机 Host 面：一条短命令。"""
+    """本机 Host 面：短命令，或附着窗口后的控件树 ref 派。"""
 
     registration = ToolRegistration(
         surface=ToolSurface.BUILTIN,
         audience=AUDIENCE_BOTH,
         host_class=True,
         catalog_summary="这台电脑。",
-        blurb="在这台电脑上跑短命令",
+        blurb="在这台电脑上跑短命令或操作窗口",
     )
 
     @property
     def schema(self) -> ToolSchema:
         return ToolSchema(
             name="host",
-            description="这台电脑上的短命令。",
+            description="这台电脑上的短命令；或附着一扇窗后读控件并按 ref 点按/键入。",
             parameters=HOST_TOOL_PARAMETERS,
             face=ToolFace.HOST_BROWSER,
             approval=ToolApproval.NEVER,
@@ -332,4 +384,12 @@ class HostTool:
         )
 
     async def execute(self, arguments: dict[str, Any], context: ToolContext) -> ToolResult:
-        return await _execute_shell(arguments, context)
+        action = host_action_name(arguments)
+        if action == "shell":
+            return await _execute_shell(arguments, context)
+        if action in GUI_ACTIONS:
+            return await execute_gui(action, arguments, context)
+        return _fail(
+            "host 的 action 只能是 attach / snapshot / click / type；省略则是短命令。",
+            contract_failure=True,
+        )

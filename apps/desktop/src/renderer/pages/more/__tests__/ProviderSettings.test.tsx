@@ -46,6 +46,7 @@ function providersResponse(
         id: "p1",
         label: "DeepSeek",
         base_url: "https://api.deepseek.com/v1",
+        vendor_id: "deepseek",
         status: "active",
         masked_key: "••••abcd",
         supports_tools: true,
@@ -54,6 +55,7 @@ function providersResponse(
         id: "p2",
         label: "OpenAI",
         base_url: "https://api.openai.com/v1",
+        vendor_id: "openai",
         status: "unchecked",
         masked_key: "••••wxyz",
       },
@@ -101,8 +103,27 @@ describe("ProviderSettings", () => {
     expect(screen.getByRole("button", { name: "添加服务商" })).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "模型组合" })).toBeNull();
     expect(
-      screen.getByText("Key 已加密保存。测连绿≠可聊天；日常选用在「装配」。"),
+      screen.getByText("Key 已加密保存。测连绿≠可聊天；日常选模型在输入框。"),
     ).toBeTruthy();
+  });
+
+  it("shows host and path so a missing /v1 is visible", () => {
+    mockProviders(
+      providersResponse({
+        providers: [
+          {
+            id: "p-relay",
+            label: "中转",
+            base_url: "https://omyai.vip/v1",
+            vendor_id: "custom",
+            status: "error",
+            masked_key: "••••KRPf",
+          },
+        ],
+      }),
+    );
+    renderPage();
+    expect(screen.getByText(/omyai\.vip\/v1/)).toBeTruthy();
   });
 
   it("does not advertise the page job in a header lede", () => {

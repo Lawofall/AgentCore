@@ -585,7 +585,6 @@ async def test_continue_ceo_rebuilds_worker_base_not_chat_prompt(monkeypatch):
         approval_gate=None,
         delegate_tool=None,
         debate_tool=None,
-        vision_cost_sink=[],
     )
 
     async def _fake_wire(**kwargs):

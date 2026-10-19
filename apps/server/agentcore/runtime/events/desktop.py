@@ -21,7 +21,8 @@ def external_mount_required(
 
     Path transport exception: may carry ``path`` and/or ``well_known``+
     ``target_name`` for desktop resolve. Success settle must not include abs.
-    ``mode`` is omitted on silent readonly; ``organize`` / ``attach_rw`` confirm.
+    ``mode`` is omitted on readonly; ``organize`` / ``attach_rw`` request a
+    write upgrade. Confirm vs silent is the conversation boundary on desktop.
     ``root_id`` upgrades an existing session root (no folder picker).
     """
     payload: dict[str, Any] = {

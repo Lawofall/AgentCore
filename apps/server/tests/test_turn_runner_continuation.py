@@ -7,6 +7,7 @@ placeholder（行已在，且会把「曾中断恢复」标记和半截正文抹
 
 from agentcore.conversation import turn_runner
 from agentcore.runtime.events import EventSink, FinishReason
+from agentcore.runtime.turn.snapshot import ConversationSnapshot
 
 
 class _FakeBackend:
@@ -40,7 +41,7 @@ async def _run(monkeypatch, **overrides) -> dict:
         conversation_id="c-cont",
         user_message="收口",
         user_id="u1",
-        folder_id=None,
+        conversation=ConversationSnapshot.default(),
         sink=EventSink(),
         history=[],
         attachments=None,

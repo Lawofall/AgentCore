@@ -127,38 +127,6 @@ async def test_drain_retries_after_write_failure(monkeypatch, ledger_queue):
     assert await ledger_queue._backend.pending_count() == 0
 
 
-async def test_drains_legacy_proxy_spend_dir(monkeypatch, ledger_queue, tmp_path):
-    """Files left in the old proxy_spend_queue path are still consumed."""
-    calls: list = []
-
-    class Repo:
-        def __init__(self, _session):
-            pass
-
-        async def record_runs(self, **kw):
-            calls.append(kw)
-            return 1
-
-    monkeypatch.setattr("agentcore.db.base.telemetry_session_factory", lambda: _FakeSession())
-    monkeypatch.setattr("agentcore.db.repositories.CostEventRepository", Repo)
-
-    legacy = tmp_path / "telemetry" / "proxy_spend_queue"
-    legacy.mkdir(parents=True)
-    (legacy / "legacy.json").write_text(
-        json.dumps(
-            {
-                "id": "legacy-1",
-                "user_id": "u1",
-                "conversation_id": "c1",
-                "runs": _sample_runs(run_id="legacy-run"),
-            }
-        ),
-        encoding="utf-8",
-    )
-    assert await ledger_queue.drain_once() == 1
-    assert calls[0]["runs"][0]["run_id"] == "legacy-run"
-
-
 async def test_drains_legacy_cost_ledger_disk_dir(monkeypatch, ledger_queue, tmp_path):
     """Pre-migration cost_ledger_queue/*.json files are drained once."""
     calls: list = []

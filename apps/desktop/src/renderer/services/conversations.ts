@@ -16,6 +16,10 @@ type BackendConversation = Schemas["ConversationSummary"] & {
   last_message_preview?: string | null;
   /** Present once OpenAPI includes the field; older generated types omit it. */
   context_cut_undoable?: boolean;
+  /** Present once OpenAPI includes the field; older generated types omit it. */
+  model_override?: Conversation["modelOverride"];
+  /** Present once OpenAPI includes the field; older generated types omit it. */
+  delegate_mode?: boolean;
 };
 /** Paginated conversation list (`GET /v1/conversations`). */
 type ConversationListResponse = Schemas["ConversationListResponse"];
@@ -51,6 +55,8 @@ function toConversation(c: BackendConversation): Conversation {
     archived: c.archived ?? false,
     permissionAxes: normalizeAxes(c.permission_axes ?? undefined),
     assemblyId: c.assembly_id ?? null,
+    modelOverride: c.model_override ?? null,
+    delegateMode: Boolean(c.delegate_mode),
     contextCompacted: c.context_compacted ?? false,
     compactedThrough: c.compacted_through ?? null,
     contextCutUndoable: c.context_cut_undoable ?? false,
@@ -376,7 +382,7 @@ export async function setConversationArchived(
 }
 
 /**
- * 换这场用的装配。传 id 钉住；传 `null` 再钉当时星标。
+ * 换这场用的装配。传 id 钉住；传 `null` 再钉账号回落。
  * 不可用 / 越权时后端返 422（由调用方 toast 呈现）。
  */
 export async function setConversationModelProfile(
@@ -386,6 +392,28 @@ export async function setConversationModelProfile(
   const assembly_id = profileId?.trim() ? profileId.trim() : null;
   const res = await api.patch<BackendConversation>(`/v1/conversations/${id}`, {
     assembly_id,
+  });
+  return toConversation(res);
+}
+
+/** 换这场的「统筹」。true = 优先派；false = 现行注意力尺。 */
+export async function setConversationDelegateMode(
+  id: string,
+  on: boolean,
+): Promise<Conversation> {
+  const res = await api.patch<BackendConversation>(`/v1/conversations/${id}`, {
+    delegate_mode: on,
+  });
+  return toConversation(res);
+}
+
+/** 换这场用的模型。传对象覆盖装配；传 `null` 再跟装配。 */
+export async function setConversationModelOverride(
+  id: string,
+  override: Conversation["modelOverride"],
+): Promise<Conversation> {
+  const res = await api.patch<BackendConversation>(`/v1/conversations/${id}`, {
+    model_override: override,
   });
   return toConversation(res);
 }

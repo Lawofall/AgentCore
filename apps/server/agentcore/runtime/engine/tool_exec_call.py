@@ -722,13 +722,6 @@ async def run_one_tool(
     finally:
         reset_tool_deadline(deadline_token)
     result.tool_call_id = tc.id
-    if result.file_products:
-        from agentcore.table.land_csv import ingest_landed_csv_products
-
-        note = await ingest_landed_csv_products(result, context)
-        if note:
-            prior = (result.output or "").rstrip()
-            result.output = f"{prior}\n{note}" if prior else note
 
     # 缓存命中 / A3 拒绝等不计预算：reserved slot refunded when not charged.
     if budget_reserved and budget_state is not None and not charges_retrieval_budget(result):

@@ -554,7 +554,6 @@ async def test_file_read_office_extract_failure_soft(tmp_path: Path):
     assert "抽文本失败" in out
     assert "convert:" not in out
     assert "markitdown" not in out.lower()
-    assert "read_image" not in out
     assert "按文件名归类" in out
     assert "请用户" not in out
 
@@ -574,7 +573,6 @@ async def test_file_read_raster_honest_when_model_rejects_images(tmp_path: Path)
     assert "[观察信封]" in out
     assert "kind: image" in out
     assert "当前主模型不收图" in out
-    assert "read_image" not in out
     assert not (result.metadata or {}).get("native_image_parts")
 
 
@@ -1690,7 +1688,7 @@ def test_file_list_schema_is_one_layer_ls():
     assert set(props) == {"directory"}
     assert "已知" not in schema.description
     assert "已证实" not in props["directory"]["description"]
-    assert "external/<别名>/" in schema.description
+    assert "本机绝对路径" in props["directory"]["description"]
     assert ".agentcore/rules" not in schema.description
 
 

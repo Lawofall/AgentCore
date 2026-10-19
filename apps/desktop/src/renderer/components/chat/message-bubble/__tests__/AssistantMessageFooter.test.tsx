@@ -138,9 +138,9 @@ function insideHoverReveal(el: HTMLElement): boolean {
 describe("气泡脚不挂轮次", () => {
   it("meta summary 只有费用和用时，没有 N 轮", () => {
     render(
-      <AssistantMessageMetaSummary costText="¥1.00" durationMs={12_000} />,
+      <AssistantMessageMetaSummary costText="1.00 积分" durationMs={12_000} />,
     );
-    expect(screen.getByText("¥1.00")).toBeTruthy();
+    expect(screen.getByText("1.00 积分")).toBeTruthy();
     expect(screen.getByText("12s")).toBeTruthy();
     expect(screen.queryByText(/用时/)).toBeNull();
     expect(screen.queryByText(/轮/)).toBeNull();

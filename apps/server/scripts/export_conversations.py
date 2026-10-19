@@ -75,7 +75,6 @@ _MSG_KEEP = (
     "attachments",
     "citations",
     "evidence_ledger",
-    "followups",
     "cost",
     "trace_id",
     "baseline_snapshot_id",

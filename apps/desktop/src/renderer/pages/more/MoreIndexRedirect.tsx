@@ -3,7 +3,7 @@ import { Navigate } from "react-router-dom";
 
 /**
  * `/more` index 落点：还没接上模型 → 服务商；已经能聊 → 用量。
- * 装配在工具箱，窄屏从设置里的「装配」进。
+ * 能力在工具箱，窄屏从设置里的「能力」进。
  */
 export function MoreIndexRedirect() {
   const { data, isLoading, isError } = useLlmProviders();

@@ -1,7 +1,8 @@
-"""Account web-search connection (设置 · 通用).
+"""Account web-search connection (设置 · 联网搜索).
 
-Platform SearXNG is the default. 开析 and SearXNG are one slot each. Connect
-probes and, only on success, saves the credential and selects that engine.
+Platform SearXNG is the default. DeepSeek is one slot and uses the official
+DeepSeek BYOK service key. Connect probes and, only on success, saves and
+selects that engine.
 """
 
 from typing import Literal
@@ -12,12 +13,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from agentcore.api.dependencies import AuthUser, get_db
 from agentcore.core.logging import get_logger
-from agentcore.tools.builtin.web.provider_service import (
+from agentcore.search.choice import DEEPSEEK
+from agentcore.search.connection import (
     SearchConnectionService,
     SearchConnectionView,
     SearchSlotView,
 )
-from agentcore.tools.builtin.web.search_choice import CLEVERSEE, SEARXNG
 from agentcore.tools.builtin.web.search_quota import SearchQuotaSnapshot
 
 logger = get_logger(__name__)
@@ -41,28 +42,24 @@ class SearchQuotaView(BaseModel):
 class SearchSlotResponse(BaseModel):
     status: Literal["connected", "needs_reconnect"]
     base_url: str
+    source: Literal["provider"]
     masked_key: str | None = None
     message: str | None = None
 
 
+class OfficialDeepSeekProviderView(BaseModel):
+    label: str
+
+
 class SearchConnectionResponse(BaseModel):
-    selected: Literal["platform", "cleversee", "searxng"]
+    selected: Literal["platform", "deepseek"]
     quota: SearchQuotaView
-    cleversee: SearchSlotResponse | None = None
-    searxng: SearchSlotResponse | None = None
+    deepseek: SearchSlotResponse | None = None
+    official_deepseek_provider: OfficialDeepSeekProviderView | None = None
 
 
 class SearchSelectionRequest(BaseModel):
-    engine: Literal["platform", "cleversee", "searxng"]
-
-
-class ConnectCleverSeeRequest(BaseModel):
-    api_key: str = ""
-
-
-class ConnectSearxngRequest(BaseModel):
-    base_url: str = ""
-    api_key: str = ""
+    engine: Literal["platform", "deepseek"]
 
 
 def _quota(snapshot: SearchQuotaSnapshot) -> SearchQuotaView:
@@ -80,17 +77,21 @@ def _slot(view: SearchSlotView | None) -> SearchSlotResponse | None:
     return SearchSlotResponse(
         status=view.status,  # type: ignore[arg-type]
         base_url=view.base_url,
+        source=view.source,  # type: ignore[arg-type]
         masked_key=view.masked_key,
         message=view.message,
     )
 
 
 def _connection(view: SearchConnectionView) -> SearchConnectionResponse:
+    provider = None
+    if view.official_provider_label:
+        provider = OfficialDeepSeekProviderView(label=view.official_provider_label)
     return SearchConnectionResponse(
         selected=view.selected,  # type: ignore[arg-type]
         quota=_quota(view.quota),
-        cleversee=_slot(view.cleversee),
-        searxng=_slot(view.searxng),
+        deepseek=_slot(view.deepseek),
+        official_deepseek_provider=provider,
     )
 
 
@@ -117,43 +118,26 @@ async def select_search_connection(
     return _connection(view)
 
 
-@router.post("/cleversee", response_model=SearchConnectionResponse)
-async def connect_cleversee(
-    body: ConnectCleverSeeRequest,
+@router.post("/deepseek", response_model=SearchConnectionResponse)
+async def connect_deepseek(
     user: AuthUser,
     service: SearchConnectionService = Depends(get_search_connection_service),
 ) -> SearchConnectionResponse:
-    view = await service.connect_cleversee(user.user_id, body.api_key)
-    logger.info("search_connection.connected", user_id=user.user_id, engine=CLEVERSEE)
+    view = await service.connect_deepseek(user.user_id)
+    logger.info(
+        "search_connection.connected",
+        user_id=user.user_id,
+        engine=DEEPSEEK,
+        source="provider",
+    )
     return _connection(view)
 
 
-@router.post("/searxng", response_model=SearchConnectionResponse)
-async def connect_searxng(
-    body: ConnectSearxngRequest,
+@router.delete("/deepseek", response_model=SearchConnectionResponse)
+async def disconnect_deepseek(
     user: AuthUser,
     service: SearchConnectionService = Depends(get_search_connection_service),
 ) -> SearchConnectionResponse:
-    view = await service.connect_searxng(user.user_id, body.base_url, body.api_key)
-    logger.info("search_connection.connected", user_id=user.user_id, engine=SEARXNG)
-    return _connection(view)
-
-
-@router.delete("/cleversee", response_model=SearchConnectionResponse)
-async def disconnect_cleversee(
-    user: AuthUser,
-    service: SearchConnectionService = Depends(get_search_connection_service),
-) -> SearchConnectionResponse:
-    view = await service.disconnect(user.user_id, CLEVERSEE)
-    logger.info("search_connection.disconnected", user_id=user.user_id, engine=CLEVERSEE)
-    return _connection(view)
-
-
-@router.delete("/searxng", response_model=SearchConnectionResponse)
-async def disconnect_searxng(
-    user: AuthUser,
-    service: SearchConnectionService = Depends(get_search_connection_service),
-) -> SearchConnectionResponse:
-    view = await service.disconnect(user.user_id, SEARXNG)
-    logger.info("search_connection.disconnected", user_id=user.user_id, engine=SEARXNG)
+    view = await service.disconnect(user.user_id, DEEPSEEK)
+    logger.info("search_connection.disconnected", user_id=user.user_id, engine=DEEPSEEK)
     return _connection(view)

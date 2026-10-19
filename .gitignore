@@ -123,6 +123,8 @@ apps/desktop/scripts/tmp-*
 =
 # Planning / proposal drafts (maintainer-local; not published — keep on disk)
 docs/06-规划/
+# Hosted-ops recipes (supplier, COGS). Never publish; never migrate into docs/01–05.
+docs/06-运营/
 # Cursor agent transcripts (local IDE); never ship
 agent-transcripts/
 # Real production secrets (created on the server from production.env.example)
@@ -225,6 +227,7 @@ apps/desktop/src/renderer/assets/support/*.webp
 # Accidental nested clone / probe drop of this repo at the workspace root
 # (may contain code_search.db ~90MB+). Leading slash = repo root only; do not
 # match docs/ or other paths named AgentCore.
+# Also the generated AgentCore-side rule mirror (`pnpm sync:rules` → AgentCore/rules/).
 /AgentCore/
 
 # Cursor 对话存档（PChat 生成的上下文归档，不应进入代码仓库）

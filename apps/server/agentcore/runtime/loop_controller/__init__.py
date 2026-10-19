@@ -124,12 +124,6 @@ class LoopController(
         convergence_finalize_rounds: int = 0,
         convergence_spin_rounds: int = DEFAULT_THRESHOLD,
         expects_landing: bool = False,
-        # Idle bars kept for explicit construction; inject path is retired.
-        # Orthogonal to token/timeout wind_down. ≤0 disables tracking.
-        delivery_idle_nudge_rounds: int = 0,
-        delivery_idle_narrow_rounds: int = 0,
-        delivery_idle_recon: bool = False,
-        delivery_idle_report: bool = False,
         investigation_tools: frozenset[str] = frozenset(),
         product_landing_artifacts: tuple[str, ...] | list[str] | None = None,
     ) -> None:
@@ -154,22 +148,12 @@ class LoopController(
         # disables the absolute cap; ``spin_rounds <= 0`` disables spinning detection.
         self._convergence_finalize_rounds = max(0, convergence_finalize_rounds)
         self._convergence_spin_rounds = max(0, convergence_spin_rounds)
-        # Idle-round counter (explicit construction with bars still uses it).
-        # Factory leaves bars at 0 so tracking stays off.
         self._expects_landing = bool(expects_landing)
-        self._delivery_idle_nudge_rounds = max(0, int(delivery_idle_nudge_rounds))
-        self._delivery_idle_narrow_rounds = max(0, int(delivery_idle_narrow_rounds))
-        self._delivery_idle_recon = bool(delivery_idle_recon)
-        self._delivery_idle_report = bool(delivery_idle_report)
-        # Declared deliverable.artifacts — dossier intermediates count as product
-        # only when they match (delivery-idle landing latch). Empty = no whitelist.
+        # Declared deliverable.artifacts — factory still threads this; landing
+        # latch itself is any successful LANDING_TOOLS write.
         self._product_landing_artifacts: tuple[str, ...] = tuple(
             a for a in (product_landing_artifacts or ()) if a
         )
-        self._idle_investigation_rounds = 0
-        self._delivery_idle_nudged = False
-        self._delivery_idle_narrowed = False
-        self._delivery_idle_narrow_apply_pending = False
         self._landing_succeeded = False
         self._prev_investigation_fps: frozenset[str] = frozenset()
         self._same_target_investigation_streak = 0
@@ -363,17 +347,6 @@ class LoopController(
             seed.get("validation_thrash_latched", False)
         )
 
-    def _is_product_landing_success(self, attempt: ToolAttempt) -> bool:
-        """Successful landing that counts as product under the files zero-write gate."""
-        if not attempt.success or attempt.tool_name not in LANDING_TOOLS:
-            return False
-        path = (attempt.meta or {}).get("path")
-        if path is None or (isinstance(path, str) and not path.strip()):
-            return True
-        from agentcore.runtime.runs.landing_product import is_product_landing_path
-
-        return is_product_landing_path(str(path), self._product_landing_artifacts)
-
     def _note_channel_op_hang(self, attempt: ToolAttempt) -> None:
         """Count consecutive channel_op hangs; latch pens after the second."""
         if self._channel_hang_dead:
@@ -422,40 +395,12 @@ class LoopController(
         round_progress = any(
             attempt.success and attempt.tool_name in PROGRESS_TOOLS for attempt in attempts
         )
-        # Soft delivery_idle: any successful landing-tool write latches success /
-        # clears the idle clock (dossier notes under research/reviews/debate count
-        # as product). Missing meta.path stays compatible (counts as product).
-        # Failed landing intent still resets the idle clock.
-        delivery_idle_tracking = (
-            self._delivery_idle_nudge_rounds > 0 or self._delivery_idle_narrow_rounds > 0
+        landing_success = any(
+            attempt.success and attempt.tool_name in LANDING_TOOLS
+            for attempt in attempts
         )
-        files_product_gate = delivery_idle_tracking and self._expects_landing
-        if files_product_gate:
-            landing_success = any(
-                self._is_product_landing_success(a) for a in attempts
-            )
-            landing_attempt = any(
-                a.tool_name in LANDING_TOOLS
-                and (
-                    not a.success
-                    or self._is_product_landing_success(a)
-                    or not (a.meta or {}).get("path")
-                )
-                for a in attempts
-            )
-        else:
-            landing_success = any(
-                attempt.success and attempt.tool_name in LANDING_TOOLS
-                for attempt in attempts
-            )
-            landing_attempt = any(
-                attempt.tool_name in LANDING_TOOLS for attempt in attempts
-            )
         if landing_success:
             self._landing_succeeded = True
-            self._idle_investigation_rounds = 0
-            self._delivery_idle_nudged = False
-            # Keep narrow latch: tools stay narrowed once applied this run.
         if round_progress:
             self._same_target_investigation_streak = 0
             self._prev_investigation_fps = frozenset()
@@ -644,37 +589,3 @@ class LoopController(
                 else:
                     self._same_target_investigation_streak = 0
                 self._prev_investigation_fps = current
-
-        # Soft delivery_idle: investigation-only round with no landing attempt
-        # bumps the streak; landing intent/success resets.
-        # Non-investigation rounds (ask / progress / exec) clear the idle clock.
-        # (Historical: dossier notes once counted as non-product idle; they now latch
-        # as product via landing_product — dossier_note_only stays unreachable.)
-        idle_tracking = delivery_idle_tracking and not self._landing_succeeded
-        if idle_tracking:
-            tool_names = {a.tool_name for a in attempts if a.tool_name}
-            investigation_only = bool(tool_names) and tool_names <= self._investigation_tools
-            dossier_note_only = False
-            if files_product_gate and tool_names and not investigation_only:
-                dossier_note_only = all(
-                    a.tool_name in self._investigation_tools
-                    or (
-                        a.tool_name in LANDING_TOOLS
-                        and a.success
-                        and (a.meta or {}).get("path")
-                        and not self._is_product_landing_success(a)
-                    )
-                    for a in attempts
-                    if a.tool_name
-                )
-            if landing_attempt or landing_success:
-                self._idle_investigation_rounds = 0
-                if not self._delivery_idle_narrowed:
-                    self._delivery_idle_nudged = False
-            elif investigation_only or dossier_note_only:
-                self._idle_investigation_rounds += 1
-            elif tool_names:
-                # Mixed / non-investigation activity — not pure read-idle.
-                self._idle_investigation_rounds = 0
-                if not self._delivery_idle_narrowed:
-                    self._delivery_idle_nudged = False

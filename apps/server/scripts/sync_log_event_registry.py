@@ -92,11 +92,6 @@ KEY_FIELDS: dict[str, dict[str, str]] = {
         "trace_id": "str",
         "ttl_days": "int",
     },
-    "ceo.unclosed_cue": {
-        "prior_gaps": "bool",
-        "recent_graph": "bool",
-        "delegated": "bool",
-    },
     "llm.rate_limit_no_retry": {
         "provider": "str",
         "scenario": "str",
@@ -298,6 +293,39 @@ KEY_FIELDS: dict[str, dict[str, str]] = {
         "cache_scope": "str",
         "degraded": "bool",
         "tool_count": "int",
+    },
+    "mcp.oauth_completed": {
+        "server_id": "str",
+        "user_id": "str",
+    },
+    "mcp.oauth_started": {
+        "server_id": "str",
+        "user_id": "str",
+    },
+    "mcp.remote_call": {
+        "server_id": "str",
+        "tool": "str",
+    },
+    "mcp.remote_list_degraded": {
+        "detail": "str",
+        "duration_ms": "int",
+        "failed_servers": "int",
+        "server_id": "str",
+        "tool_count": "int",
+    },
+    "mcp.remote_list_ok": {
+        "duration_ms": "int",
+        "failed_servers": "int",
+        "ready_servers": "int",
+        "tool_count": "int",
+    },
+    "mcp.server_deleted": {
+        "server_id": "str",
+        "user_id": "str",
+    },
+    "mcp.server_upserted": {
+        "server_id": "str",
+        "user_id": "str",
     },
     "account.rules_memory_cache_hit": {
         "user_id": "str",
@@ -731,9 +759,6 @@ KEY_FIELDS: dict[str, dict[str, str]] = {
         "session_count": "int",
         "timeout_seconds": "float",
     },
-    "browser.cgroup_unwritable_ignore": {
-        "reason": "str",
-    },
     "browser.session_open_failed": {
         "conversation_id": "str",
         "error": "str",
@@ -950,165 +975,66 @@ KEY_FIELDS: dict[str, dict[str, str]] = {
         "pruned": "int",
         "failed": "int",
     },
+    "seat.redeemed": {
+        "user_id": "str",
+        "sku": "str",
+        "kind": "str",
+        "code_id": "str",
+    },
+    "seat.tick": {
+        "user_id": "str",
+        "kind": "str",
+        "plan": "str",
+    },
+    "seat.codes_issued": {
+        "sku": "str",
+        "count": "int",
+        "batch_id": "str",
+        "actor_id": "str",
+    },
+    "seat.code_voided": {
+        "code_id": "str",
+        "sku": "str",
+    },
+    "seat.reminded": {
+        "user_id": "str",
+    },
+    "seat.mail_failed": {
+        "purpose": "str",
+        "error": "str",
+    },
+    "seat.sweep_user_failed": {
+        "user_id": "str",
+        "error": "str",
+    },
+    "seat.swept": {
+        "expired": "int",
+        "pending": "int",
+        "reminded": "int",
+    },
+    "seat.sweep_failed": {
+        "error": "str",
+    },
 }
 
-# S3-retired names: no emit site, kept so old JSONL still validates against the registry.
-# Descriptions must say 历史兼容 — do not present as current contract.
+# Retired names stay here so old JSONL still validated / catalog --check does
+# not flag a missing emit site.
 HISTORICAL_COMPAT: dict[str, str] = {
-    "browser.cgroup_unwritable_ignore": (
-        "历史兼容：曾在探测 subtree_control 只读后自动加 --ignore-cgroups；"
-        "现形状 B 固定 ignore-cgroups，不再发此事件"
-    ),
-    "handoff.empty_body_blocked": (
-        "历史兼容：曾因空正文拒收 handoff；实测误伤已撤，不再发此事件"
-    ),
-    "contract.hard_gap_blocked_completion": (
-        "历史兼容：曾因空交/未落盘把节点打成 FAILED；已撤"
-    ),
-    "coordination.idle_yield_to_captain": (
-        "历史兼容：曾在有在飞工作时 idle-yield 回 CEO；现改为 held_inflight"
-    ),
-    "coordination.synthesis_updated": (
-        "历史兼容：曾在 CEO 写队长节点过程稿时发出；两支写笔已收，不再发此事件"
-    ),
-    "delegate.team_synthesis_preview_failed": (
-        "历史兼容：曾在引擎旁路拼团队进展预览失败时发出；预览通道已收，不再发此事件"
-    ),
-    "team_preview.list_pending_failed": (
-        "历史兼容：曾在列出待处理开工卡失败时发出；开工卡产品位已拆，不再发此事件"
-    ),
-    "team_preview.orphaned": (
-        "历史兼容：曾在发新开工卡前结算旧 pending 时发出；开工卡产品位已拆，不再发此事件"
-    ),
-    "team_preview.research_first_rejected": (
-        "历史兼容：曾把已退役的先调研续跑选项降级为停止；契约已拒收，不再发此事件"
-    ),
-    "plan_review.ceo_review_done": (
-        "历史兼容：曾在计划复核暂停前跑 LLM 把关成功时发出；把关模块已卸，不再发此事件"
-    ),
-    "plan_review.ceo_review_failed": (
-        "历史兼容：曾在计划复核 LLM 把关失败时发出；把关模块已卸，不再发此事件"
-    ),
-    "plan_review.ceo_review_fallback": (
-        "历史兼容：曾在计划复核 LLM 把关回落确定性摘要时发出；把关模块已卸，不再发此事件"
-    ),
-    "stage_card.consume_prepared": (
-        "历史兼容：曾在点卡开辩前消费推进卡；入口已下线，不再发此事件"
-    ),
-    "stage_card.debate_pipeline_failed": (
-        "历史兼容：曾在推进卡直起辩论管道失败时发出；直起管道已删，不再发此事件"
-    ),
-    "stage_card.emitted": (
-        "历史兼容：曾在调研收尾登记推进卡时发出；新调研不再发卡，不再发此事件"
-    ),
-    "stage_card.finalize_at_started_failed": (
-        "历史兼容：曾在开辩当时结算推进卡失败时发出；入口已下线，不再发此事件"
-    ),
-    "stage_card.host_attach_invalid": (
-        "历史兼容：曾在推进卡宿主三元组失效时发出；直起链已删，不再发此事件"
-    ),
-    "stage_card.host_triple_missing": (
-        "历史兼容：曾在发卡时打不上宿主三元组时发出；不再发卡，不再发此事件"
-    ),
-    "stage_card.journal_write_failed": (
-        "历史兼容：曾在推进卡落盘失败时发出；不再发卡，不再发此事件"
-    ),
-    "stage_card.orphaned": (
-        "历史兼容：曾在后续回合给遗留推进卡写 orphan 墓碑；不再盖章，不再发此事件"
-    ),
-    "stage_card.start_debate_exception_kept_pending": (
-        "历史兼容：曾在点卡开辩异常时保持 pending；入口已下线，不再发此事件"
-    ),
-    "stage_card.supersede_prior_failed": (
-        "历史兼容：曾在新卡 supersede 旧 pending 失败时发出；不再发卡，不再发此事件"
-    ),
-    "ask_user.option_label_rejected": (
-        "历史兼容：曾拒选项名含「（推荐）」等倾向标记；现倾向写入名末，不再发此事件"
-    ),
-    "worker.escalate_option_label_rejected": (
-        "历史兼容：曾因同一选项名规则拒升级卡；现接受名末「（推荐）」，不再发此事件"
-    ),
-    "sandbox.write_back": (
-        "历史兼容：曾为 copy-out 写回计数；云桌 bind 落盘后不再发此事件"
-    ),
-    "browser.netns_health_failed": (
-        "历史兼容：曾为独立 browser netns 装配门失败；现跟 desk 健康，不再发此事件"
-    ),
-    "browser.netns_health_ok": (
-        "历史兼容：曾为独立 browser netns 装配门成功；现跟 desk 健康，不再发此事件"
-    ),
-    "browser.netns_setup": (
-        "历史兼容：曾为 family=browser 会话 netns；现 Chromium exec 进桌，不再发此事件"
-    ),
-    "delegate.force_unknown_gate": (
-        "历史兼容：曾解析 delegate/replan force 闸名数组时忽略未知闸；"
-        "force 跳闸已撤，不再发此事件"
-    ),
-    "delegate.force_unparsable": (
-        "历史兼容：曾解析 delegate/replan force 入参失败时发出；"
-        "force 跳闸已撤，不再发此事件"
-    ),
-    "contract.failed": (
-        "历史兼容：曾作 logger 事件名；现为 RunPhase.FAILED 的 error 字面，不再 emit"
-    ),
-    "ceo.unclosed_cue": (
-        "历史兼容：曾在提示装了上轮交付缺口时记账；跨轮缺口易变尾已撤，不再发此事件。"
-        "delegated / prior_gaps / recent_graph 字段保留兼容旧 JSONL"
-    ),
-    "engine.audit_gate_hard_block": (
-        "历史兼容：曾因审计启发式硬拦收口；拦截已撤，不再发此事件"
-    ),
-    "engine.audit_gate_nudge": (
-        "历史兼容：曾因审计启发式软提醒；拦截已撤，不再发此事件"
-    ),
-    "engine.availability_status_nudge": (
-        "历史兼容：曾因可用性状态软提醒；拦截已撤，不再发此事件"
-    ),
-    "engine.debate_gate_nudge": (
-        "历史兼容：曾因辩论收口软提醒；拦截已撤，不再发此事件"
-    ),
-    "engine.retrieval_budget_critical": (
-        "历史兼容：曾在检索预算临界注入提示；提示已撤，不再发此事件"
-    ),
-    "consult.skill_replacements_load_failed": (
-        "历史兼容：换用 overlay 已撤，不再 emit"
-    ),
-    "consult.skill_replacements_snapshot_failed": (
-        "历史兼容：换用 overlay 已撤，不再 emit"
-    ),
-    "board.op_timeout": (
-        "历史兼容：曾在白板 AI 操作超时发出；白板 AI 工具面已卸，不再发此事件"
-    ),
-    "board.ops_apply": (
-        "历史兼容：曾在白板 AI 应用操作时发出；白板 AI 工具面已卸，不再发此事件"
-    ),
-    "board.read": (
-        "历史兼容：曾在白板 AI 读盘时发出；白板 AI 工具面已卸，不再发此事件"
-    ),
-    "board.read_billing_failed": (
-        "历史兼容：曾在白板 AI 读盘计费失败时发出；白板 AI 工具面已卸，不再发此事件"
-    ),
-    "board.read_timeout": (
-        "历史兼容：曾在白板 AI 读盘超时发出；白板 AI 工具面已卸，不再发此事件"
-    ),
-    "board.read_vision_failed": (
-        "历史兼容：曾在白板 AI 视觉读失败时发出；白板 AI 工具面已卸，不再发此事件"
-    ),
-    "read_image.read": (
-        "历史兼容：曾为独立 read_image 工具读图；现并入 read，不再发此事件"
-    ),
-    "read_image.vision_failed": (
-        "历史兼容：曾为独立 read_image 视觉失败；现并入 read，不再发此事件"
-    ),
-    "attachment.vision_billing_failed": (
-        "历史兼容：曾为附件视觉计费失败；现并入 read 路径，不再发此事件"
-    ),
-    "title.empty_retry": (
-        "历史兼容：完成的空标题曾用同一份请求再采样一次；已撤，空结果交给调用方回退"
+    "engine.delivery_idle_narrow_apply": (
+        "Retired delivery-idle tool-narrow apply; emit site removed."
     ),
 }
 
 KEY_DESC: dict[str, str] = {
+    "seat.redeemed": "付费席位兑码成功。kind = activate / renew / upgrade / defer_downgrade",
+    "seat.tick": "到期扫描对单账号执行 apply_pending 或 expire",
+    "seat.codes_issued": "admin 批量生成兑换码；明文只在该次响应返回",
+    "seat.code_voided": "admin 作废一张未使用兑换码",
+    "seat.reminded": "到期前 3 天已向登录邮箱发出提醒",
+    "seat.mail_failed": "席位回执 / 提醒邮件发送失败；兑码本身已提交",
+    "seat.sweep_user_failed": "到期扫描处理单账号失败，其余账号继续",
+    "seat.swept": "本轮到期扫描有实际变更（expired / pending / reminded）",
+    "seat.sweep_failed": "本轮到期扫描整体失败，循环继续",
     "checkpoint.finalized": (
         "ask_user 挂起已落帧。n_questions / n_options 为 normalize 后卡面结构"
         "（空 choice 已降为 text；题上误写的 label 已收进 options）"

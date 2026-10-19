@@ -9,7 +9,7 @@ export function ConversationCloudIcon() {
       <Cloud
         size={14}
         aria-label="云端"
-        className="shrink-0 text-muted-foreground"
+        className="shrink-0 text-sidebar-muted"
       />
     </SimpleTooltip>
   );

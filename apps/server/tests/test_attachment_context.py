@@ -553,37 +553,6 @@ async def test_conversation_db_connectivity_soft_degrades(monkeypatch):
     assert "CLIENT_SHALLOW" not in out
 
 
-class _StubVisionReader:
-    """Minimal VisionReader duck for attachment eye→text tests."""
-
-    def __init__(
-        self,
-        text: str = "图中有一只猫和一行标题",
-        *,
-        model: str = "qwen-vl-max",
-        input_tokens: int = 100,
-        output_tokens: int = 20,
-        credential_source: str = "user",
-        fail: bool = False,
-    ) -> None:
-        from agentcore.llm.provider.protocol import TokenUsage
-
-        self.text = text
-        self.model = model
-        self.usage = TokenUsage(input_tokens=input_tokens, output_tokens=output_tokens)
-        self.credential_source = credential_source
-        self.fail = fail
-        self.calls: list[tuple[str, str]] = []
-
-    async def read(self, png_base64: str, prompt: str):
-        from agentcore.vision.protocol import VisionReading
-
-        self.calls.append((png_base64, prompt))
-        if self.fail:
-            raise RuntimeError("vision down")
-        return VisionReading(text=self.text, usage=self.usage, model=self.model)
-
-
 class _StubBackend:
     def __init__(self, blobs: dict[str, bytes] | None = None) -> None:
         self.blobs = blobs or {}
@@ -607,7 +576,6 @@ async def test_image_without_native_vision_honest_unconfigured():
                 "mime": "image/jpeg",
             }
         ],
-        vision_reader=None,
         backend=None,
     )
     assert out is not None
@@ -634,7 +602,6 @@ async def test_non_image_spreadsheet_skips_vision():
                 "workspace_path": "attachments/report.xlsx",
             }
         ],
-        vision_reader=_StubVisionReader(),  # type: ignore[arg-type]
         backend=_StubBackend(),  # type: ignore[arg-type]
         available_tools=frozenset(),
     )
@@ -719,7 +686,6 @@ async def test_heic_routes_to_image_not_run():
                 "mime": "image/heic",
             }
         ],
-        vision_reader=None,
         backend=None,
     )
     assert out is not None
@@ -742,7 +708,6 @@ async def test_heif_ext_without_mime_routes_to_image():
                 "workspace_path": "attachments/shot.heif",
             }
         ],
-        vision_reader=None,
         backend=None,
     )
     assert out is not None
@@ -764,7 +729,6 @@ async def test_generic_image_mime_routes_to_image():
                 "mime": "image/tiff",
             }
         ],
-        vision_reader=None,
         backend=None,
     )
     assert out is not None
@@ -786,7 +750,6 @@ async def test_svg_mime_excluded_from_vision_path():
                 "mime": "image/svg+xml",
             }
         ],
-        vision_reader=_StubVisionReader(),  # type: ignore[arg-type]
         backend=_StubBackend(),  # type: ignore[arg-type]
     )
     assert out is not None
@@ -796,11 +759,9 @@ async def test_svg_mime_excluded_from_vision_path():
 
 @pytest.mark.asyncio
 async def test_main_native_vision_builds_image_parts_skips_reader():
-    """Main catalog vision → multimodal parts; unused VisionReader must not be called."""
-    reader = _StubVisionReader(credential_source="user")
+    """Main catalog vision → multimodal parts on the current model."""
     backend = _StubBackend({"attachments/pic.jpg": b"\xff\xd8\xffjpeg"})
     parts: list[dict] = []
-    sink: list = []
 
     out = await _build_attachment_context(
         [
@@ -812,17 +773,13 @@ async def test_main_native_vision_builds_image_parts_skips_reader():
                 "workspace_path": "attachments/pic.jpg",
             }
         ],
-        vision_reader=reader,  # type: ignore[arg-type]
         backend=backend,  # type: ignore[arg-type]
-        cost_sink=sink,
         main_native_vision=True,
         native_image_parts=parts,
     )
     assert out is not None
     assert "[image / multimodal]" in out
     assert "多模态" in out
-    assert reader.calls == []
-    assert sink == []
     assert len(parts) == 1
     assert parts[0]["type"] == "image_url"
     url = parts[0]["image_url"]["url"]

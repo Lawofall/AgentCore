@@ -206,10 +206,9 @@ describe("ipc-validate（IPC 边界结构校验 · IPC-004）", () => {
       ).toThrow(IpcInvalidArgsError);
     });
 
-    it("未列入 optionalStrings 的对象载荷（permissionAxes）不拦合法 startTurn", () => {
-      // 回归：权限轴迁到对象后，曾误把 permissionAxes 塞进 optionalStrings，
-      // 导致每次本地回合 IPC 边界拒掉。寻址 string 校验 + 对象载荷透传才是正确姿态。
-      // folderId 等三态标识走 nullableIds（null=裸聊），勿塞进 optionalStrings。
+    it("未列入 optionalStrings 的对象载荷（session）不拦合法 startTurn", () => {
+      // 回归：对象载荷勿塞进 optionalStrings，否则合法请求会被拒。
+      // session 是会话快照对象，寻址 string 校验 + 对象透传才是正确姿态。
       const startTurnRequired = [
         "rootId",
         "conversationId",
@@ -220,11 +219,6 @@ describe("ipc-validate（IPC 边界结构校验 · IPC-004）", () => {
         "messageId",
       ] as const;
       const startTurnOptionalStrings = ["subpath"] as const;
-      const startTurnNullableIds = [
-        "folderId",
-        "localRootId",
-        "localSubpath",
-      ] as const;
       expect(() =>
         assertShape(
           "sidecar:startTurn",
@@ -237,19 +231,21 @@ describe("ipc-validate（IPC 边界结构校验 · IPC-004）", () => {
             userMessageId: "u",
             messageId: "m",
             subpath: "scratch",
-            folderId: null,
-            localRootId: null,
-            localSubpath: null,
-            permissionAxes: { boundary: "folder" },
+            session: {
+              permissionAxes: { boundary: "folder" },
+              delegateMode: true,
+              folderId: null,
+              localRootId: null,
+              localSubpath: null,
+            },
           },
           startTurnRequired,
           startTurnOptionalStrings,
-          startTurnNullableIds,
         ),
       ).not.toThrow();
     });
 
-    it("resume 同构：permissionAxes 对象 + folderId null + 可选 string 并存时放行", () => {
+    it("resume 同构：session 对象 + 可选 string 并存时放行", () => {
       const resumeRequired = [
         "rootId",
         "conversationId",
@@ -259,11 +255,6 @@ describe("ipc-validate（IPC 边界结构校验 · IPC-004）", () => {
         "note",
       ] as const;
       const resumeOptionalStrings = ["subpath", "userMessageId"] as const;
-      const resumeNullableIds = [
-        "folderId",
-        "localRootId",
-        "localSubpath",
-      ] as const;
       expect(() =>
         assertShape(
           "sidecar:resume",
@@ -275,12 +266,16 @@ describe("ipc-validate（IPC 边界结构校验 · IPC-004）", () => {
             decision: "continue",
             note: "",
             userMessageId: "u",
-            folderId: null,
-            permissionAxes: { boundary: "computer" },
+            session: {
+              permissionAxes: { boundary: "computer" },
+              delegateMode: false,
+              folderId: null,
+              localRootId: null,
+              localSubpath: null,
+            },
           },
           resumeRequired,
           resumeOptionalStrings,
-          resumeNullableIds,
         ),
       ).not.toThrow();
     });

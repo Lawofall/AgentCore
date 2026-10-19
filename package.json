@@ -11,6 +11,8 @@
     "gen:types": "node scripts/gen-types.mjs",
     "sync:manual-corpus": "node scripts/sync-manual-corpus.mjs",
     "sync:manual-corpus:check": "node scripts/sync-manual-corpus.mjs --check",
+    "sync:rules": "node scripts/sync-agentcore-rules.mjs",
+    "sync:rules:check": "node scripts/sync-agentcore-rules.mjs --check",
     "check:doc-sections": "node scripts/check-doc-section-pointers.mjs",
     "bump-version": "node scripts/bump-version.mjs",
     "release:gate": "node scripts/release-gate.mjs",

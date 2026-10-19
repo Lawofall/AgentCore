@@ -52,12 +52,10 @@ def _to_response(view: ModelProfileView) -> LlmModelProfileView:
         recipe=view.recipe,  # type: ignore[arg-type]
         main=_slot(view.main),  # type: ignore[arg-type]
         worker=_slot(view.worker),  # type: ignore[arg-type]
-        background=_slot(view.background),  # type: ignore[arg-type]
-        vision=_slot(view.vision),  # type: ignore[arg-type]
         reasoning_effort=view.reasoning_effort,
         context_budget=view.context_budget,
         enabled_mcp_server_ids=list(view.enabled_mcp_server_ids),
-        omit_factory_catalog=view.omit_factory_catalog,
+        omitted_factory_skills=list(view.omitted_factory_skills),
         warnings=list(view.warnings),
     )
 
@@ -87,6 +85,7 @@ async def create_model_profile(
         user.user_id,
         name=body.name,
         set_as_default=body.set_as_default,
+        origin=body.origin,
     )
     logger.info(
         "llm_model_profile.created",
@@ -139,11 +138,9 @@ async def update_model_profile(
             profile_id,
             name=body.name,
             enabled_mcp_server_ids=body.enabled_mcp_server_ids,
-            omit_factory_catalog=body.omit_factory_catalog,
+            omitted_factory_skills=body.omitted_factory_skills,
             main=_as_slot(body.main) if "main" in fields else None,
             worker=_as_slot(body.worker) if "worker" in fields else None,
-            background=_as_slot(body.background) if "background" in fields else None,
-            vision=_as_slot(body.vision) if "vision" in fields else None,
             reasoning_effort=body.reasoning_effort,
             context_budget=body.context_budget,
             fields_set=fields,

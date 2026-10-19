@@ -19,6 +19,7 @@ from . import (
     observability,
     overview,
     platform_credentials,
+    redemption_codes,
     skill_store,
     system,
     usage,
@@ -41,5 +42,6 @@ router.include_router(observability.router)
 router.include_router(notices.router)
 router.include_router(beta_group.router)
 router.include_router(skill_store.router)
+router.include_router(redemption_codes.router)
 
 __all__ = ["router"]

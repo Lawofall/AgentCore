@@ -200,6 +200,29 @@ async def test_always_confirm_without_gate_is_denied_not_pushed():
     assert [e["status"] for e in ends] == ["always_confirm_no_gate"]
 
 
+async def test_cloud_worker_full_skips_git_push_card():
+    """完全权限：云端 worker 的 push 不再弹确认卡。硬拒仍由 breaker 另测。"""
+    reg = InteractionRegistry()
+    sink = EventSink()
+    gate = ApprovalGate(
+        sink=sink,
+        conversation_id="conv-1",
+        registry=reg,
+        timeout_seconds=5.0,
+        file_op_tools=approval_class_tool_names(),
+        delegation_grantable_tools=delegation_grantable_tool_names(),
+        permission_axes=WorkspaceBoundary.FULL,
+    )
+    denied = await _run_worker_gates(
+        gate,
+        sink,
+        arguments={"command": "git push origin feature/x"},
+        tool_call_id="push-full",
+    )
+    assert denied is None
+    assert not [e for e in _drain(sink) if e.type is EventType.APPROVAL_REQUIRED]
+
+
 def test_cloud_worker_skip_never_covers_always_confirm():
     """判据层：云端免逐次卡的判定本身必须先问恒确认。"""
     cloud = _CloudBackend()

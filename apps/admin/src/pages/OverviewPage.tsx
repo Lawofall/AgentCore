@@ -42,6 +42,9 @@ function fmtPct(rate: number): string {
 /** Recent errors preview shows only the freshest few — the full feed lives on 对话（仅有错误）. */
 const ERROR_PREVIEW_LIMIT = 5;
 
+/** Pulse tiles: two rows of three once the console is wide enough. */
+const METRIC_GRID = "grid grid-cols-2 gap-4 lg:grid-cols-3";
+
 /**
  * 总览: today's pulse + deploy snapshot + the 7-day turn trend + recent errors.
  * Cost trend and credential pool live on 供给; conversation index on 对话.
@@ -119,12 +122,17 @@ export function OverviewPage() {
           )}
 
           <Refreshing active={loading} className="flex flex-col gap-5">
-            <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-5">
+            <div className={METRIC_GRID}>
               <MetricCard
                 label="今日活跃用户"
                 value={fmtInt(data.active_users_today)}
                 sub={`共 ${fmtInt(data.users_active)} 活跃账号`}
                 onClick={() => navigate("/users")}
+              />
+              <MetricCard
+                label="当前在线"
+                value={fmtInt(data.users_online)}
+                sub="实时连接中的账号"
               />
               <MetricCard
                 label="今日回合"
@@ -204,8 +212,8 @@ export function OverviewPage() {
 function OverviewSkeleton() {
   return (
     <div className="flex flex-col gap-5">
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-5">
-        {Array.from({ length: 5 }, (_, i) => (
+      <div className={METRIC_GRID}>
+        {Array.from({ length: 6 }, (_, i) => (
           <TableSkeleton key={`tile-${i}`} rows={2} columns={1} />
         ))}
       </div>

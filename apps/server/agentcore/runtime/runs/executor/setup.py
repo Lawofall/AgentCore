@@ -244,7 +244,11 @@ async def _prepare_agent_node(
         # 成篇交接：空交不再硬拒；下游靠指针 / 缺席标注消费已有内容。
         handoff_requires_body=False,
         handoff_expects_landing=deliverable_expects_landing(deliverable),
-        accepts_images=model_accepts_images(priced_model or ""),
+        accepts_images=model_accepts_images(
+            priced_model or "",
+            declared=bool(base_ctx.accepts_images)
+            and (priced_model or "") == env.profiles.model_for("chat"),
+        ),
     )
     # 阶段2 嵌套子任务: hand this worker delegation tools when opted in.
     _trim_started = time.monotonic()

@@ -296,7 +296,7 @@ class ApprovalGate:
         APPROVE_ALWAYS may write a same-tool turn grant while still forcing the
         first card via the breaker entrance (read tools are not delegation/session
         covered). Structured ``git push`` / ``create_pr`` and
-        ``host(action=install_package)``
+        ``host`` package-manager installs and ``host(action=attach)``
         likewise always prompt (session / delegation / turn grants do not cover them).
         """
         always_confirm = _requires_always_confirm(tool_name, arguments)

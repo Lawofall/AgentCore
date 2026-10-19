@@ -14,6 +14,7 @@ from dataclasses import dataclass
 
 from agentcore.core.types import WorkspaceBoundary
 from agentcore.tools.builtin import build_worker_registry
+from agentcore.tools.builtin.delegate.schema import catalog_prefer_description
 from agentcore.tools.protocol import ToolSchema
 from agentcore.tools.registration import (
     AUDIENCE_CEO,
@@ -32,13 +33,18 @@ AVAILABLE_TO_WORKER = AUDIENCE_WORKER
 
 @dataclass(frozen=True)
 class CatalogTool:
-    """One tool in the capability catalog: schema + who may call it + catalog policy."""
+    """One tool in the capability catalog: schema + who may call it + catalog policy.
+
+    ``description_prefer`` is the root-CEO prefer-delegate schema description.
+    Empty except for ``delegate``. Nested captain variants are not catalogued.
+    """
 
     schema: ToolSchema
     available_to: tuple[str, ...]
     resident: bool
     summary: str
     blurb: str
+    description_prefer: str = ""
 
 
 def _policy_by_name() -> dict[str, tuple[bool, str, str]]:
@@ -91,6 +97,7 @@ def build_capability_catalog() -> list[CatalogTool]:
             resident=resident,
             summary=summary,
             blurb=blurb,
+            description_prefer=catalog_prefer_description(schema.name),
         )
 
     # Platform roster, not this session's boundary. Host is on ``computer``;

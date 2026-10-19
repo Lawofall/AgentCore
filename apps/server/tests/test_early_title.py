@@ -529,17 +529,9 @@ async def test_stream_chat_schedules_title_before_turn(monkeypatch):
             order.append("user_saved")
             return SimpleNamespace(id="um1")
 
-    class _BoardRepo:
-        def __init__(self, _session):
-            pass
-
-        async def get_by_conversation_id(self, *_a, **_k):
-            return None
-
     monkeypatch.setattr(turns_mod, "async_session_factory", lambda: _FakeSessionCM())
     monkeypatch.setattr(turns_mod, "ConversationRepository", _ConvRepo)
     monkeypatch.setattr(turns_mod, "MessageRepository", _MsgRepo)
-    monkeypatch.setattr(turns_mod, "TableRepository", _BoardRepo)
     monkeypatch.setattr(
         "agentcore.conversation.midflight_persist.MessageRepository",
         _MsgRepo,
@@ -547,13 +539,6 @@ async def test_stream_chat_schedules_title_before_turn(monkeypatch):
     monkeypatch.setattr(turns_mod, "resolve_local_binding", AsyncMock(return_value=None))
     monkeypatch.setattr(turns_mod, "resolve_profile_set", AsyncMock(return_value=None))
 
-    from agentcore.core.types import WorkspaceBoundary
-
-    monkeypatch.setattr(
-        turns_mod,
-        "resolve_permission_axes",
-        AsyncMock(return_value=WorkspaceBoundary.FOLDER),
-    )
     monkeypatch.setattr(
         turns_mod,
         "build_turn_backend",
@@ -612,17 +597,9 @@ async def test_stream_chat_skips_title_when_already_named(monkeypatch):
         async def create(self, **_kwargs):
             return SimpleNamespace(id="um1")
 
-    class _BoardRepo:
-        def __init__(self, _session):
-            pass
-
-        async def get_by_conversation_id(self, *_a, **_k):
-            return None
-
     monkeypatch.setattr(turns_mod, "async_session_factory", lambda: _FakeSessionCM())
     monkeypatch.setattr(turns_mod, "ConversationRepository", _ConvRepo)
     monkeypatch.setattr(turns_mod, "MessageRepository", _MsgRepo)
-    monkeypatch.setattr(turns_mod, "TableRepository", _BoardRepo)
     monkeypatch.setattr(
         "agentcore.conversation.midflight_persist.MessageRepository",
         _MsgRepo,
@@ -630,13 +607,6 @@ async def test_stream_chat_skips_title_when_already_named(monkeypatch):
     monkeypatch.setattr(turns_mod, "resolve_local_binding", AsyncMock(return_value=None))
     monkeypatch.setattr(turns_mod, "resolve_profile_set", AsyncMock(return_value=None))
 
-    from agentcore.core.types import WorkspaceBoundary
-
-    monkeypatch.setattr(
-        turns_mod,
-        "resolve_permission_axes",
-        AsyncMock(return_value=WorkspaceBoundary.FOLDER),
-    )
     monkeypatch.setattr(
         turns_mod,
         "build_turn_backend",

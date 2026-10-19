@@ -26,7 +26,6 @@ async def finish_resume_turn(
     audit_recorder,
     roster_writer,
     journal_writer,
-    vision_cost_runs: list | None = None,
     pre_pause_reasoning: str = "",
     ask_settled: bool = False,
 ) -> dict:
@@ -36,9 +35,6 @@ async def finish_resume_turn(
     ``join_segments``), then delegates the fold / citations / message_end / soft-fail
     stamp to :func:`settle_successful_turn` — same billing kernel as a fresh turn.
     The whole turn bills once here under the ORIGINAL ``message_id``.
-
-    ``vision_cost_runs`` are the resumed turn's 读图 ledger rows (role=vision),
-    collected off the shared ``ToolContext.cost_sink``.
 
     ``ask_settled`` is True when this resume answered an ask_user card: join then
     keeps only the post-resume body (do not splice leftover「请确认」prose).
@@ -62,7 +58,6 @@ async def finish_resume_turn(
         debate_tool=debate_tool,
         profile=profile,
         citations=citations,
-        vision_cost_sink=vision_cost_runs or [],
         sink=sink,
         fact_log=fact_log,
         audit_recorder=audit_recorder,

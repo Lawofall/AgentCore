@@ -8,7 +8,7 @@ import time
 
 from agentcore.attention import bind_attention_scope, reset_attention_scope
 from agentcore.core.logging import get_logger
-from agentcore.core.types import WorkspaceBoundary, new_id
+from agentcore.core.types import new_id
 from agentcore.llm.credentials import LLMCredentials
 from agentcore.llm.profiles import TurnProfiles as ProfileSet
 from agentcore.llm.profiles import turn_profiles_for_turn
@@ -42,6 +42,7 @@ from agentcore.runtime.suspension import (
     turn_history,
 )
 from agentcore.runtime.turn.latency import get_turn_latency
+from agentcore.runtime.turn.snapshot import ConversationSnapshot
 from agentcore.tools.ceo_toolset import _assemble_ceo_toolset  # noqa: F401 — test seam
 from agentcore.workspace.protocol import WorkspaceBackend
 
@@ -61,12 +62,9 @@ async def run_chat_pipeline(
     sink: EventSink,
     user_id: str,
     backend: WorkspaceBackend,
-    folder_id: str | None = None,
-    table_id: str | None = None,
-    table_selection: list[str] | None = None,
+    conversation: ConversationSnapshot,
     attachments: list[dict] | None = None,
     approvals_enabled: bool = True,
-    permission_axes: WorkspaceBoundary | None = None,
     profile_set: ProfileSet | None = None,
     llm_credentials: LLMCredentials | None = None,
     session_saver: SessionSaver | None = None,
@@ -77,9 +75,6 @@ async def run_chat_pipeline(
     message_id: str | None = None,
     x_client_platform: str | None = None,
     agent_mentions: list[dict] | None = None,
-    folder_binding_injected: bool = False,
-    folder_local_root_id: str | None = None,
-    folder_local_subpath: str | None = None,
     inherited_journal_entries: list[dict] | None = None,
 ) -> dict:
     """Run the full chat pipeline for a single user message.
@@ -96,17 +91,11 @@ async def run_chat_pipeline(
     went fail-closed, a call that genuinely needs a human (MCP / Host / 恒确认 / 熔断
     FORCE) is denied on this path instead of silently executing.
 
-    ``permission_axes`` is the conversation's permission mode
-    (安全权限与治理 · 会话级权限): file_write / command / host.
-    ask_user / plan_review / circuit-breakers are orthogonal. ``command=ask``
-    withholds the execution class at worker registry.
-
-    ``folder_id`` is the conversation's project (None for a bare/global chat): it selects
-    the memory SCOPE so a project conversation also gets that project's memory layer
-    injected (global + project), and ``consult`` searches both (Agent记忆与知识系统 §二).
-
-    ``table_id`` marks a 表格会话 so ``<表格>`` facts can render. ``table_selection`` is this
-    turn's selected row ids (not stored on the message).
+    ``conversation`` is the session snapshot (permission / 统筹 / folder / bind).
+    Cloud builds it from the conversation row; sidecar parses RPC ``session``.
+    The engine never loads those columns. ``folder_id`` selects memory SCOPE
+    (Agent记忆与知识系统 §二). ``permission_axes`` is the conversation boundary
+    (安全权限与治理 · 会话级权限).
 
     ``x_client_platform`` is the raw ``X-Client-Platform`` header (desktop / mobile-web /
     …). Gates the ``<工作区>`` desktop-online line. Open/bind folder is human-side
@@ -131,6 +120,12 @@ async def run_chat_pipeline(
     finalize appends this segment to that one stream instead of re-writing it.
     ``None`` = fresh turn.
     """
+    folder_id = conversation.folder_id
+    permission_axes = conversation.permission_axes
+    prefer_delegate = conversation.prefer_delegate
+    folder_binding_injected = conversation.folder_binding_injected
+    folder_local_root_id = conversation.folder_local_root_id
+    folder_local_subpath = conversation.folder_local_subpath
     profiles = turn_profiles_for_turn(profile_set, llm_credentials)
     message_id = message_id or new_id()
     # The CEO captain is the turn's root Run node (kind=captain): it owns the reply
@@ -244,8 +239,6 @@ async def run_chat_pipeline(
                 backend=backend,
                 sink=sink,
                 folder_id=folder_id,
-                table_id=table_id,
-                table_selection=table_selection,
                 attachments=attachments,
                 permission_axes=permission_axes,
                 llm_credentials=llm_credentials,
@@ -277,6 +270,7 @@ async def run_chat_pipeline(
                 folder_id=folder_id,
                 approvals_enabled=approvals_enabled,
                 permission_axes=permission_axes,
+                prefer_delegate=prefer_delegate,
                 profiles=profiles,
                 captain_run_id=captain_run_id,
                 message_id=message_id,
@@ -366,7 +360,6 @@ async def run_chat_pipeline(
                 message_id=message_id,
                 captain_run_id=captain_run_id,
                 captain_state=captain_state,
-                vision_cost_sink=prepared.vision_cost_sink,
                 sink=sink,
                 audit_recorder=audit_recorder,
                 roster_writer=roster_writer,
@@ -380,7 +373,6 @@ async def run_chat_pipeline(
             debate_tool=assembled.debate_tool,
             profile=profile,
             citations=citations,
-            vision_cost_sink=prepared.vision_cost_sink,
             sink=sink,
             fact_log=fact_log,
             audit_recorder=audit_recorder,

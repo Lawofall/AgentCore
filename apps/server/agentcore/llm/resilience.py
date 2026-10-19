@@ -42,8 +42,6 @@ LAYER_ORDER: tuple[ResilienceLayer, ...] = (
 EXTRA_COUNT_KEYS: tuple[str, ...] = (
     "stream_stall_salvage",
     "empty_response",
-    "web_search_cloud_fallback",
-    "web_search_cloud_fallback_failed",
 )
 
 COUNT_KEYS: tuple[str, ...] = LAYER_ORDER + EXTRA_COUNT_KEYS
@@ -61,8 +59,6 @@ _EVENT_LAYER: dict[str, ResilienceLayer] = {
 
 _EVENT_EXTRA: dict[str, str] = {
     "llm.empty_response": "empty_response",
-    "tool.web_search_cloud_fallback": "web_search_cloud_fallback",
-    "tool.web_search_cloud_fallback_failed": "web_search_cloud_fallback_failed",
 }
 
 

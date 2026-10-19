@@ -31,6 +31,7 @@ from agentcore.runtime.suspension.persistence import delete_paused_turn, save_pa
 from agentcore.runtime.turn.complete_log import log_chat_turn_complete
 from agentcore.runtime.turn.latency import bind_turn_latency, reset_turn_latency
 from agentcore.runtime.turn.runs import turn_runs
+from agentcore.runtime.turn.snapshot import ConversationSnapshot
 from agentcore.workspace.protocol import WorkspaceBackend
 
 logger = get_logger(__name__)
@@ -64,16 +65,13 @@ async def run_and_persist(
     conversation_id: str,
     user_message: str,
     user_id: str,
-    folder_id: str | None,
+    conversation: ConversationSnapshot,
     sink: EventSink,
     history: list[dict],
     attachments: list[dict] | None,
     backend: WorkspaceBackend,
     llm_credentials: LLMCredentials | None,
     profile_set: ProfileSet | None = None,
-    permission_axes=None,
-    table_id: str | None = None,
-    table_selection: list[str] | None = None,
     llm_supports_tools: bool | None = None,
     x_client_platform: str | None = None,
     agent_mentions: list[dict] | None = None,
@@ -88,6 +86,8 @@ async def run_and_persist(
     ``None`` only if the turn never produced a result (cancel / early abort paths
     that raise instead).
 
+    ``conversation`` is the session snapshot (permission / 统筹 / folder).
+
     ``continue_message_id`` runs this turn ON an existing assistant row instead of a
     freshly minted one (崩溃重驱恢复收口 · D5 归属原回合): the placeholder insert is
     skipped (the row is already there, still ``running``) and finalize's merging
@@ -98,6 +98,7 @@ async def run_and_persist(
     session_saver, session_loader = session_callbacks(conversation_id)
     suspension_saver, suspension_deleter = suspension_callbacks()
 
+    folder_id = conversation.folder_id
     continuing = bool(continue_message_id)
     message_id = continue_message_id or new_id()
     # attempt_id = this run of the turn (resume mints a fresh one); ≠ journal turn_id
@@ -279,12 +280,9 @@ async def run_and_persist(
                             sink=sink,
                             user_id=user_id,
                             backend=backend,
-                            folder_id=folder_id,
-                            table_id=table_id,
-                            table_selection=table_selection,
+                            conversation=conversation,
                             attachments=attachments,
                             llm_credentials=llm_credentials,
-                            permission_axes=permission_axes,
                             profile_set=profile_set,
                             session_saver=session_saver,
                             session_loader=session_loader,

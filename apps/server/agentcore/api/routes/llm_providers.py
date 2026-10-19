@@ -34,6 +34,7 @@ def _provider_to_response(view: ServiceProviderView) -> LlmProviderView:
         id=view.id,
         label=view.label,
         base_url=view.base_url,
+        vendor_id=view.vendor_id,
         status=view.status,
         masked_key=view.masked_key,
         supports_tools=view.supports_tools,
@@ -73,6 +74,7 @@ async def create_llm_provider(
         user.user_id,
         label=body.label,
         api_key=body.api_key,
+        vendor_id=body.vendor_id,
         base_url=body.base_url,
     )
     logger.info(
@@ -99,6 +101,7 @@ async def update_llm_provider(
         label=body.label,
         api_key=body.api_key,
         base_url=body.base_url,
+        vendor_id=body.vendor_id,
         fields_set=fields_set,
     )
     if "api_key" in fields_set and (body.api_key or "").strip():

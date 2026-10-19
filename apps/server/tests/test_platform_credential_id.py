@@ -2,7 +2,7 @@
 
 ``credential_source`` is only user/platform/vendor. The pool-member id is a
 stable alias or hash of (api_key, base_url) — never key plaintext / last-4 —
-and must not appear on user-visible SSE error context (Sub2API posture).
+and must not appear on user-visible SSE error context.
 """
 
 from __future__ import annotations

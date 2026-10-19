@@ -799,8 +799,15 @@ export function FileWorkbench({
                     >
                       {wsPanel === WS_VERSIONS_PATH ? (
                         <WorkspaceVersionsPanel
-                          wsId={t.wsId}
-                          name={panelWsName}
+                          ws={
+                            railWorkspaceByWsId.get(t.wsId) ?? {
+                              wsId: t.wsId,
+                              name: panelWsName,
+                              location: "cloud",
+                              rootId: null,
+                              subpath: "",
+                            }
+                          }
                         />
                       ) : wsPanel === WS_TRASH_PATH ? (
                         <WorkspaceTrashSection

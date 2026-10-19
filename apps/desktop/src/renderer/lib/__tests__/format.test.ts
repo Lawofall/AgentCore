@@ -6,6 +6,7 @@ import {
   formatBytesPerSecond,
   formatCompact,
   formatCost,
+  formatCostBill,
   formatDateDivider,
   formatDisplayCost,
   formatDownloadProgress,
@@ -16,9 +17,12 @@ import {
   formatMessageTimeOfDay,
   formatOutputSpeed,
   formatQuotaRemaining,
+  formatTokenFlow,
   formatTtft,
   formatUsageCount,
   pickCostMoney,
+  splitAccountSpend,
+  splitCostMoney,
   stripDurationFaceSuffix,
   sumChunkChars,
   tailText,
@@ -64,56 +68,73 @@ describe("formatBytesPerSecond", () => {
 });
 
 describe("formatCost", () => {
-  it("converts nano-CNY to ¥, rounded to fen", () => {
-    expect(formatCost(120_000_000)).toBe("¥0.12");
-    expect(formatCost(YUAN)).toBe("¥1.00");
+  it("converts nano selling-CNY to 积分", () => {
+    expect(formatCost(120_000_000)).toBe("0.12 积分");
+    expect(formatCost(YUAN)).toBe("1.00 积分");
   });
 
-  it("shows「—」for zero / negative (无花销，不显 ¥0.00) — §7.5", () => {
+  it("writes BYOK CNY as ¥", () => {
+    expect(formatCost(YUAN, "CNY", "cash")).toBe("¥1.00");
+    expect(formatCost(1000, "CNY", "cash")).toBe("<¥0.01");
+  });
+
+  it("shows「—」for zero / negative (无花销，不显 0.00 积分) — §7.5", () => {
     expect(formatCost(0)).toBe("—");
     expect(formatCost(-5)).toBe("—");
   });
 
-  it("shows「<¥0.01」for a cost that rounds below one fen", () => {
-    expect(formatCost(1000)).toBe("<¥0.01");
+  it("shows「<0.01 积分」for a cost that rounds below one fen", () => {
+    expect(formatCost(1000)).toBe("<0.01 积分");
+  });
+
+  it("keeps $ for leftover USD estimates", () => {
+    expect(formatCost(YUAN, "USD")).toBe("$1.00");
   });
 });
 
 describe("formatQuotaRemaining", () => {
-  it("shows ¥0.00 when the allowance is exhausted (not —)", () => {
-    expect(formatQuotaRemaining(0)).toBe("¥0.00");
-    expect(formatQuotaRemaining(-1)).toBe("¥0.00");
+  it("shows 0.00 积分 when the allowance is exhausted (not —)", () => {
+    expect(formatQuotaRemaining(0)).toBe("0.00 积分");
+    expect(formatQuotaRemaining(-1)).toBe("0.00 积分");
   });
 
   it("reuses cost formatting for a positive remainder", () => {
-    expect(formatQuotaRemaining(YUAN)).toBe("¥1.00");
-    expect(formatQuotaRemaining(1000)).toBe("<¥0.01");
+    expect(formatQuotaRemaining(YUAN)).toBe("1.00 积分");
+    expect(formatQuotaRemaining(1000)).toBe("<0.01 积分");
   });
 });
 
-describe("formatDisplayCost / pickCostMoney (BYOK ≈)", () => {
-  it("prefixes ≈ only for estimates; billed stays plain ¥", () => {
-    expect(formatDisplayCost(YUAN, false)).toBe("¥1.00");
-    expect(formatDisplayCost(YUAN, true)).toBe("≈¥1.00");
+describe("formatDisplayCost / pickCostMoney (BYOK ¥)", () => {
+  it("prefixes ≈ only for leftover USD; billed stays 积分; BYOK CNY is ¥", () => {
+    expect(formatDisplayCost(YUAN, false)).toBe("1.00 积分");
+    expect(formatDisplayCost(YUAN, false, "CNY", "cash")).toBe("¥1.00");
+    expect(formatDisplayCost(YUAN, true, "USD")).toBe("≈$1.00");
     expect(formatDisplayCost(0, true)).toBe("—");
   });
 
-  it("picks billed total over estimated_total", () => {
-    expect(pickCostMoney({ total: 100, estimated_total: 999 })).toEqual({
+  it("splits a mixed turn whose total already includes the BYOK copy", () => {
+    expect(splitCostMoney({ total: 1099, estimated_total: 999 })).toEqual({
+      billed: {
+        nano: 100,
+        estimated: false,
+        currency: "CNY",
+        unit: "credit",
+      },
+      extra: { nano: 999, estimated: false, currency: "CNY", unit: "cash" },
+    });
+    expect(pickCostMoney({ total: 1099, estimated_total: 999 })).toEqual({
       nano: 100,
       estimated: false,
       currency: "CNY",
+      unit: "credit",
     });
     expect(pickCostMoney({ total: 0, estimated_total: 999 })).toEqual({
       nano: 999,
       estimated: false,
       currency: "CNY",
+      unit: "cash",
     });
-    expect(pickCostMoney({ total: 0 })).toEqual({
-      nano: 0,
-      estimated: false,
-      currency: "CNY",
-    });
+    expect(pickCostMoney({ total: 0 })).toBeNull();
   });
 
   it("treats total > 0 as billed (not estimate), even with pricing_source", () => {
@@ -121,7 +142,43 @@ describe("formatDisplayCost / pickCostMoney (BYOK ≈)", () => {
       nano: 100,
       estimated: false,
       currency: "CNY",
+      unit: "credit",
     });
+  });
+
+  it("account windows keep billed and BYOK exclusive (do not subtract)", () => {
+    expect(
+      splitAccountSpend({
+        billed: 100,
+        extra: 999,
+        billedCurrency: "CNY",
+        extraCurrency: "CNY",
+      }),
+    ).toEqual({
+      billed: {
+        nano: 100,
+        estimated: false,
+        currency: "CNY",
+        unit: "credit",
+      },
+      extra: { nano: 999, estimated: false, currency: "CNY", unit: "cash" },
+    });
+    expect(
+      formatCostBill(
+        {
+          nano: YUAN,
+          estimated: false,
+          currency: "CNY",
+          unit: "credit",
+        },
+        {
+          nano: 40_000_000,
+          estimated: false,
+          currency: "CNY",
+          unit: "cash",
+        },
+      ),
+    ).toBe("1.00 积分 · ¥0.04");
   });
 
   // 遗留 USD 估算走 estimated_currency；缺省才回落记账币种。币种必须随金额交给调用方。
@@ -133,10 +190,20 @@ describe("formatDisplayCost / pickCostMoney (BYOK ≈)", () => {
         estimated_total: 999,
         estimated_currency: "USD",
       }),
-    ).toEqual({ nano: 999, estimated: true, currency: "USD" });
+    ).toEqual({
+      nano: 999,
+      estimated: true,
+      currency: "USD",
+      unit: "cash",
+    });
     expect(
       pickCostMoney({ total: 0, currency: "USD", estimated_total: 999 }),
-    ).toEqual({ nano: 999, estimated: true, currency: "USD" });
+    ).toEqual({
+      nano: 999,
+      estimated: true,
+      currency: "USD",
+      unit: "cash",
+    });
   });
 });
 
@@ -156,7 +223,7 @@ describe("formatAlignedCostParts", () => {
   it("leaves parts unchanged when independent rounding already matches", () => {
     expect(
       formatAlignedCostParts(140_000_000, 20_000_000, 160_000_000),
-    ).toEqual({ input: "¥0.14", output: "¥0.02" });
+    ).toEqual({ input: "0.14 积分", output: "0.02 积分" });
   });
 });
 
@@ -167,6 +234,18 @@ describe("formatCompact", () => {
     expect(formatCompact(8200)).toBe("8.2k");
     expect(formatCompact(820_000)).toBe("820.0k");
     expect(formatCompact(2_000_000)).toBe("2.0M");
+  });
+});
+
+describe("formatTokenFlow", () => {
+  it("joins input and output compact counts", () => {
+    expect(formatTokenFlow(6184, 4716)).toBe("↓ 6.2k ↑ 4.7k");
+  });
+
+  it("appends hit rate only when provided and positive", () => {
+    expect(formatTokenFlow(100, 20, 48)).toBe("↓ 100 ↑ 20 · 命中 48%");
+    expect(formatTokenFlow(100, 20, null)).toBe("↓ 100 ↑ 20");
+    expect(formatTokenFlow(100, 20, 0)).toBe("↓ 100 ↑ 20");
   });
 });
 

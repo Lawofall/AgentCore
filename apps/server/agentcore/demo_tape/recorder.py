@@ -21,8 +21,8 @@ Shapes
 
   Document discriminator ``kind: demo_tape_recording`` is unrelated to SSE event
   fields. Event elements align with the online SSE / conformance contract
-  (``type`` + ``timestamp``) plus pacing supersets (``t_ms``). Legacy v1
-  recordings used ``kind``/``ts``; ``load_recording`` alias-compat on read.
+  (``type`` + ``timestamp``) plus pacing supersets (``t_ms``). v1 ``kind``/``ts``
+  已硬切，读时不再别名。
 - ``t_ms`` is the offset from the segment's start; ``wall_t0_ms`` anchors segments
   on one global timeline (the human decision gap at a pause survives as a real gap).
 

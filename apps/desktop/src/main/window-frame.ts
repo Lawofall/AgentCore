@@ -90,6 +90,14 @@ export function getFramePreset(): WindowFramePreset {
   return currentPreset;
 }
 
+/** 打包安装包不恢复拍摄锁：标题栏没有解锁入口，避免开发态留下的比例把用户窗锁死。 */
+export function resolveStartupFramePreset(
+  saved: WindowFramePreset,
+  packaged: boolean,
+): WindowFramePreset {
+  return packaged ? "free" : saved;
+}
+
 /** 对已有窗口应用拍摄比例（启动恢复与 IPC 共用）。 */
 export function applyFramePresetToWindow(
   window: BrowserWindow,
@@ -114,11 +122,11 @@ export function applyFramePresetToWindow(
 }
 
 /**
- * 注册拍摄比例 IPC，并在启动时恢复上次选择（若有）。
+ * 注册拍摄比例 IPC，并在未打包时恢复上次选择（若有）。
  * apply 按 sender 窗路由（主窗 / 真 OS 浮窗均可）；IPC 句柄全局只注册一次。
  */
 export function registerWindowFrameIpc(window: BrowserWindow): void {
-  currentPreset = readSavedPreset();
+  currentPreset = resolveStartupFramePreset(readSavedPreset(), app.isPackaged);
 
   if (!frameIpcRegistered) {
     frameIpcRegistered = true;

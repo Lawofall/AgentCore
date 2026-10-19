@@ -123,7 +123,7 @@ async def _resolve_inference_credentials(
     cost_role: str | None = None,
     requested_model: str | None = None,
 ) -> ModelConfig:
-    from agentcore.db.repositories import ConversationRepository
+    from agentcore.db.repositories import ConversationRepository, UserRepository
     from agentcore.llm.catalog import validate_model_choice
     from agentcore.llm.resolve import (
         resolve_account_default_model,
@@ -146,12 +146,16 @@ async def _resolve_inference_credentials(
         selection = await resolve_account_default_model(session, user.user_id)
     explicit = _explicit_selection_from_requested(requested_model)
     if explicit is not None:
+        enabled: tuple[str, ...] = ()
+        if session is not None:
+            enabled = await UserRepository(session).enabled_model_refs(user.user_id)
         ok = await validate_model_choice(
             session,
             user.user_id,
             explicit.model,
             explicit.origin,
             explicit.provider_id,
+            enabled_refs=enabled,
         )
         if not ok:
             raise ValidationError(
@@ -198,7 +202,7 @@ async def _resolve_inference_credentials(
             label=credentials.label,
         )
     else:
-        # Per-model platform credential (运营中转「一 key 一模型」): the selected model's
+        # Per-model platform credential (「一 key 一模型」): the selected model's
         # override key/base_url win, else the shared default.
         platform = platform_llm_credentials(model=selection.model)
         if platform is None:
@@ -238,8 +242,8 @@ async def _record_proxy_spend(
     ``call_id`` UNIQUE dedupes at-least-once retries. See ``billing.proxy_spend_queue``.
 
     ``role=vision`` is the same fence as in-process ``call_meter`` (``vision.*``):
-    读图 is priced onto the turn ``cost_runs`` sink (``vision_run_cost``) and
-    folded at finalize. Metering the proxied HTTP call would double-bill.
+    live 读图 rides the main model; historical ``cost_events.role=vision`` still
+    fold at settle. Metering the proxied HTTP call would double-bill.
     """
     from agentcore.billing.proxy_spend_queue import get_proxy_spend_queue
     from agentcore.runtime.costing import ROLE_VISION

@@ -340,7 +340,7 @@ export function ConversationItem({
             }
             commitEdit();
           }}
-          className="h-7 min-w-0 flex-1 bg-transparent px-1 text-sm text-sidebar-accent-foreground focus:outline-none max-md:min-h-11 pointer-coarse:min-h-11"
+          className="h-7 min-w-0 flex-1 bg-transparent px-1 text-sm text-sidebar-list focus:outline-none max-md:min-h-11 pointer-coarse:min-h-11"
         />
       </div>
     );
@@ -427,7 +427,7 @@ export function ConversationItem({
                     showCloudIcon && <ConversationCloudIcon />
                   )}
                 </span>
-                <span className="min-w-0 flex-1 truncate">
+                <span className="min-w-0 flex-1 truncate text-sidebar-list">
                   {conversation.title}
                 </span>
               </div>

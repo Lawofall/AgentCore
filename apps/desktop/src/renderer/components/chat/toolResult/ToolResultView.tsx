@@ -10,6 +10,7 @@ import {
   hasDebriefDetails,
   isSuccessfulHandoff,
 } from "@/components/chat/handoffBrief";
+import { DiffRows } from "@/components/diff/DiffRows";
 import { PromptDocument } from "@/components/prompt/PromptDocument";
 import { cleanSourceTitle } from "@/lib/citations";
 import type {
@@ -35,7 +36,7 @@ import {
   codeDiagnosticsPeek,
   extractCodeDiagnostics,
 } from "./codeDiagnostics";
-import { type DiffLine, lineDiff, lineDiffCounts } from "./diff";
+import { lineDiff, lineDiffCounts } from "./diff";
 import {
   isPartialFileReadWindow,
   parseFileReadWindow,
@@ -64,8 +65,8 @@ export interface ToolResultData {
   /** Live stdout/stderr while the call is still running. Absent once display is authority. */
   liveStdout?: string;
   liveStderr?: string;
-  /** Conversation the call belongs to — only the browser result uses it, to lazy-fetch
-   * its key-frame from that conversation's workspace. Absent everywhere else. */
+  /** Conversation the call belongs to — browser / host GUI key-frames lazy-fetch
+   * from that conversation's workspace. */
   conversationId?: string | null;
 }
 
@@ -565,18 +566,6 @@ function ConversationLogResult({ result }: { result: string }) {
   );
 }
 
-function diffSign(type: DiffLine["type"]): string {
-  if (type === "add") return "+";
-  if (type === "del") return "-";
-  return " ";
-}
-
-function diffRowClass(type: DiffLine["type"]): string {
-  if (type === "add") return "bg-success/10 text-foreground";
-  if (type === "del") return "bg-destructive/10 text-foreground";
-  return "text-muted-foreground";
-}
-
 /** Red/green line diff for an edit, derived from the call arguments
  * (old_string → new_string) the client already has — no backend echo needed.
  * Path and +/- live on the ToolLine title (toolLineTitleStat); this card is
@@ -592,20 +581,7 @@ function FileEditDiff({
   return (
     <div className="mt-1 overflow-hidden rounded-lg border border-border">
       <div className="max-h-72 overflow-auto font-mono text-xs leading-relaxed">
-        {lines.map((l, i) => (
-          <div
-            // biome-ignore lint/suspicious/noArrayIndexKey: a diff render is a stable, positional list — the index is the natural key and rows never reorder within a render.
-            key={i}
-            className={`flex ${diffRowClass(l.type)}`}
-          >
-            <span className="w-5 shrink-0 select-none text-center text-muted-foreground/50">
-              {diffSign(l.type)}
-            </span>
-            <span className="whitespace-pre-wrap break-words pr-2">
-              {l.text || " "}
-            </span>
-          </div>
-        ))}
+        <DiffRows lines={lines} />
       </div>
     </div>
   );
@@ -787,7 +763,24 @@ function renderRichToolResult(data: ToolResultData): ReactNode {
     );
   }
   if (isHostDisplay(data.display)) {
-    return <TextResult result={data.display.body} status={data.status} />;
+    const frame = data.display.frame?.trim() ?? "";
+    return (
+      <>
+        <TextResult result={data.display.body} status={data.status} />
+        {frame ? (
+          <BrowserResult
+            display={{
+              kind: "browser",
+              action: data.display.action,
+              url: "",
+              title: data.display.title,
+              frame,
+            }}
+            conversationId={data.conversationId ?? null}
+          />
+        ) : null}
+      </>
+    );
   }
   if (isFileEdit(data)) {
     return (

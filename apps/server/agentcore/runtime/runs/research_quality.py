@@ -171,8 +171,6 @@ EVIDENCE_QUALITY_KEY = "evidence_quality"
 ACADEMIC_USABLE_COUNT_KEY = "academic_usable_count"
 # Align with tools.builtin.web.relevance.SEARCH_POLICY_ACADEMIC_LITERATURE.
 SEARCH_POLICY_ACADEMIC_LITERATURE = "academic_literature"
-# Legacy alias kept for older stamps / fixtures.
-SEARCH_POLICY_ACADEMIC_EVIDENCE = SEARCH_POLICY_ACADEMIC_LITERATURE
 EVIDENCE_QUALITY_POOR = "poor"
 
 # 有检索痕迹但学术可用源极少 → 近零误报：至少若干非学术 citation 才认「搜了但水」。

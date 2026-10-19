@@ -104,9 +104,6 @@ class SectionOrder(IntEnum):
     # keep their prefix-cache order.
     PRIOR_FUTILE_RETRIES = 862
     ATTACHMENT = 900
-    # Per-turn 多维表格 facts + optional row selection. After attachments; empty
-    # text is dropped.
-    TABLE_FACTS = 905
     # Worker opening tail (executor ``worker_turn`` observe). Not used on the CEO
     # turn assembler — numeric values sit after the CEO tail so a mistaken add
     # cannot reorder CEO sections.

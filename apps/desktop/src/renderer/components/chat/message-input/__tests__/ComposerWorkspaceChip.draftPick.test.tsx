@@ -187,10 +187,12 @@ afterEach(() => {
 describe("DraftChip pick view · 选地方", () => {
   it("第一屏并列本地对话和云端对话，不铺六条动词", () => {
     const menu = within(openPicker());
-    expect(menu.getByRole("button", { name: "本地对话" })).toBeTruthy();
-    expect(menu.getByRole("button", { name: "云端对话" })).toBeTruthy();
+    expect(menu.getByRole("button", { name: /本地对话/ })).toBeTruthy();
+    expect(menu.getByRole("button", { name: /云端对话/ })).toBeTruthy();
     expect(menu.getByRole("button", { name: "新建或加入…" })).toBeTruthy();
-    expect(menu.getByText("了解区别")).toBeTruthy();
+    expect(menu.getByText("改这台电脑上的文件")).toBeTruthy();
+    expect(menu.getByText("关电脑、手机网页也能接着改")).toBeTruthy();
+    expect(menu.queryByText("了解区别")).toBeNull();
 
     for (const buried of [
       "云上做完再写入",
@@ -204,9 +206,35 @@ describe("DraftChip pick view · 选地方", () => {
     expect(menu.queryByText("在「我的文件」里新建文件夹")).toBeNull();
   });
 
+  // 防回潮：第一屏文案曾抄设计文档，把实现词漏给用户。
+  const BANNED = [
+    "ModeControl",
+    "Composer",
+    "sidecar",
+    "云桌",
+    "过桥",
+    "本机传统",
+    "遗留",
+    "后台云端",
+    "通道",
+    "合回",
+    "云协作",
+    "≠",
+  ];
+
+  it("第一屏不出现代码符号与内部黑话", () => {
+    const text = (openPicker().textContent ?? "").toLowerCase();
+    for (const word of BANNED) {
+      expect(
+        text.includes(word.toLowerCase()),
+        `文案里不该出现「${word}」`,
+      ).toBe(false);
+    }
+  });
+
   it("点本地对话走本机草稿", () => {
     const menu = within(openPicker());
-    fireEvent.click(menu.getByRole("button", { name: "本地对话" }));
+    fireEvent.click(menu.getByRole("button", { name: /本地对话/ }));
     expect(useFoldersStore.getState().draftWorkspaceIntent).toEqual({
       kind: "quick_local",
     });
@@ -214,7 +242,7 @@ describe("DraftChip pick view · 选地方", () => {
 
   it("点云端对话走云草稿", () => {
     const menu = within(openPicker());
-    fireEvent.click(menu.getByRole("button", { name: "云端对话" }));
+    fireEvent.click(menu.getByRole("button", { name: /云端对话/ }));
     expect(useFoldersStore.getState().draftWorkspaceIntent).toEqual({
       kind: "quick_cloud",
     });
@@ -230,7 +258,6 @@ describe("DraftChip pick view · 选地方", () => {
 
     expect(precedes(menu.getByText("我的文件"), separator)).toBe(true);
     expect(precedes(separator, menu.getByText("新建或加入…"))).toBe(true);
-    expect(precedes(separator, menu.getByText("了解区别"))).toBe(true);
   });
 
   it("新建或加入展开新建、Git、从本机加入", () => {
@@ -242,8 +269,8 @@ describe("DraftChip pick view · 选地方", () => {
     expect(menu.getByRole("button", { name: "新建文件夹" })).toBeTruthy();
     expect(menu.getByRole("button", { name: "从 Git 克隆" })).toBeTruthy();
     expect(menu.getByRole("button", { name: "从本机加入" })).toBeTruthy();
-    expect(menu.queryByRole("button", { name: "云端对话" })).toBeNull();
-    expect(menu.queryByRole("button", { name: "本地对话" })).toBeNull();
+    expect(menu.queryByRole("button", { name: /云端对话/ })).toBeNull();
+    expect(menu.queryByRole("button", { name: /本地对话/ })).toBeNull();
   });
 
   it("从本机加入选完路径即直接改", async () => {
@@ -295,8 +322,10 @@ describe("DraftChip pick view · 选地方", () => {
     const content = openPicker();
     const menu = within(content);
 
-    expect(menu.getByRole("button", { name: "云端对话" })).toBeTruthy();
-    expect(menu.queryByRole("button", { name: "本地对话" })).toBeNull();
+    expect(menu.getByRole("button", { name: /云端对话/ })).toBeTruthy();
+    expect(menu.getByText("关电脑、手机网页也能接着改")).toBeTruthy();
+    expect(menu.queryByRole("button", { name: /本地对话/ })).toBeNull();
+    expect(menu.queryByText("改这台电脑上的文件")).toBeNull();
     expect(menu.getByRole("button", { name: "新建文件夹" })).toBeTruthy();
     expect(menu.queryByText("新建或加入…")).toBeNull();
     expect(menu.queryByText("从本机加入")).toBeNull();

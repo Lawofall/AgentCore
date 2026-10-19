@@ -72,6 +72,12 @@ def test_every_catalog_tool_has_usable_metadata():
         assert blurb != schema.name, schema.name
         assert blurb != schema.description.strip(), schema.name
         assert len(blurb) <= 80, (schema.name, blurb)
+        assert isinstance(entry.description_prefer, str)
+        if schema.name == "delegate":
+            assert entry.description_prefer
+            assert entry.description_prefer != schema.description
+        else:
+            assert entry.description_prefer == ""
 
 
 def test_catalog_has_no_duplicate_tools():
@@ -105,6 +111,22 @@ def test_ceo_orchestration_tools_are_present_and_ceo_only():
     for name in _CEO_ORCHESTRATION:
         assert name in entries, f"{name} missing from catalog"
         assert entries[name].available_to == (AVAILABLE_TO_CEO,)
+
+
+def test_delegate_catalog_exposes_root_prefer_not_nested():
+    from agentcore.tools.builtin.delegate.schema import (
+        DELEGATE_DESCRIPTION,
+        DELEGATE_DESCRIPTION_PREFER,
+        NESTED_DELEGATE_DESCRIPTION,
+        NESTED_DELEGATE_DESCRIPTION_PREFER,
+    )
+
+    entry = _by_name()["delegate"]
+    assert entry.schema.description == DELEGATE_DESCRIPTION
+    assert entry.description_prefer == DELEGATE_DESCRIPTION_PREFER
+    assert NESTED_DELEGATE_DESCRIPTION not in entry.schema.description
+    assert NESTED_DELEGATE_DESCRIPTION not in entry.description_prefer
+    assert NESTED_DELEGATE_DESCRIPTION_PREFER not in entry.description_prefer
 
 
 def test_consult_is_shared_between_ceo_and_worker():

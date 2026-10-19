@@ -103,7 +103,6 @@ export const TOOL_LABELS: Record<string, string> = {
   md_to_docx: "Export Word",
   md_to_pdf: "Export PDF",
   md_export: "Export document",
-  read_image: "Read image",
   code_diagnostics: "Check types",
   // CEO captain tools (surfaced by the bubble's tool_progress / process timeline).
   delegate: "Delegate",

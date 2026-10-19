@@ -1,7 +1,8 @@
-import { Badge, CatalogIconShell } from "@/components/ui";
+import { Badge, CatalogIconShell, SegmentedControl } from "@/components/ui";
 import { catalogCategoryColorVar } from "@/lib/catalogColors";
 import type { CapabilityTool } from "@/services/capabilities";
 import { Wrench } from "lucide-react";
+import { useState } from "react";
 import { FACE_META, RESIDENT_LABEL } from "./catalogMeta";
 
 type ToolParam = {
@@ -9,6 +10,13 @@ type ToolParam = {
   description: string;
   required: boolean;
 };
+
+type DelegateGuide = "default" | "prefer";
+
+const DELEGATE_GUIDE_ITEMS = [
+  { value: "default" as const, label: "注意力尺" },
+  { value: "prefer" as const, label: "优先派" },
+];
 
 export function toolGuideParams(tool: CapabilityTool): ToolParam[] {
   const schema = tool.parameters;
@@ -36,6 +44,10 @@ export function toolGuideParams(tool: CapabilityTool): ToolParam[] {
   });
 }
 
+function preferGuide(tool: CapabilityTool): string {
+  return tool.description_prefer?.trim() ?? "";
+}
+
 /** Inspector for an out-of-the-box tool. Lead = schema description; params; no schema dump. */
 export function ToolInspector({
   tool,
@@ -50,7 +62,13 @@ export function ToolInspector({
   const Icon = meta?.icon ?? Wrench;
   const colorVar = catalogCategoryColorVar(tool.face);
   const params = toolGuideParams(tool);
-  const blurb = (tool.description || tool.summary).trim();
+  const prefer = preferGuide(tool);
+  const showSwitch = Boolean(prefer);
+  const [guide, setGuide] = useState<DelegateGuide>("default");
+  const blurb = (
+    (showSwitch && guide === "prefer" ? prefer : tool.description) ||
+    tool.summary
+  ).trim();
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -84,10 +102,21 @@ export function ToolInspector({
         {hideChrome ? (
           <p className="font-mono text-sm text-foreground">{tool.name}</p>
         ) : null}
+        {showSwitch ? (
+          <SegmentedControl
+            aria-label="委派规则"
+            value={guide}
+            onChange={setGuide}
+            items={DELEGATE_GUIDE_ITEMS}
+            fit
+            className={hideChrome ? "mt-3" : undefined}
+          />
+        ) : null}
         {blurb ? (
           <p
+            data-testid="tool-face-guide-body"
             className={
-              hideChrome
+              hideChrome || showSwitch
                 ? "mt-3 text-sm leading-relaxed text-foreground"
                 : "text-sm leading-relaxed text-foreground"
             }

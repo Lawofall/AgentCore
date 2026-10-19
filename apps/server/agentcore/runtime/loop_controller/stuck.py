@@ -17,7 +17,7 @@ from .types import (
 
 
 class StuckInterventionMixin:
-    """Sliding-window stuck patterns + unproductive/delivery-idle ladders."""
+    """Sliding-window stuck patterns + unproductive / investigation ladders."""
 
     # Declared on LoopController.__init__; listed for type-checkers.
     _window: int
@@ -35,14 +35,6 @@ class StuckInterventionMixin:
     _same_target_investigation_streak: int
     _expects_landing: bool
     _landing_succeeded: bool
-    _delivery_idle_nudge_rounds: int
-    _delivery_idle_narrow_rounds: int
-    _delivery_idle_recon: bool
-    _delivery_idle_report: bool
-    _idle_investigation_rounds: int
-    _delivery_idle_nudged: bool
-    _delivery_idle_narrowed: bool
-    _delivery_idle_narrow_apply_pending: bool
     _validation_thrash_latched: bool
 
     def note_round_productivity(
@@ -101,74 +93,6 @@ class StuckInterventionMixin:
     def landing_succeeded(self) -> bool:
         """True once a product landing write succeeded."""
         return self._landing_succeeded
-
-    @property
-    def delivery_idle_nudge_rounds(self) -> int:
-        """Configured soft nudge threshold (0 = off). Product factory always 0."""
-        return self._delivery_idle_nudge_rounds
-
-    @property
-    def delivery_idle_narrow_rounds(self) -> int:
-        """Configured tool-narrow threshold (0 = off). Factory never arms files-expected."""
-        return self._delivery_idle_narrow_rounds
-
-    @property
-    def delivery_idle_recon(self) -> bool:
-        """True when soft nudge uses recon (conclude) copy, not write-disk copy."""
-        return self._delivery_idle_recon
-
-    @property
-    def delivery_idle_report(self) -> bool:
-        """Compat flag for report-landing copy; factory never sets this."""
-        return self._delivery_idle_report
-
-    @property
-    def delivery_idle_rounds(self) -> int:
-        """Consecutive investigation-only rounds with no landing (delivery-idle clock)."""
-        return self._idle_investigation_rounds
-
-    @property
-    def delivery_idle_nudged(self) -> bool:
-        """True after the soft delivery-idle nudge was injected."""
-        return self._delivery_idle_nudged
-
-    @property
-    def delivery_idle_narrowed(self) -> bool:
-        """True after the delivery-idle narrow steer was latched."""
-        return self._delivery_idle_narrowed
-
-    def delivery_idle_nudge_due(self) -> bool:
-        """True when idle rounds hit the soft nudge bar (one-shot)."""
-        bar = self._delivery_idle_nudge_rounds
-        if bar <= 0 or self._landing_succeeded or self._delivery_idle_nudged:
-            return False
-        if self._delivery_idle_narrowed:
-            return False
-        return self._idle_investigation_rounds >= bar
-
-    def mark_delivery_idle_nudged(self) -> None:
-        """Latch the one-shot delivery-idle soft nudge."""
-        self._delivery_idle_nudged = True
-
-    def delivery_idle_narrow_due(self) -> bool:
-        """True when idle rounds hit the tool-narrow bar (one-shot; not FINALIZE)."""
-        bar = self._delivery_idle_narrow_rounds
-        if bar <= 0 or self._landing_succeeded or self._delivery_idle_narrowed:
-            return False
-        return self._idle_investigation_rounds >= bar
-
-    def mark_delivery_idle_narrowed(self) -> None:
-        """Latch narrow steer + pending allowlist apply for the react loop."""
-        self._delivery_idle_narrowed = True
-        self._delivery_idle_nudged = True
-        self._delivery_idle_narrow_apply_pending = True
-
-    def take_delivery_idle_narrow_apply(self) -> bool:
-        """Consume one-shot pending tool-surface narrow (loop applies whitelist)."""
-        if not self._delivery_idle_narrow_apply_pending:
-            return False
-        self._delivery_idle_narrow_apply_pending = False
-        return True
 
     def convergence_action(self) -> Intervention:
         """Over-investigation finalize: same-target spinning; leftover absolute cap.

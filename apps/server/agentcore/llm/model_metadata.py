@@ -165,7 +165,7 @@ _METADATA: dict[str, ModelMeta] = {
         capabilities=frozenset({CAPABILITY_TOOLS}),
         context_length=128_000,
     ),
-    # Platform vision default (VISION_MODEL); curated priced but keep off PLATFORM_MODELS.
+    # Historical role=vision ledger id; curated priced but keep off PLATFORM_MODELS.
     "kimi-k2.5": ModelMeta(
         display_name="Kimi K2.5",
         vendor="Moonshot",
@@ -203,13 +203,25 @@ _METADATA: dict[str, ModelMeta] = {
         capabilities=frozenset({CAPABILITY_TOOLS}),
         context_length=8_000,
     ),
-    # Platform relay default id (config/platform.py PLATFORM_MODEL). GLM-5.2 on
-    # the operator's中转 upstream; curated as 智谱 AI for catalog display.
+    # Unpriced-fallback id (pricing._DEFAULT_MODEL). Curated as 智谱 AI for display.
     "glm-5.2": ModelMeta(
         display_name="GLM-5.2",
         vendor="智谱 AI",
         capabilities=frozenset({CAPABILITY_TOOLS, CAPABILITY_REASONING}),
         context_length=128_000,
+    ),
+    "glm-5.3": ModelMeta(
+        display_name="GLM-5.3",
+        vendor="智谱 AI",
+        capabilities=frozenset({CAPABILITY_TOOLS, CAPABILITY_REASONING}),
+        context_length=1_000_000,
+    ),
+    # Exact so family-prefix does not collapse to「GLM-5.3 · flash」.
+    "glm-5.3-flash": ModelMeta(
+        display_name="GLM-5.3 Flash",
+        vendor="智谱 AI",
+        capabilities=frozenset({CAPABILITY_TOOLS, CAPABILITY_REASONING}),
+        context_length=1_000_000,
     ),
     "grok-4.5": ModelMeta(
         display_name="Grok 4.5",
@@ -229,6 +241,36 @@ _METADATA: dict[str, ModelMeta] = {
         vendor="腾讯 Hy",
         capabilities=frozenset({CAPABILITY_TOOLS, CAPABILITY_REASONING}),
         context_length=256_000,
+    ),
+    "claude-opus-4-6": ModelMeta(
+        display_name="Claude Opus 4.6",
+        vendor="Anthropic",
+        capabilities=frozenset({CAPABILITY_TOOLS, CAPABILITY_REASONING}),
+        context_length=200_000,
+    ),
+    "claude-opus-5-5": ModelMeta(
+        display_name="Claude Opus 5.5",
+        vendor="Anthropic",
+        capabilities=frozenset({CAPABILITY_TOOLS, CAPABILITY_REASONING}),
+        context_length=200_000,
+    ),
+    "claude-fable-5.1": ModelMeta(
+        display_name="Claude Fable 5.1",
+        vendor="Anthropic",
+        capabilities=frozenset({CAPABILITY_TOOLS, CAPABILITY_REASONING}),
+        context_length=200_000,
+    ),
+    "gpt-6-astra": ModelMeta(
+        display_name="GPT-6 Astra",
+        vendor="OpenAI",
+        capabilities=frozenset({CAPABILITY_TOOLS, CAPABILITY_REASONING}),
+        context_length=128_000,
+    ),
+    "gpt-6.1-sol": ModelMeta(
+        display_name="GPT-6.1 Sol",
+        vendor="OpenAI",
+        capabilities=frozenset({CAPABILITY_TOOLS, CAPABILITY_REASONING}),
+        context_length=128_000,
     ),
 }
 

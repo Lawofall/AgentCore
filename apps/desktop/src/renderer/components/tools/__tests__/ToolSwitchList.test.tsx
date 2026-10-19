@@ -5,6 +5,7 @@
 
 import { api } from "@/services/api";
 import { __resetToolSwitchStoresForTests } from "@/services/toolSwitches";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   cleanup,
   fireEvent,
@@ -12,7 +13,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
-import type { ComponentProps } from "react";
+import type { ComponentProps, ReactElement } from "react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -25,6 +26,9 @@ vi.mock("@/lib/toast", () => ({
 }));
 vi.mock("@/hooks/useConversations", () => ({
   patchConversationCache: vi.fn(),
+}));
+vi.mock("@/lib/assemblyWrite", () => ({
+  refreshAssembliesAfterWrite: vi.fn(async () => undefined),
 }));
 
 import { ToolSwitchList } from "../ToolSwitchList";
@@ -57,13 +61,22 @@ function board(disabled: string[]) {
   };
 }
 
+function withQuery(ui: ReactElement) {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return <QueryClientProvider client={client}>{ui}</QueryClientProvider>;
+}
+
 function renderList(
   props: Partial<ComponentProps<typeof ToolSwitchList>> = {},
 ) {
   return render(
-    <MemoryRouter>
-      <ToolSwitchList scope="draft" showBulk {...props} />
-    </MemoryRouter>,
+    withQuery(
+      <MemoryRouter>
+        <ToolSwitchList scope="draft" showBulk {...props} />
+      </MemoryRouter>,
+    ),
   );
 }
 
@@ -93,6 +106,15 @@ describe("ToolSwitchList bulk", () => {
       });
     });
     expect(screen.getByRole("button", { name: "全部打开" })).toBeTruthy();
+  });
+
+  it("官方完整锁定时不拨、不出现全部开关", async () => {
+    renderList({ locked: true, heading: "工具" });
+    expect(await screen.findByRole("switch", { name: "改文件" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "全部关闭" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "全部打开" })).toBeNull();
+    fireEvent.click(screen.getByRole("switch", { name: "改文件" }));
+    expect(put).not.toHaveBeenCalled();
   });
 
   it("节标题与全部打开同一行", async () => {
@@ -160,19 +182,21 @@ describe("ToolSwitchList shelf", () => {
       ],
     });
     render(
-      <MemoryRouter initialEntries={["/toolbox"]}>
-        <Routes>
-          <Route
-            path="/toolbox"
-            element={
-              <>
-                <ToolSwitchList scope="draft" layout="shelf" />
-                <LocationProbe />
-              </>
-            }
-          />
-        </Routes>
-      </MemoryRouter>,
+      withQuery(
+        <MemoryRouter initialEntries={["/toolbox"]}>
+          <Routes>
+            <Route
+              path="/toolbox"
+              element={
+                <>
+                  <ToolSwitchList scope="draft" layout="shelf" />
+                  <LocationProbe />
+                </>
+              }
+            />
+          </Routes>
+        </MemoryRouter>,
+      ),
     );
     expect(await screen.findByRole("heading", { name: "改文件" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "写工作区文件" })).toBeNull();

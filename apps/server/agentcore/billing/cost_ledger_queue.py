@@ -10,9 +10,9 @@ Medium (G5 mid-term): Postgres table ``cost_ledger_outbox``. Drain claims with
 API process can self-drain. Idempotency stays on the sink (``call_id`` /
 ``run_id`` UNIQUE).
 
-Legacy disk files under ``{data_dir}/telemetry/cost_ledger_queue/`` and
-``proxy_spend_queue/`` are still drained once (upgrade compat). Enqueue DB
-failure falls back to that disk path so billing intent is never silent-dropped.
+Disk files under ``{data_dir}/telemetry/cost_ledger_queue/`` are drained
+when enqueue could not write the DB outbox. Enqueue DB failure falls back
+to that disk path so billing intent is never silent-dropped.
 
 Deployment: shared DB outbox + ``RATE_LIMIT_BACKEND=redis`` unlocks multi-worker
 API. Other subsystems (approval gate / IM / steer / journal settlement) may still
@@ -37,7 +37,6 @@ from agentcore.core.types import new_id
 logger = get_logger(__name__)
 
 _QUEUE_SUBDIR = Path("telemetry") / "cost_ledger_queue"
-_LEGACY_PROXY_SUBDIR = Path("telemetry") / "proxy_spend_queue"
 _DRAIN_IDLE_WAIT_S = 0.05
 _DRAIN_RETRY_BACKOFF_S = 0.05
 _DRAIN_BATCH_SIZE = 32
@@ -48,10 +47,6 @@ USES_SHARED_DB_OUTBOX = True
 
 def _queue_dir() -> Path:
     return Path(settings.data_dir) / _QUEUE_SUBDIR
-
-
-def _legacy_proxy_dir() -> Path:
-    return Path(settings.data_dir) / _LEGACY_PROXY_SUBDIR
 
 
 def _record_path(record_id: str) -> Path:
@@ -556,11 +551,10 @@ class CostLedgerQueue:
             await asyncio.gather(*pending, return_exceptions=True)
 
     def _pending_disk_paths(self) -> list[Path]:
-        paths: list[Path] = []
-        for directory in (_queue_dir(), _legacy_proxy_dir()):
-            if directory.exists():
-                paths.extend(sorted(directory.glob("*.json")))
-        return paths
+        directory = _queue_dir()
+        if directory.exists():
+            return sorted(directory.glob("*.json"))
+        return []
 
     async def drain_once(self) -> int:
         """Drain legacy disk + shared DB outbox once. Returns successful write count.

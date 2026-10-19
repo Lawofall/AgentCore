@@ -626,7 +626,7 @@ async function route(
   }
 
   if (method === "GET" && path === "/v1/users/me/autonomy") {
-    json(req, res, 200, { policy: "folder" });
+    json(req, res, 200, { policy: "computer" });
     return;
   }
 

@@ -1,0 +1,42 @@
+---
+description: 同一处界面有两套以上都能做出来的改法、要让人在真实窗口里拨着看时读——开发态方案开关已在 AppShell。登记新档即可，不要再搭一套。与 #/preview 回放 AI 态无关。
+alwaysApply: false
+---
+
+# 界面方案开关
+
+给人看几套前端改法。文字看不出效果；人要在同一扇真实窗口里拨，宽度、数据和壳都不变。开关是开发脚手架，不是产品设置。**常留**：方便后续 Cursor AI 接着拨，不要拆掉控件。
+
+## 何时做
+
+- 同一处改动有 ≥2 套可并立的做法，且都要写进同一次构建 → 用开关。
+- 只有一套合理做法 → 直接改现行。不另造一套。
+
+## 不要再搭
+
+控件已经在：`AppShell` → `DevSchemeGate`（仅 `import.meta.env.DEV`）。登记在 `apps/desktop/src/renderer/dev-schemes/register.ts`。库在 `lib/devSchemes.ts`。角落默认不画；命令面板「开发」或 `Ctrl/Cmd+.` 打开面板；× / Esc / 点外面关掉，不留按钮。禁止再做第二套开关 / 假预览页。
+
+## 怎么加一档
+
+一档 = 一套方案的全部改动一起换上。挂载点用 `useSchemeSlot`；备选与现行同一套 props；结构不同就换组件，只是摆放或文案就换参数。备选文件放 `apps/desktop/src/renderer/dev-schemes/`，只从 DEV 分支 import。
+
+```tsx
+const View = useSchemeSlot("composer-model-shelf", ComposerModelShelf);
+
+registerScheme({
+  id: "picker-split",
+  label: "合一双栏",
+  group: "model-picker",
+  groupLabel: "模型弹层",
+  slots: { "composer-model-shelf": ComposerModelShelfSplit },
+});
+```
+
+「现行」永远在，是准备合进去的那一版。同一时刻只亮一档。互不相关的实验各自成组；控件上先选组再选档。选中记 `sessionStorage`，不进 `uiStorage`。循环键 `Ctrl/Cmd+.`（`shortcuts.ts`，输入框聚焦不触发）。同一组名字进命令面板「开发」。
+
+- 两套方案依赖不同的数据、路由或后端时，不要塞进开关。
+- 不做并排分屏。`#/preview` 只回放 AI 态。
+
+## 选定后
+
+胜出版移回正式默认。删掉**这一档**的登记和落选文件。**开关、Gate、`devSchemes` 留下。** 新实验再往 `register.ts` 加。

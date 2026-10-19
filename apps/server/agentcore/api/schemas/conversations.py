@@ -5,6 +5,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from agentcore.api.schemas.llm_model_profiles import ModelProfileSlot
 from agentcore.conversation.context_cut_plan import context_cut_undoable
 from agentcore.core.types import WorkspaceBoundary
 
@@ -14,7 +15,7 @@ class PermissionAxesModel(BaseModel):
 
     model_config = {"extra": "ignore"}
 
-    boundary: WorkspaceBoundary = WorkspaceBoundary.FOLDER
+    boundary: WorkspaceBoundary = WorkspaceBoundary.COMPUTER
 
     def to_axes(self) -> WorkspaceBoundary:
         return self.boundary
@@ -50,6 +51,26 @@ class ContextGapModel(BaseModel):
     recovery_at: str | None = None
 
 
+class ConversationModelOverride(BaseModel):
+    """A complete composer snapshot: this conversation, or the account last-used.
+
+    Null on the conversation row = this chat never pinned a brain (follow the
+    assembly). Null ``reasoning_effort`` / ``context_budget`` / ``worker`` inside
+    a snapshot = vendor default / model window / follow main — not assembly.
+    """
+
+    main: ModelProfileSlot
+    worker: ModelProfileSlot | None = None
+    reasoning_effort: str | None = None
+    context_budget: int | None = Field(
+        default=None,
+        description=(
+            "Shorter context ceiling in tokens (128000 / 256000 / 512000). "
+            "Null = the main model's own window."
+        ),
+    )
+
+
 class CreateConversationRequest(BaseModel):
     title: str | None = None
     # File the new chat into a project at creation. Born into that project's
@@ -59,11 +80,14 @@ class CreateConversationRequest(BaseModel):
     # Recorded only when ``folder_id`` is None; project chats inherit the project's
     # binding instead.
     local_container_root_id: str | None = Field(None, max_length=200)
-    # Session permission axes. Omit → seed from the user's autonomy recipe
-    # (default recipe = less_interrupt → session/auto/rules/session).
+    # Session permission axes. Omit → last-picked boundary (computer if never picked).
     permission_axes: PermissionAxesModel | None = None
     # 新建拍快照：显式 uuid = 钉该装配；省略 = 服务端写入当时星标装配。
     assembly_id: str | None = None
+    # 这场的模型。省略 = 跟装配；写出则只影响这场。
+    model_override: ConversationModelOverride | None = None
+    # 输入区「统筹」。省略 = 关（注意力尺）。
+    delegate_mode: bool = False
     # 幂等键：客户端为「这一次发送」自铸一个 id（重试 / 重按都复用同一个）。同一用户
     # 同一个键只会建出一条会话，第二次起原样返回首次那条（201，body 同形）。省略 =
     # 保持旧行为，一次请求建一条——老客户端不受影响。
@@ -95,8 +119,12 @@ class ConversationSummary(BaseModel):
     )
     # 深度研究自治（会话级显式旗标；不再由权限配方蕴含）。
     deep_research_auto: bool = False
-    # 这场用的装配。新建写入星标或客户端所选。模型在这份装配上。
+    # 这场用的装配。新建写入星标或客户端所选。
     assembly_id: str | None = None
+    # 这场自己的模型。null = 跟装配走。
+    model_override: ConversationModelOverride | None = None
+    # 输入区「统筹」：True = 优先派；False = 现行注意力尺。
+    delegate_mode: bool = False
     # True iff ORM has both compaction_summary and compacted_through.
     # Flag only — never expose rolling-summary text to clients.
     context_compacted: bool = False
@@ -118,6 +146,13 @@ class ConversationSummary(BaseModel):
             return PermissionAxesModel.from_axes(value)
         if isinstance(value, dict):
             return WorkspaceBoundary.from_mapping(value).to_dict()
+        return value
+
+    @field_validator("model_override", mode="before")
+    @classmethod
+    def _coerce_model_override(cls, value: object) -> object:
+        if value is None or value == {}:
+            return None
         return value
 
 
@@ -248,6 +283,10 @@ class UpdateConversationRequest(BaseModel):
     deep_research_auto: bool | None = None
     # 会话级装配：省略 = 不变；显式 uuid = 钉装配；显式 null = 再钉当时星标。
     assembly_id: str | None = None
+    # 这场的模型：省略 = 不变；显式对象 = 覆盖装配；显式 null = 再跟装配。
+    model_override: ConversationModelOverride | None = None
+    # 输入区「统筹」：省略 = 不变；显式 true/false 切换。
+    delegate_mode: bool | None = None
 
 
 class PermissionAxesUpdate(BaseModel):

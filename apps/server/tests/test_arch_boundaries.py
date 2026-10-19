@@ -148,7 +148,6 @@ def test_core_has_no_upward_business_deps() -> None:
         "agentcore.doc",
         "agentcore.evals",
         "agentcore.assist",
-        "agentcore.vision",
         "agentcore.sidecar",
         "agentcore.conformance",
         "agentcore.workspace",
@@ -162,7 +161,8 @@ def test_leaf_web_tools_do_not_import_runtime_or_llm() -> None:
 
     Orchestration primitives (delegate/debate) legitimately drive the runtime.
     ``named_desk_read`` is the one-shot other-Folder bind: it loads a Folder and
-    builds a desk, so it is not a leaf I/O module.
+    builds a desk, so it is not a leaf I/O module. Account search connection
+    and choice live in ``agentcore.search`` (db + credential bridge), not here.
     """
     files = [
         p
@@ -509,3 +509,28 @@ def test_p3a_clusters_have_no_flat_root_shims() -> None:
     assert bad_imports == [], (
         "old flat P3-A root import paths still referenced:\n  " + "\n  ".join(bad_imports)
     )
+
+
+def test_creation_table_package_is_gone() -> None:
+    """多维表格内测硬切 — ``agentcore/table/`` and ``/v1/tables`` must not return."""
+    assert not (_PKG_ROOT / "table").exists(), "agentcore/table/ is retired"
+    assert not (_PKG_ROOT / "api" / "routes" / "tables.py").exists(), (
+        "api/routes/tables.py is retired"
+    )
+    main_src = (_PKG_ROOT / "main.py").read_text(encoding="utf-8")
+    assert "tables.router" not in main_src
+    assert "from agentcore.api.routes import" in main_src
+    assert "\n    tables,\n" not in main_src and not main_src.endswith("    tables,\n")
+
+
+def test_creation_doc_package_is_gone() -> None:
+    """创作文档活稿内测硬切 — ``agentcore/doc/`` gone; documents/ and docs_export/ stay."""
+    assert not (_PKG_ROOT / "doc").exists(), "agentcore/doc/ is retired"
+    assert (_PKG_ROOT / "documents").is_dir(), "agentcore/documents/ (用户规则) must stay"
+    assert (_PKG_ROOT / "docs_export").is_dir(), "agentcore/docs_export/ must stay"
+    assert not (_PKG_ROOT / "api" / "routes" / "docs.py").exists(), (
+        "api/routes/docs.py is retired"
+    )
+    main_src = (_PKG_ROOT / "main.py").read_text(encoding="utf-8")
+    assert "docs.router" not in main_src
+    assert "\n    docs,\n" not in main_src

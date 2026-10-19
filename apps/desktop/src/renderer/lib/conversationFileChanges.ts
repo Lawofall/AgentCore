@@ -3,10 +3,11 @@
  * （process + execution → fileArtifacts），并含 Local zip 基线
  *（不依赖 file_*；脚本删事故仍可进 restore，但零文件差异的回合不展示；
  * 问候等未改文件的回合不留底）。
- * 供右坞「改动」tab 按需显隐（前端UX设计.md §四）。
+ * 供右坞「改动」tab 按需显隐、输入区「改动」chip（前端UX设计.md §四）。
  */
 
 import {
+  type FileOp,
   fileArtifactsFromExecution,
   fileArtifactsFromProcess,
   mergeArtifacts,
@@ -17,6 +18,48 @@ import { type ExecutionRuntime, projectRuntime } from "@/stores/execution";
 import { CHANGES_TAB_ID } from "@/stores/sidePanel/types";
 
 /** 当前对话 messages 是否已有至少一条成功的 AI 文件改动。 */
+export type ConversationChangeCounts = {
+  added: number;
+  modified: number;
+  deleted: number;
+};
+
+/**
+ * 本对话文件改动按路径最后一次 op 汇总（清单「改动」行数字）。
+ * write = 新建，delete = 删除，edit / move = 更新；无 op 的验收行不计数。
+ */
+export function conversationChangeCounts(
+  messages: Message[],
+  byId: Record<string, ExecutionRuntime>,
+): ConversationChangeCounts {
+  const lastOp = new Map<string, FileOp>();
+  for (const msg of messages) {
+    if (msg.role !== "assistant") continue;
+    const messageId = assistantProjectionId(msg);
+    const rt = byId[messageId];
+    const execution = rt ? projectRuntime(rt) : null;
+    const artifacts = mergeArtifacts(
+      fileArtifactsFromProcess(msg.process),
+      fileArtifactsFromExecution(execution),
+    );
+    for (const artifact of artifacts) {
+      if (!artifact.op) continue;
+      lastOp.set(artifact.path, artifact.op);
+    }
+  }
+  const counts: ConversationChangeCounts = {
+    added: 0,
+    modified: 0,
+    deleted: 0,
+  };
+  for (const op of lastOp.values()) {
+    if (op === "write") counts.added += 1;
+    else if (op === "delete") counts.deleted += 1;
+    else counts.modified += 1;
+  }
+  return counts;
+}
+
 export function conversationHasFileArtifacts(
   messages: Message[],
   byId: Record<string, ExecutionRuntime>,
@@ -79,7 +122,22 @@ export function shouldPinChangesTab(opts: {
 }
 
 /**
- * 切对话后是否把坞焦点从「改动」弹回工作区（安全网；主路径是 `closeChanges`）。
+ * 输入区「改动」chip：本对话有可恢复改动、且右坞还没挂「改动」时才亮。
+ * 点开仍走 {@link shouldPinChangesTab} 的显式入口，不因有货自动占条。
+ */
+export function shouldShowComposerChangesHint(opts: {
+  conversationId: string | null;
+  hasRestorable: boolean;
+  changesOpen: boolean;
+  isChangesFloating: boolean;
+}): boolean {
+  if (!opts.conversationId || !opts.hasRestorable) return false;
+  if (opts.changesOpen || opts.isChangesFloating) return false;
+  return true;
+}
+
+/**
+ * 切对话后是否把坞焦点从「改动」弹回清单（安全网；主路径是 `closeChanges`）。
  * 调用方必须只在 `conversationId` 变化时使用。
  */
 export function shouldBounceChangesTabToWorkspace(opts: {

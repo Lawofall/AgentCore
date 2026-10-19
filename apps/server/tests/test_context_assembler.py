@@ -165,30 +165,7 @@ def _ceo_turn(**overrides: object) -> str:
     return render_ceo_turn_envelope(**sections)  # type: ignore[arg-type]
 
 
-def test_ceo_turn_table_facts_follow_attachments():
-    out = _ceo_turn(
-        attachment_context="<附件/>",
-        table_context="<表格/>",
-    )
-    assert out == "[系统提示]\n<附件/>\n<表格/>"
-
-
 def test_ceo_turn_empty_sections_render_prefix_only():
     assert _ceo_turn() == ""
 
 
-def test_ceo_turn_observation_covers_table_facts(monkeypatch):
-    from agentcore.observability.prefix_cache import digest_text
-
-    captured = _spy_on_observe(monkeypatch)
-    table = "<表格>\n选中 1 行\n</表格>"
-    out = _ceo_turn(table_context=table)
-
-    row = captured[0]
-    assert row["event"] == "cost.prompt_assembled"
-    assert row["sections"]["table_context"] == len(table)
-    assert row["total_chars"] == len(table)
-    assert row["section_digests"]["table_context"] == digest_text(table)
-    from agentcore.runtime.resolve.prompt import strip_turn_envelope_fence
-
-    assert row["assembly_hash"] == assembly_hash(strip_turn_envelope_fence(out))

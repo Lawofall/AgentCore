@@ -111,8 +111,6 @@ def test_resident_tools_are_not_on_the_roster():
     ):
         assert not is_on_demand_tool(name), name
     assert not ON_DEMAND_TOOL_NAMES
-    assert "read_image" not in ON_DEMAND_TOOL_NAMES
-    assert not is_on_demand_tool("read_image")
     # Dynamic MCP names are not in the static set, but still ride the same gate.
     assert "mcp_playwright_browser_navigate" not in ON_DEMAND_TOOL_NAMES
     assert is_mcp_tool_name("mcp_playwright_browser_navigate")
@@ -475,7 +473,6 @@ def test_stuffed_worker_opening_table_includes_assembled_tools():
     """Assembled tools — including former on-demand — sit on the opening FC table."""
     registry = _stuffed_worker()
     assert registry.count == 16
-    assert "read_image" not in registry.names
     offered = _def_names(registry)
     assert offered == set(registry.names)
     assert offered >= _STUFFED_WORKER_RESIDENT

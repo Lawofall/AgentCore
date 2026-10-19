@@ -16,7 +16,11 @@ export type HostOpName =
   | "host_power"
   | "host_network_summary"
   | "host_apps"
-  | "host_shell";
+  | "host_shell"
+  | "host_gui_attach"
+  | "host_gui_snapshot"
+  | "host_gui_click"
+  | "host_gui_type";
 
 export interface HostOpInput {
   op: HostOpName | string;

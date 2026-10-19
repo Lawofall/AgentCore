@@ -1,14 +1,16 @@
 import {
   type VersionSource,
   type VersionTimelineEntry,
+  localVersionTimelineEntries,
   snapshotTimelineEntries,
 } from "@/components/workspace/changesTimeline";
+import { listLocalVersions } from "@/services/localWorkspaceVersions";
 import { wsListSnapshots } from "@/services/workspaces";
 import { useCallback, useEffect, useState } from "react";
 
 /**
- * 文件页「版本」面板的列表来源 —— 只走云端工作区快照 API。
- * 本机命名版本无产品入口；右坞「改动」tab 不再拉版本轨。
+ * 文件页「版本」面板的列表来源 —— 云端 REST 或本机 sidecar，由 {@link VersionSource} 分流。
+ * 右坞「改动」tab 不再拉版本轨。
  *
  * 调用方须 memo 化 `source`：它就是重拉的依赖。
  */
@@ -27,7 +29,18 @@ export function useChangesVersions(source: VersionSource | null): {
       return;
     }
     try {
-      setEntries(snapshotTimelineEntries(await wsListSnapshots(source.wsId)));
+      if (source.origin === "localWs") {
+        setEntries(
+          localVersionTimelineEntries(
+            await listLocalVersions({
+              rootId: source.rootId,
+              subpath: source.subpath,
+            }),
+          ),
+        );
+      } else {
+        setEntries(snapshotTimelineEntries(await wsListSnapshots(source.wsId)));
+      }
       setFailed(false);
     } catch {
       setFailed(true);

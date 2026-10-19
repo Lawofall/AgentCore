@@ -2,7 +2,7 @@
 
 Auto-skips (via the shared ``client`` fixture) when no PostgreSQL is reachable.
 Covers the /users/me/llm-providers routes (list / create / update / delete /
-connectivity-test / defaults), at-rest encryption + last-4 masking, the same-model-
+connectivity-test / defaults), at-rest encryption + prefix…suffix masking, the same-model-
 id-across-two-providers catalog, delete-provider fallback, and the turn preflight
 that refuses a keyless BYOK turn (402) while a keyed BYOK turn skips the platform
 quota gate.
@@ -29,7 +29,7 @@ from agentcore.llm.tools_gate import TOOLS_SOFT_GATE_WARNING
 from tests.integration.conftest import register_and_login
 
 _MASTER_KEY = "a" * 64
-_OVER_MONTHLY_NANO = 20_000_000_000  # above the default ¥10 monthly cap
+_OVER_MONTHLY_NANO = 20_000_000_000  # above the default ¥5 monthly cap
 _BASE = "/v1/users/me/llm-providers"
 
 
@@ -68,7 +68,7 @@ async def _seed_spend(session_factory, *, user_id: str, conversation_id: str, to
 async def _add_provider(session_factory, *, user_id: str, api_key: str, label: str = "DeepSeek"):
     async with session_factory() as session:
         return await LlmProviderService(session).create_provider(
-            user_id, label=label, api_key=api_key
+            user_id, label=label, api_key=api_key, vendor_id="deepseek"
         )
 
 
@@ -84,7 +84,9 @@ def byok(monkeypatch):
 
 async def test_llm_provider_routes_require_auth(client):
     assert (await client.get(_BASE)).status_code == 401
-    assert (await client.post(_BASE, json={"api_key": "x"})).status_code == 401
+    assert (
+        await client.post(_BASE, json={"api_key": "x", "vendor_id": "custom"})
+    ).status_code == 401
     assert (await client.delete(f"{_BASE}/xyz")).status_code == 401
     assert (await client.post(f"{_BASE}/xyz/test")).status_code == 401
 
@@ -107,6 +109,7 @@ async def test_create_provider_masks_and_seeds_profile(client, byok):
         json={
             "label": "OpenAI",
             "api_key": "sk-openai-abcd1234",
+            "vendor_id": "openai",
             "base_url": "https://api.openai.com/v1",
             # Former user-facing field: extra keys are ignored, not a compat layer.
             "default_model": "should-be-ignored",
@@ -115,8 +118,9 @@ async def test_create_provider_masks_and_seeds_profile(client, byok):
     assert r.status_code == 201, r.text
     body = r.json()
     assert body["label"] == "OpenAI"
+    assert body["vendor_id"] == "openai"
     assert body["status"] == "unchecked"
-    assert body["masked_key"] == "••••1234"
+    assert body["masked_key"] == "sk-ope...1234"
     assert body["base_url"] == "https://api.openai.com/v1"
     assert "default_model" not in body
     assert "is_default_chat" not in body
@@ -134,7 +138,13 @@ async def test_create_provider_masks_and_seeds_profile(client, byok):
 
 async def test_create_provider_requires_api_key(client, byok):
     await register_and_login(client, "provuser3")
-    r = await client.post(_BASE, json={"label": "X"})
+    r = await client.post(_BASE, json={"label": "X", "vendor_id": "custom"})
+    assert r.status_code == 422, r.text
+
+
+async def test_create_provider_requires_vendor_id(client, byok):
+    await register_and_login(client, "provuser3b")
+    r = await client.post(_BASE, json={"api_key": "sk-x"})
     assert r.status_code == 422, r.text
 
 
@@ -142,7 +152,9 @@ async def test_create_provider_refused_without_master_key(client, monkeypatch):
     monkeypatch.setattr(settings, "billing_mode", "byok")
     monkeypatch.setattr(settings, "encryption_key", "")  # no master key → can't store
     await register_and_login(client, "provuser4")
-    r = await client.post(_BASE, json={"api_key": "sk-x"})
+    r = await client.post(
+        _BASE, json={"api_key": "sk-x", "vendor_id": "deepseek"}
+    )
     assert r.status_code == 503, r.text
     assert r.json()["error"]["code"] == "KEY_STORAGE_UNAVAILABLE"
 
@@ -154,6 +166,7 @@ async def test_update_provider_keeps_ciphertext_and_changes_label(client, byok):
             _BASE,
             json={
                 "api_key": "sk-keep-me-4242",
+                "vendor_id": "deepseek",
                 "base_url": "https://api.deepseek.com",
             },
         )
@@ -166,15 +179,25 @@ async def test_update_provider_keeps_ciphertext_and_changes_label(client, byok):
     )
     assert r.status_code == 200, r.text
     body = r.json()
-    assert body["masked_key"] == "••••4242"
+    assert body["masked_key"] == "sk-kee...4242"
     assert body["label"] == "DS"
     assert "default_model" not in body
 
 
 async def test_multiple_providers_and_delete_retargets_profile(client, byok):
     await register_and_login(client, "provuser7")
-    a = (await client.post(_BASE, json={"api_key": "sk-a-1111", "label": "A"})).json()
-    b = (await client.post(_BASE, json={"api_key": "sk-b-2222", "label": "B"})).json()
+    a = (
+        await client.post(
+            _BASE,
+            json={"api_key": "sk-a-1111", "label": "A", "vendor_id": "deepseek"},
+        )
+    ).json()
+    b = (
+        await client.post(
+            _BASE,
+            json={"api_key": "sk-b-2222", "label": "B", "vendor_id": "deepseek"},
+        )
+    ).json()
     listed = (await client.get(_BASE)).json()
     assert {p["label"] for p in listed["providers"]} == {"A", "B"}
     assembly_id = listed["default_assembly_id"]
@@ -196,8 +219,18 @@ async def test_multiple_providers_and_delete_retargets_profile(client, byok):
 
 async def test_model_profile_crud_and_set_default(client, byok):
     await register_and_login(client, "provuser8")
-    a = (await client.post(_BASE, json={"api_key": "sk-a-1111", "label": "A"})).json()
-    b = (await client.post(_BASE, json={"api_key": "sk-b-2222", "label": "B"})).json()
+    a = (
+        await client.post(
+            _BASE,
+            json={"api_key": "sk-a-1111", "label": "A", "vendor_id": "deepseek"},
+        )
+    ).json()
+    b = (
+        await client.post(
+            _BASE,
+            json={"api_key": "sk-b-2222", "label": "B", "vendor_id": "deepseek"},
+        )
+    ).json()
 
     r = await client.post(
         "/v1/users/me/assemblies",
@@ -226,7 +259,9 @@ async def test_model_profile_crud_and_set_default(client, byok):
 
 async def test_model_profile_rejects_foreign_provider(client, byok):
     await register_and_login(client, "provuser9")
-    await client.post(_BASE, json={"api_key": "sk-a-1111"})
+    await client.post(
+        _BASE, json={"api_key": "sk-a-1111", "vendor_id": "deepseek"}
+    )
     created = (
         await client.post("/v1/users/me/assemblies", json={"name": "坏"})
     ).json()
@@ -283,6 +318,7 @@ async def test_test_provider_active_on_success(client, byok, monkeypatch):
             _BASE,
             json={
                 "api_key": "sk-good-4242",
+                "vendor_id": "custom",
                 "base_url": "https://my-proxy.example/v1",
             },
         )
@@ -308,7 +344,11 @@ async def test_test_provider_active_on_success(client, byok, monkeypatch):
 
 async def test_test_provider_error_on_probe_failure(client, byok, monkeypatch):
     await register_and_login(client, "provuser11")
-    created = (await client.post(_BASE, json={"api_key": "sk-bad-0000"})).json()
+    created = (
+        await client.post(
+            _BASE, json={"api_key": "sk-bad-0000", "vendor_id": "deepseek"}
+        )
+    ).json()
     monkeypatch.setattr(
         "agentcore.llm.provider_service.build_provider",
         lambda creds, **kwargs: _FakeProvider(fail=True),
@@ -432,7 +472,7 @@ async def test_single_provider_user_equivalent_to_legacy_key(
     client, session_factory, byok
 ):
     """First matching-preset provider seeds「当前配置」; turns run on that key."""
-    from agentcore.llm.byok_provider_presets import seed_model_for_base_url
+    from agentcore.llm.byok_provider_presets import seed_model_for_vendor
 
     user_id = await register_and_login(client, "provuser17")
     async with session_factory() as session:
@@ -440,6 +480,7 @@ async def test_single_provider_user_equivalent_to_legacy_key(
             user_id,
             label="DeepSeek",
             api_key="sk-solo-9999",
+            vendor_id="deepseek",
             base_url="https://api.deepseek.com",
         )
 
@@ -447,7 +488,7 @@ async def test_single_provider_user_equivalent_to_legacy_key(
     assert r.status_code == 200, r.text
     cat = r.json()
     assert cat["byok_configured"] is True
-    assert cat["current"]["id"] == seed_model_for_base_url("https://api.deepseek.com")
+    assert cat["current"]["id"] == seed_model_for_vendor("deepseek")
     assert cat["current"]["origin"] == "byok"
     assert cat["current"]["provider_id"] == provider.id
 

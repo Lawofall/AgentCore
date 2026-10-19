@@ -62,13 +62,16 @@ import {
 } from "@/stores/conversation/turnPhaseActions";
 import { clearInteractionPrompts } from "@/stores/interactionPrompts";
 import type { SSEEvent } from "@/types/events";
+import {
+  type SidecarConversationSnapshot,
+  buildSidecarConversationSnapshot,
+} from "@shared/sidecar-contract";
 import type {
   SidecarHistoryEntry,
   SidecarQueueNeedStart,
   SidecarQueuedAttachment,
   SidecarTurnResult,
 } from "@shared/sidecar-contract";
-import { tableSelectionPayload } from "@shared/tableSelection";
 
 /**
  * 本地引擎（sidecar）对话流 —— 与 `streamConversation`（云 SSE）对偶的另一条链路。
@@ -107,8 +110,6 @@ export interface StreamViaSidecarOptions {
   agentMentions?: OutgoingAgentMention[];
   /** Desktop-settled attachments (citation or attachments/ copy). Forwarded to startTurn. */
   attachments?: OutgoingAttachment[];
-  /** This turn's selected table row ids. Forwarded to startTurn. */
-  tableSelection?: readonly string[];
   /**
    * 编辑后重发 / 重新生成：占用截断后再开本机回合。此时禁止带截断前的 cookie 窗
    * （``history`` 必须缺省，让 sidecar 在 occupy 之后拉）。
@@ -203,6 +204,12 @@ function newTraceId(): string {
  * 绑定字段与寻址用 `rootId`/`subpath` 分离：仅当文件夹在 folders 缓存有 `localRootId` 时
  * 填入；裸聊 / 云项目 / 无绑定 → 二者为 null（键仍由调用方写入 RPC）。
  */
+function resolveConversationDelegateMode(conversationId: string): boolean {
+  return Boolean(
+    getConversations().find((row) => row.id === conversationId)?.delegateMode,
+  );
+}
+
 function resolveProjectTurnBinding(conversationId: string): {
   folderId: string | null;
   localRootId: string | null;
@@ -299,11 +306,26 @@ function isSidecarUserCancel(conversationId: string, err: unknown): boolean {
 }
 
 /** Positive assembly step only; omit the key when the model window is the default. */
-function contextBudgetPayload(
+async function resolveSidecarSession(
   conversationId: string,
-): { contextBudget: number } | Record<string, never> {
-  const budget = contextBudgetForConversation(conversationId);
-  return budget ? { contextBudget: budget } : {};
+): Promise<SidecarConversationSnapshot> {
+  const permissionAxes = (await resolveConversationPermissionAxes(
+    conversationId,
+  )) ?? {
+    boundary: "folder" as const,
+  };
+  const delegateMode = resolveConversationDelegateMode(conversationId);
+  const { folderId, localRootId, localSubpath } =
+    resolveProjectTurnBinding(conversationId);
+  const contextBudget = contextBudgetForConversation(conversationId);
+  return buildSidecarConversationSnapshot({
+    permissionAxes,
+    delegateMode,
+    folderId,
+    localRootId,
+    localSubpath,
+    ...(contextBudget ? { contextBudget } : {}),
+  });
 }
 
 /** 引擎中断（`TURN_INTERRUPTED` / `"turn interrupted"`）：非用户停止、非引擎故障横幅。 */
@@ -334,7 +356,6 @@ export async function streamConversationViaSidecar({
   turnCommit,
   regenerate,
   replaceMaterials,
-  tableSelection,
 }: StreamViaSidecarOptions): Promise<SidecarTurnResult> {
   const turnId = newTurnId();
   // 本回合 trace_id：贯穿云代理推理调用 + 回写落库，使推理日志↔气泡同 trace（打通气泡↔日志）。
@@ -376,12 +397,7 @@ export async function streamConversationViaSidecar({
   if (cookieWindow.ok) {
     history = cookieWindow.rows;
   }
-  // 本会话权限轴随回合送达本地引擎；取不到则 sidecar 沿用其当前值。
-  const permissionAxes =
-    await resolveConversationPermissionAxes(conversationId);
-  // 项目归属 + 本地绑定：列表 / folders 缓存已有，勿为此查本机库；裸聊 / 云 = null。
-  const { folderId, localRootId, localSubpath } =
-    resolveProjectTurnBinding(conversationId);
+  const session = await resolveSidecarSession(conversationId);
   throwIfCannotOpenStream(conversationId, signal);
   if (!cookieWindow.ok && !accountAuth) {
     throw new StreamError("sidecar", undefined, {
@@ -415,22 +431,17 @@ export async function streamConversationViaSidecar({
         userMessageId: optimisticUserId,
         messageId,
         ...(history !== undefined ? { history } : {}),
-        ...contextBudgetPayload(conversationId),
         ...(regenerate ? { regenerate: true } : {}),
         ...(replaceMaterials ? { replaceMaterials: true } : {}),
         ...(agentMentions && (replaceMaterials || agentMentions.length > 0)
           ? { agentMentions }
           : {}),
         ...(sidecarAttachments ? { attachments: sidecarAttachments } : {}),
-        ...tableSelectionPayload(tableSelection),
         inference,
         foldersAuth,
         accountAuth,
         workspacesAuth,
-        permissionAxes,
-        folderId,
-        localRootId,
-        localSubpath,
+        session,
       }),
     remintInference: async () => {
       clearSidecarInference();
@@ -515,12 +526,7 @@ export async function resumeConversationViaSidecar({
   let foldersAuth = foldersAuthRaw ?? undefined;
   let accountAuth = accountAuthRaw ?? undefined;
   let workspacesAuth = workspacesAuthRaw ?? undefined;
-  // 本会话权限轴（同 startTurn）：续跑期间的能力授权按会话当前轴。
-  const permissionAxes =
-    await resolveConversationPermissionAxes(conversationId);
-  // 项目归属 + 本地绑定（同 startTurn）：续跑对称下发；folderId 覆盖帧内归属。
-  const { folderId, localRootId, localSubpath } =
-    resolveProjectTurnBinding(conversationId);
+  const session = await resolveSidecarSession(conversationId);
   // 本次续跑的 trace_id（同 startTurn）：贯穿续跑的推理调用 + 回写落库。
   const traceId = newTraceId();
   throwIfCannotOpenStream(conversationId, signal);
@@ -543,7 +549,6 @@ export async function resumeConversationViaSidecar({
           traceId,
           userId: useAuthStore.getState().user?.id ?? "local",
           userMessageId,
-          ...contextBudgetPayload(conversationId),
           decision,
           note,
           selected,
@@ -551,10 +556,7 @@ export async function resumeConversationViaSidecar({
           foldersAuth,
           accountAuth,
           workspacesAuth,
-          permissionAxes,
-          folderId,
-          localRootId,
-          localSubpath,
+          session,
         }),
       remintInference: async () => {
         clearSidecarInference();
@@ -874,10 +876,7 @@ export async function startQueuedSidecarTurn(
     let foldersAuth = foldersAuthRaw ?? undefined;
     let accountAuth = accountAuthRaw ?? undefined;
     let workspacesAuth = workspacesAuthRaw ?? undefined;
-    const permissionAxes =
-      await resolveConversationPermissionAxes(conversationId);
-    const { folderId, localRootId, localSubpath } =
-      resolveProjectTurnBinding(conversationId);
+    const session = await resolveSidecarSession(conversationId);
     await runSidecarTurn({
       conversationId,
       rootId: notice.rootId,
@@ -897,7 +896,6 @@ export async function startQueuedSidecarTurn(
           userMessage: notice.userMessage,
           userMessageId: notice.userMessageId,
           messageId: notice.messageId,
-          ...contextBudgetPayload(conversationId),
           queueId: notice.queueId,
           ...(notice.agentMentions && notice.agentMentions.length > 0
             ? { agentMentions: notice.agentMentions }
@@ -905,15 +903,11 @@ export async function startQueuedSidecarTurn(
           ...(notice.attachments && notice.attachments.length > 0
             ? { attachments: notice.attachments }
             : {}),
-          ...tableSelectionPayload(notice.tableSelection),
           inference,
           foldersAuth,
           accountAuth,
           workspacesAuth,
-          permissionAxes,
-          folderId,
-          localRootId,
-          localSubpath,
+          session,
         }),
       remintInference: async () => {
         clearSidecarInference();

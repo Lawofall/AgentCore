@@ -88,6 +88,7 @@ function capTool(name: string, resident: boolean): CapabilityTool {
         ? "打开文本、代码或图片，看里面写了什么"
         : "看本机屏幕、键鼠和已打开的应用",
     description: name,
+    description_prefer: "",
     parameters: {},
     approval: "never",
     available_to: ["ceo", "worker"],
@@ -304,24 +305,50 @@ describe("PromptOverview", () => {
 
   it("出厂开关不占货架，点卡只打开这条", () => {
     const onOpenItem = vi.fn();
+    const onToggle = vi.fn();
     renderOverview({
       onOpenItem,
       factoryControl: {
-        present: true,
+        omitted: [],
         canToggle: true,
-        onPresentChange: vi.fn(),
+        onToggle,
       },
     });
     const shelf = screen.getByTestId("prompt-rail-shelf");
+    const factory = screen.getByTestId("prompt-rail-factory");
     expect(screen.queryByRole("heading", { name: "出厂" })).toBeNull();
     expect(within(shelf).queryByRole("switch", { name: "出厂" })).toBeNull();
+    const toggle = within(factory).getByRole("switch", {
+      name: "写一条按需薄技能",
+    });
+    expect(toggle.getAttribute("aria-checked")).toBe("true");
     fireEvent.click(
       within(shelf).getByRole("button", { name: "写一条按需薄技能" }),
     );
     expect(onOpenItem.mock.calls.map((call) => call[0])).toEqual([
       skillCatalogId("thin_skill"),
     ]);
+    expect(onToggle).not.toHaveBeenCalled();
+    fireEvent.click(toggle);
+    expect(onToggle).toHaveBeenCalledWith("thin_skill", false);
     expect(within(shelf).queryByText("thin_skill")).toBeNull();
+  });
+
+  it("关掉的出厂卡变淡，开关在卡上", () => {
+    renderOverview({
+      factoryControl: {
+        omitted: ["thin_skill"],
+        canToggle: true,
+        onToggle: vi.fn(),
+      },
+    });
+    const factory = screen.getByTestId("prompt-rail-factory");
+    expect(
+      within(factory)
+        .getByRole("switch", { name: "写一条按需薄技能" })
+        .getAttribute("aria-checked"),
+    ).toBe("false");
+    expect(within(factory).getByText("官方")).toBeTruthy();
   });
 
   it("出厂卡标题独占一行，说明停在第一句", () => {

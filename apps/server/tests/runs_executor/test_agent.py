@@ -65,10 +65,10 @@ async def test_worker_usage_split_and_cost_priced(monkeypatch):
     # The cache split survives into RunState.usage (not collapsed to one input).
     assert state.usage["cache_hit"] == 1_000_000
     assert state.usage["cache_miss"] == 1_000_000
-    # Cost is computed once, in nano-CNY, on the state (official Flash CNY).
-    assert state.cost["cached"] == 20_000_000
-    assert state.cost["output"] == 4_000_000_000
-    assert state.cost["total"] == 20_000_000 + 1_000_000_000 + 4_000_000_000
+    # Cost is computed once, in nano-CNY, on the state (Flash selling = official × 0.25).
+    assert state.cost["cached"] == 5_000_000
+    assert state.cost["output"] == 1_000_000_000
+    assert state.cost["total"] == 5_000_000 + 250_000_000 + 1_000_000_000
     assert state.cost["currency"] == "CNY"
     assert state.cost["pricing_source"] == "curated"
 

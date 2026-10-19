@@ -1,6 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
+import { ZOOM_DEFAULT, applyFontSize, applyZoom } from "./lib/appearance";
 import { isNativeRuntime } from "./lib/capabilities";
 import { initScrollReveal } from "./lib/scrollReveal";
 import { applyTheme } from "./lib/theme";
@@ -35,12 +36,18 @@ startOutboxReconcile();
 // Reap attach-staging left by earlier sessions: drafts are capped, so an evicted
 // draft's staged bytes are unreachable and would otherwise never be freed.
 void window.fsApi?.sweepStagingOrphans?.(liveStagingIds());
-// Apply the persisted theme before the first paint to avoid a light→dark flash
+// Apply persisted theme / type scale / zoom before the first paint
 // (the store reads the saved choice from localStorage on creation).
 applyTheme(
   isNativeRuntime() || readNarrowViewport()
     ? "light"
     : useUIStore.getState().theme,
+);
+applyFontSize(useUIStore.getState().fontSize);
+applyZoom(
+  isNativeRuntime() || readNarrowViewport()
+    ? ZOOM_DEFAULT
+    : useUIStore.getState().zoom,
 );
 
 const rootElement = document.getElementById("root");

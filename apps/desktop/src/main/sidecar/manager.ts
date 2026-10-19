@@ -45,10 +45,6 @@ import {
   type SidecarWorkspaceVersionResult,
   buildSidecarResumeRpcParams,
 } from "@shared/sidecar-contract";
-import {
-  capTableSelection,
-  tableSelectionPayload,
-} from "@shared/tableSelection";
 import { BrowserWindow, type WebContents } from "electron";
 import { getDesktopBrowserBridgeCredentials } from "../browser";
 import { listSessionRoots } from "../fs/roots";
@@ -605,7 +601,7 @@ export class SidecarManager {
     await entry.ready; // 初始化失败则在此抛出 → renderer 据此降级
     // 有票且快照已过期则续暖 account rules/memory；MCP 仅在曾经暖过且过期时续。
     this.maybeKickAccountRulesMemoryWarm(entry, req.rootId, {
-      folderId: req.folderId,
+      folderId: req.session.folderId,
       accountAuth: req.accountAuth,
       userId: req.userId,
     });
@@ -613,7 +609,7 @@ export class SidecarManager {
     await this.awaitInflightWarms(entry, req.rootId);
     this.beginExecutionWarmLease(entry, {
       rootId: req.rootId,
-      folderId: req.folderId,
+      folderId: req.session.folderId,
       accountAuth: req.accountAuth,
       userId: req.userId,
     });
@@ -676,14 +672,12 @@ export class SidecarManager {
         ...(req.agentMentions && req.agentMentions.length > 0
           ? { agentMentions: req.agentMentions }
           : {}),
-        ...tableSelectionPayload(req.tableSelection),
         ...(req.queueId ? { queueId: req.queueId } : {}),
         ...(req.attachments && req.attachments.length > 0
           ? { attachments: req.attachments }
           : {}),
         // Per-turn account id (long-lived sidecar may have initialized as "local").
         ...(req.userId?.trim() ? { userId: req.userId.trim() } : {}),
-        ...(req.contextBudget ? { contextBudget: req.contextBudget } : {}),
         // W3: session read-only mounts (abs paths stay in main → sidecar only).
         ...(externalMounts.length > 0 ? { externalMounts } : {}),
         // Re-send the current cloud-proxy token every turn: the sidecar is long-lived
@@ -698,14 +692,7 @@ export class SidecarManager {
         ...(req.workspacesAuth ? { workspacesAuth: req.workspacesAuth } : {}),
         // Same for DesktopBrowserBridge (B-Arch): refresh every turn; null = 未装配.
         browserBridge: currentBrowserBridge(),
-        // 会话权限轴按回合随送：中途切换后下一回合即生效。
-        ...(req.permissionAxes ? { permissionAxes: req.permissionAxes } : {}),
-        // 项目归属：键始终下发（含 null=裸聊）；引擎缺键诚实失败请更新桌面，不再查本机库。
-        folderId: req.folderId ?? null,
-        // 项目本地绑定（FolderMeta 同形）：进 RPC 供拼 workspace key；与 rootId/subpath
-        // 寻址分离（后者只经 ensure，不进本 params）。
-        localRootId: req.localRootId ?? null,
-        localSubpath: req.localSubpath ?? null,
+        session: req.session,
       });
       this.emitSyntheticTerminalIfNeeded(req.turnId, "message_end");
       return result as SidecarTurnResult;
@@ -1306,7 +1293,7 @@ export class SidecarManager {
     await entry.ready;
     // 同 startTurn：有票按 TTL 续暖，发 resume RPC 前 await 在途 warm。
     this.maybeKickAccountRulesMemoryWarm(entry, req.rootId, {
-      folderId: req.folderId,
+      folderId: req.session.folderId,
       accountAuth: req.accountAuth,
       userId: req.userId,
     });
@@ -1314,7 +1301,7 @@ export class SidecarManager {
     await this.awaitInflightWarms(entry, req.rootId);
     this.beginExecutionWarmLease(entry, {
       rootId: req.rootId,
-      folderId: req.folderId,
+      folderId: req.session.folderId,
       accountAuth: req.accountAuth,
       userId: req.userId,
     });
@@ -1608,7 +1595,6 @@ export class SidecarManager {
         ...(req.agentMentions && req.agentMentions.length > 0
           ? { agentMentions: req.agentMentions }
           : {}),
-        ...tableSelectionPayload(req.tableSelection),
       });
       return parseDeliverMessageAck(reply);
     } catch (err) {
@@ -1806,9 +1792,6 @@ export class SidecarManager {
     const attachments = Array.isArray(params.attachments)
       ? (params.attachments as SidecarQueuedAttachment[])
       : undefined;
-    const tableSelection = Array.isArray(params.tableSelection)
-      ? capTableSelection(params.tableSelection as string[])
-      : undefined;
     safeWcSend(resolved.wc, SIDECAR_CHANNELS.queueNeedStart, {
       conversationId,
       rootId: resolved.rootId,
@@ -1820,9 +1803,6 @@ export class SidecarManager {
       userMessage,
       ...(mentions && mentions.length > 0 ? { agentMentions: mentions } : {}),
       ...(attachments && attachments.length > 0 ? { attachments } : {}),
-      ...(tableSelection && tableSelection.length > 0
-        ? { tableSelection }
-        : {}),
     });
   }
 

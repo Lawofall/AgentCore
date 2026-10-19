@@ -429,9 +429,6 @@ async def aclose_search_backend() -> None:
         closer = getattr(backend, "aclose", None)
         if closer is not None:
             await closer()
-    from agentcore.tools.builtin.web.cleversee import aclose_cleversee_backend
-
-    await aclose_cleversee_backend()
 
 
 async def probe_search_backend() -> tuple[bool, str] | None:

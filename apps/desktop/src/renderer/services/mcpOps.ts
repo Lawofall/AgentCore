@@ -1,3 +1,4 @@
+import { hasLocalMcp } from "@/lib/capabilities";
 import { fulfillClientToolOnce } from "@/services/clientToolFulfill";
 import type { InteractionSettleOrigin } from "@/services/interaction";
 import type { McpOpRequiredPayload } from "@/types/events";
@@ -24,8 +25,7 @@ export async function performMcpOp(
 }
 
 async function runMcpOp(payload: McpOpRequiredPayload): Promise<McpOpResult> {
-  const api = typeof window !== "undefined" ? window.mcpApi : undefined;
-  if (!api?.runOp) {
+  if (!hasLocalMcp() || !window.mcpApi?.runOp) {
     return {
       ok: false,
       error: {
@@ -35,7 +35,7 @@ async function runMcpOp(payload: McpOpRequiredPayload): Promise<McpOpResult> {
     };
   }
   try {
-    return await api.runOp({
+    return await window.mcpApi.runOp({
       op: payload.op,
       args: (payload.args ?? {}) as Record<string, unknown>,
     });

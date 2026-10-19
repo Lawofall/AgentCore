@@ -488,7 +488,7 @@ async def test_resolve_member_illegal_explicit_hard_fails(monkeypatch):
 
 
 async def test_resolve_vision_role_retired():
-    """cost_role=vision no longer expands a slot / VISION_* fallback."""
+    """cost_role=vision is retired; the proxy hard-refuses the old eye role."""
     with pytest.raises(ValidationError, match="读图角色已退役"):
         await inference._resolve_inference_credentials(
             None, None, SimpleNamespace(user_id="u1"), cost_role="vision"

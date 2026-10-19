@@ -27,10 +27,6 @@ import type {
   UserInterjectionPayload,
 } from "@/types/events";
 import {
-  capTableSelection,
-  tableSelectionPayload,
-} from "@shared/tableSelection";
-import {
   type ActiveSidecarTurn,
   type SidecarTarget,
   getActiveSidecarTarget,
@@ -104,7 +100,6 @@ async function deliverViaSidecar(
   delivery: MessageDelivery,
   agentMentions: OutgoingAgentMention[] | undefined,
   reuseUserMessageId?: string,
-  tableSelection?: readonly string[],
 ): Promise<MidFlightSendResult> {
   try {
     const userMessageId = reuseUserMessageId?.trim() || crypto.randomUUID();
@@ -121,7 +116,6 @@ async function deliverViaSidecar(
       traceId,
       ...(attachments && attachments.length > 0 ? { attachments } : {}),
       ...(agentMentions && agentMentions.length > 0 ? { agentMentions } : {}),
-      ...tableSelectionPayload(tableSelection),
     });
     if (ack.status === "received" || ack.status === "queued") {
       // 乐观用户行是按「开新回合」画的。排队 / 未读取的插话先离开时间线。
@@ -195,7 +189,6 @@ export async function sendMidFlightMessage(
     sidecarTarget?: SidecarTarget;
     /** 已入场的乐观用户泡 id，ack 绑同一条，不双泡。 */
     userMessageId?: string;
-    tableSelection?: readonly string[];
   },
 ): Promise<MidFlightSendResult> {
   const sidecarTarget =
@@ -209,7 +202,6 @@ export async function sendMidFlightMessage(
       delivery,
       agentMentions,
       opts?.userMessageId,
-      opts?.tableSelection,
     );
   }
 
@@ -217,10 +209,6 @@ export async function sendMidFlightMessage(
   if (attachments && attachments.length > 0) body.attachments = attachments;
   if (agentMentions && agentMentions.length > 0) {
     body.agent_mentions = agentMentions;
-  }
-  if (opts?.tableSelection && opts.tableSelection.length > 0) {
-    const selected = capTableSelection(opts.tableSelection);
-    if (selected.length > 0) body.table_selection = selected;
   }
 
   const ac = new AbortController();

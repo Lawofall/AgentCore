@@ -34,7 +34,7 @@ def _events_have_pacing(events: list[dict[str, Any]]) -> bool:
 
 
 def open_event_document(raw: dict[str, Any]) -> EventDocument:
-    """读入超集文档并归一事件元素（旧 ``kind``/``ts`` 读时别名，不改写调用方输入）。
+    """读入超集文档并归一事件元素（契约 ``type``/``timestamp``；不改写调用方输入）。
 
     判别顺序：录制原片（``segments``）→ 带 ``projected``/巡检名的向量 → 磁带
     （``version`` + ``events``）→ 裸 ``events`` 列表。

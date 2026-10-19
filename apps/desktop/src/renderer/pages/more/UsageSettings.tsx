@@ -4,7 +4,7 @@ import {
   SettingsSection,
   SettingsStack,
 } from "@/components/settings";
-import { Button, Card, IconButton, PageHeader } from "@/components/ui";
+import { Badge, Button, Card, IconButton, PageHeader } from "@/components/ui";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import {
   formatCompact,
@@ -12,7 +12,9 @@ import {
   formatDisplayCost,
   formatQuotaRemaining,
 } from "@/lib/format";
+import { SUBSCRIPTION_PLANS, formatSeatUntil } from "@/lib/subscriptionPlans";
 import { cn } from "@/lib/utils";
+import { UsageActivity } from "@/pages/more/usage/UsageActivity";
 import { useUsageStore } from "@/stores/usage";
 import {
   CACHE_BILLED_AS_MISS_LABEL,
@@ -23,11 +25,13 @@ import { type ReactNode, useEffect } from "react";
 import { Link } from "react-router-dom";
 
 /**
- * Account usage dashboard — 大众面先答「还能用多久」。
+ * Account usage — 大众面先答「还能用多久」。
  *
- * 平台代付：主卡是额度还剩（日/月取更紧的一窗，不并排两条钱条）；今日花费 /
- * tokens / 请求用数字卡；不限的维不画空槽；近 7 日趋势次之；明细只留构成。
- * BYOK：说明卡 + token 面 + 有产品价目再出 ¥。数字来自 `GET /usage/summary`。
+ * 平台代付：额度行是积分还剩（日/月取更紧的一窗，不并排两条钱条）；搜索次数
+ * 和 tokens 将尽并进同一张卡；不限的维不画空槽、不撑仪表盘卡；近 30 日趋势次
+ * 之；活动表按对话一行，列头筛模型，汇总跟筛选走同一窗。明细只留缓存计价口
+ * 径与 BYOK 月面。BYOK：说明卡 + token 面 + 有产品价目再出 ¥（不扣积分）。数字
+ * 来自 `GET /usage/summary`。
  */
 export function UsageSettings() {
   const summary = useUsageStore((s) => s.summary);
@@ -141,7 +145,6 @@ function Dashboard({
   const dayCostUsed = today.cost.total;
   const dayTokenLimit = quota.daily_tokens;
   const dayTokensUsed = today.usage.input + today.usage.output;
-  const dayReqUsed = today.requests;
   const moneyCurrency = month.cost.currency ?? today.cost.currency;
 
   const monthRemaining = remainingNano(monthUsed, monthLimit);
@@ -151,40 +154,22 @@ function Dashboard({
     (monthRemaining == null || dayRemaining < monthRemaining);
 
   const { dailyResetText, monthlyResetText } = resetTexts();
-
-  const todayStats: StatCell[] = byok
-    ? byokTodayStats(summary, {
-        dayTokensUsed,
-        dayTokenLimit,
-        dayReqUsed,
-      })
-    : [
-        {
-          label: "花费",
-          value: formatCost(dayCostUsed, today.cost.currency),
-          near: isNear(dayCostUsed, dayCostLimit) && !dayIsHero,
-        },
-        {
-          label: "tokens",
-          value: formatCompact(dayTokensUsed),
-          caption:
-            dayTokenLimit > 0 ? `/ ${formatCompact(dayTokenLimit)}` : undefined,
-          near: isNear(dayTokensUsed, dayTokenLimit),
-        },
-        {
-          label: "请求",
-          value: String(dayReqUsed),
-          caption: `本月 ${month.requests}`,
-        },
-      ];
+  const searchLine = searchCaption(summary.search);
+  const tokenNear =
+    !byok && isNear(dayTokensUsed, dayTokenLimit)
+      ? { used: dayTokensUsed, limit: dayTokenLimit }
+      : null;
 
   return (
     <SettingsStack>
       {banner}
       {byok ? (
-        <ByokNote />
+        <ByokNote
+          searchText={searchLine?.text ?? null}
+          searchNear={searchLine?.near ?? false}
+        />
       ) : (
-        <QuotaHero
+        <QuotaRow
           dayIsHero={dayIsHero}
           monthUsed={monthUsed}
           monthLimit={monthLimit}
@@ -195,22 +180,13 @@ function Dashboard({
           currency={moneyCurrency}
           dailyResetText={dailyResetText}
           monthlyResetText={monthlyResetText}
+          seatPlan={summary.seat.plan}
+          seatUntil={summary.seat.until}
+          searchText={searchLine?.text ?? null}
+          searchNear={searchLine?.near ?? false}
+          tokenNear={tokenNear}
         />
       )}
-
-      <SettingsSection title="今日">
-        <TodayStats items={todayStats} />
-        {!byok && isNear(dayTokensUsed, dayTokenLimit) && (
-          <div className="mt-3">
-            <QuotaMeter
-              label="今日 tokens"
-              used={dayTokensUsed}
-              limit={dayTokenLimit}
-              caption={`${formatCompact(dayTokensUsed)} / ${formatCompact(dayTokenLimit)} · ${dailyResetText}`}
-            />
-          </div>
-        )}
-      </SettingsSection>
 
       {summary.recent_daily_cost.some((p) => p.cost_total > 0) && !byok && (
         <CostTrend
@@ -220,50 +196,33 @@ function Dashboard({
       )}
 
       <UsageDetail summary={summary} byok={byok} />
+
+      <UsageActivity models={summary.month_by_model ?? []} />
     </SettingsStack>
   );
 }
 
-function byokTodayStats(
-  summary: Summary,
-  counts: {
-    dayTokensUsed: number;
-    dayTokenLimit: number;
-    dayReqUsed: number;
-  },
-): StatCell[] {
-  const { today, month } = summary;
-  const todayEst = today.estimated_cost?.total ?? 0;
-  const items: StatCell[] = [
-    {
-      label: "tokens",
-      value: formatCompact(counts.dayTokensUsed),
-      caption:
-        counts.dayTokenLimit > 0
-          ? `/ ${formatCompact(counts.dayTokenLimit)}`
-          : undefined,
-    },
-    {
-      label: "请求",
-      value: String(counts.dayReqUsed),
-      caption: `本月 ${month.requests}`,
-    },
-  ];
-  if (todayEst > 0) {
-    const currency = today.estimated_cost?.currency;
-    items.push({
-      label: "花费",
-      value: formatDisplayCost(
-        todayEst,
-        (currency || "CNY").toUpperCase() === "USD",
-        currency,
-      ),
-    });
+function searchCaption(
+  search: Summary["search"],
+): { text: string; near: boolean } | null {
+  const dailyCap = search.daily_limit > 0;
+  const monthlyCap = search.monthly_limit > 0;
+  if (!dailyCap && !monthlyCap) return null;
+  if (dailyCap) {
+    return {
+      text: monthlyCap
+        ? `搜索 ${search.daily_used} / ${search.daily_limit} · 本月 ${search.monthly_used}/${search.monthly_limit}`
+        : `搜索 ${search.daily_used} / ${search.daily_limit}`,
+      near: isNear(search.daily_used, search.daily_limit),
+    };
   }
-  return items;
+  return {
+    text: `搜索 ${search.monthly_used} / ${search.monthly_limit}`,
+    near: isNear(search.monthly_used, search.monthly_limit),
+  };
 }
 
-function QuotaHero({
+function QuotaRow({
   dayIsHero,
   monthUsed,
   monthLimit,
@@ -274,6 +233,11 @@ function QuotaHero({
   currency,
   dailyResetText,
   monthlyResetText,
+  seatPlan,
+  seatUntil,
+  searchText,
+  searchNear,
+  tokenNear,
 }: {
   dayIsHero: boolean;
   monthUsed: number;
@@ -285,63 +249,160 @@ function QuotaHero({
   currency?: string | null;
   dailyResetText: string;
   monthlyResetText: string;
+  seatPlan: Summary["seat"]["plan"];
+  seatUntil: Summary["seat"]["until"];
+  searchText: string | null;
+  searchNear: boolean;
+  tokenNear: { used: number; limit: number } | null;
 }) {
-  if (monthRemaining == null && dayRemaining == null) {
-    return (
-      <Card className="px-4 py-4">
-        <p className="text-sm text-foreground">本月已用</p>
-        <p className="mt-1 text-xl font-semibold tabular-nums">
-          {formatCost(monthUsed, currency)}
-        </p>
-        <p className="mt-1 text-xs text-muted-foreground">不限</p>
-      </Card>
-    );
-  }
-
+  const unlimited = monthRemaining == null && dayRemaining == null;
   const used = dayIsHero ? dayCostUsed : monthUsed;
   const limit = dayIsHero ? dayCostLimit : monthLimit;
   const remaining = dayIsHero ? dayRemaining : monthRemaining;
-  const label = dayIsHero ? "今日额度还剩" : "本月额度还剩";
-  const pct = usedPct(used, limit);
-  const near = isNear(used, limit);
+  const label = unlimited
+    ? "本月已用"
+    : dayIsHero
+      ? "今日积分还剩"
+      : "本月积分还剩";
+  const pct = unlimited ? 0 : usedPct(used, limit);
+  const near = !unlimited && isNear(used, limit);
   const resetText = dayIsHero ? dailyResetText : monthlyResetText;
+  const until = seatUntil ? ` · ${formatSeatUntil(seatUntil)}到期` : "";
+  const value = unlimited
+    ? `${formatCost(monthUsed, currency)} · 不限${until}`
+    : formatQuotaRemaining(remaining ?? 0, currency);
+  const extras = (
+    <QuotaExtras
+      searchText={searchText}
+      searchNear={searchNear}
+      tokenNear={tokenNear}
+      dailyResetText={dailyResetText}
+    />
+  );
+  const hasBody = !unlimited || Boolean(searchText || tokenNear);
 
   return (
-    <Card className="px-4 py-4">
-      <div className="flex items-baseline justify-between gap-3">
-        <p className="text-sm text-foreground">{label}</p>
-        <p
-          className={
-            near ? "text-sm text-primary" : "text-sm text-muted-foreground"
-          }
-        >
-          {pct}%
-        </p>
-      </div>
-      <p className="mt-1 text-xl font-semibold tabular-nums">
-        {formatQuotaRemaining(remaining ?? 0, currency)}
-      </p>
-      <QuotaBar label={label} pct={pct} className="mt-3" />
-      <p className="mt-1 text-xs text-muted-foreground">
-        已用 {formatCost(used, currency)} / {formatCost(limit, currency)} ·{" "}
-        {resetText}
-      </p>
-      {dayIsHero && monthRemaining != null && (
-        <p className="mt-1 text-xs text-muted-foreground">
-          本月还剩 {formatQuotaRemaining(monthRemaining, currency)} ·{" "}
-          {monthlyResetText}
-        </p>
-      )}
-      {near && <NearLimitHint daily={dayIsHero} />}
+    <Card>
+      <SettingRow
+        surface="list"
+        label={label}
+        value={value}
+        control={<SeatChip plan={seatPlan} />}
+      />
+      {hasBody ? (
+        <div className="space-y-2 px-4 pb-3">
+          {unlimited ? null : (
+            <>
+              <QuotaBar label={label} pct={pct} />
+              <p className="text-xs text-muted-foreground">
+                已用 {formatCost(used, currency)} /{" "}
+                {formatCost(limit, currency)} ·{" "}
+                <span
+                  className={near ? "text-primary" : "text-muted-foreground"}
+                >
+                  {pct}%
+                </span>
+                {" · "}
+                {resetText}
+                {until}
+              </p>
+              {dayIsHero && monthRemaining != null ? (
+                <p className="text-xs text-muted-foreground">
+                  本月还剩 {formatQuotaRemaining(monthRemaining, currency)} ·{" "}
+                  {monthlyResetText}
+                </p>
+              ) : null}
+              {near ? (
+                <NearLimitHint
+                  daily={dayIsHero}
+                  canUpgrade={seatPlan !== "flagship"}
+                />
+              ) : null}
+            </>
+          )}
+          {extras}
+        </div>
+      ) : null}
     </Card>
   );
 }
 
-function NearLimitHint({ daily }: { daily: boolean }) {
+function QuotaExtras({
+  searchText,
+  searchNear,
+  tokenNear,
+  dailyResetText,
+}: {
+  searchText: string | null;
+  searchNear: boolean;
+  tokenNear: { used: number; limit: number } | null;
+  dailyResetText: string;
+}) {
   return (
-    <p className="mt-2 text-xs text-primary">
-      {daily ? "接近今日额度" : "接近本月额度"}
-      ，用完可联系管理员提额，或
+    <>
+      {searchText ? (
+        <p
+          className={
+            searchNear
+              ? "text-xs text-primary"
+              : "text-xs text-muted-foreground"
+          }
+        >
+          {searchText}
+        </p>
+      ) : null}
+      {tokenNear ? (
+        <QuotaMeter
+          label="今日 tokens"
+          used={tokenNear.used}
+          limit={tokenNear.limit}
+          caption={`${formatCompact(tokenNear.used)} / ${formatCompact(tokenNear.limit)} · ${dailyResetText}`}
+        />
+      ) : null}
+    </>
+  );
+}
+
+function SeatChip({ plan }: { plan: Summary["seat"]["plan"] }) {
+  return (
+    <Link to="/more/subscription" className="shrink-0" aria-label="当前席位">
+      <Badge pill>{SUBSCRIPTION_PLANS[plan].name}</Badge>
+    </Link>
+  );
+}
+
+function NearLimitHint({
+  daily,
+  canUpgrade,
+}: {
+  daily: boolean;
+  canUpgrade: boolean;
+}) {
+  const window = daily ? "接近今日积分" : "接近本月积分";
+  if (canUpgrade) {
+    return (
+      <p className="text-xs text-primary">
+        {window}，用完可
+        <Link
+          to="/more/subscription"
+          className="underline-offset-2 hover:underline"
+        >
+          去订阅
+        </Link>
+        开通更高档，或
+        <Link
+          to="/more/providers"
+          className="underline-offset-2 hover:underline"
+        >
+          接入自己的 Key
+        </Link>
+        继续。
+      </p>
+    );
+  }
+  return (
+    <p className="text-xs text-primary">
+      {window}，用完后额度重置可继续，或
       <Link to="/more/providers" className="underline-offset-2 hover:underline">
         接入自己的 Key
       </Link>
@@ -379,47 +440,33 @@ function QuotaBar({
   );
 }
 
-type StatCell = {
-  label: string;
-  value: string;
-  caption?: string;
-  near?: boolean;
-};
-
-function TodayStats({ items }: { items: StatCell[] }) {
-  const cols = items.length >= 3 ? "grid-cols-3" : "grid-cols-2";
-  return (
-    <Card className={cn("grid divide-x divide-border overflow-hidden", cols)}>
-      {items.map((item) => (
-        <div key={item.label} className="min-w-0 px-4 py-3">
-          <p className="text-xs text-muted-foreground">{item.label}</p>
-          <p
-            className={cn(
-              "mt-1 text-base font-medium tabular-nums",
-              item.near ? "text-primary" : "text-foreground",
-            )}
-          >
-            {item.value}
-          </p>
-          {item.caption ? (
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              {item.caption}
-            </p>
-          ) : null}
-        </div>
-      ))}
-    </Card>
-  );
-}
-
-function ByokNote() {
+function ByokNote({
+  searchText,
+  searchNear,
+}: {
+  searchText: string | null;
+  searchNear: boolean;
+}) {
   return (
     <Card variant="muted" className="flex items-start gap-2.5 px-4 py-3">
       <KeyRound size={16} className="mt-0.5 shrink-0 text-muted-foreground" />
-      <p className="text-xs text-muted-foreground">
-        当前为「自带 Key」模式：对话走你配置的模型与端点，平台不设上限。下方以
-        token 为主；有产品价目的模型按同一张人民币账单展示，不扣额度。
-      </p>
+      <div className="min-w-0">
+        <p className="text-xs text-muted-foreground">
+          当前为「自带 Key」模式：对话走你配置的模型与端点，平台不设上限。下方以
+          token 为主；有产品价目的模型按官网价写成人民币，不扣积分。
+        </p>
+        {searchText ? (
+          <p
+            className={
+              searchNear
+                ? "mt-2 text-xs text-primary"
+                : "mt-2 text-xs text-muted-foreground"
+            }
+          >
+            {searchText}
+          </p>
+        ) : null}
+      </div>
     </Card>
   );
 }
@@ -525,7 +572,7 @@ function CostTrend({
 
   return (
     <SettingsSection
-      title="近 7 日成本"
+      title="近 30 日成本"
       action={
         <span className="text-xs text-muted-foreground">
           合计 {formatCost(total, currency)}
@@ -533,7 +580,7 @@ function CostTrend({
       }
     >
       <table className="sr-only">
-        <caption>近 7 日每日成本</caption>
+        <caption>近 30 日每日成本</caption>
         <thead>
           <tr>
             <th scope="col">日期</th>
@@ -557,7 +604,7 @@ function CostTrend({
             preserveAspectRatio="none"
             viewBox="0 0 100 100"
           >
-            <title>近 7 日成本趋势</title>
+            <title>近 30 日成本趋势</title>
             {areaD ? <path className="fill-primary/15" d={areaD} /> : null}
             {lineD ? (
               <path
@@ -587,7 +634,9 @@ function CostTrend({
                   />
                 </div>
                 <span className="mt-2 text-center text-xs text-muted-foreground">
-                  {weekdayLabel(p.date)}
+                  {i === 0 || i === points.length - 1 || i % 7 === 0
+                    ? weekdayLabel(p.date)
+                    : ""}
                 </span>
               </div>
             </SimpleTooltip>
@@ -609,21 +658,11 @@ function UsageDetail({
   const cache = cacheUsageDisplay(today.usage);
   const monthEst = month.estimated_cost?.total ?? 0;
 
-  const rows: { label: string; value: string }[] = [
-    {
-      label: "输入 / 输出",
-      value: `输入 ${formatCompact(today.usage.input)} · 输出 ${formatCompact(today.usage.output)}`,
-    },
-  ];
+  const rows: { label: string; value: string }[] = [];
   if (cache.billedAsMiss) {
     rows.push({
       label: "今日缓存",
       value: `${CACHE_BILLED_AS_MISS_LABEL} · ${formatCompact(cache.cacheMiss)}`,
-    });
-  } else if (cache.cacheHit > 0) {
-    rows.push({
-      label: "今日缓存命中率",
-      value: `${cache.hitRatePercent ?? 0}%`,
     });
   }
   if (byok) {
@@ -639,10 +678,13 @@ function UsageDetail({
           monthEst,
           (currency || "CNY").toUpperCase() === "USD",
           currency,
+          "cash",
         ),
       });
     }
   }
+
+  if (rows.length === 0) return null;
 
   return (
     <Card>

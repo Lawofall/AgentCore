@@ -1,4 +1,4 @@
-"""Official 极简 / 轻量 / 完整 recipes stay live until the user edits them."""
+"""Official 完整 and 极简 stay live. Create is a snapshot of 完整."""
 
 from __future__ import annotations
 
@@ -9,53 +9,78 @@ import pytest
 from agentcore.assembly.bind import (
     arm_conversation_assembly,
     current_omit_desk_rules,
-    current_omit_factory_catalog,
+    current_skill_membership,
     disarm_conversation_assembly,
 )
 from agentcore.assembly.recipes import (
     CHAT,
-    WEB,
+    FULL,
     capability_preset_id,
+    capability_recipe_for_id,
     capability_recipe_for_key,
     clear_recipe,
+    surface_for,
     surface_from_recipe,
     surface_from_row,
 )
-from agentcore.runtime.context.envelope_switches import RUNTIME_DATE, all_projection_ids
+from agentcore.runtime.context.envelope_switches import all_projection_ids
+from agentcore.runtime.skills.factory_switches import (
+    all_factory_skill_names,
+    current_omit_factory_catalog,
+)
 from agentcore.tools.switchboard import all_switch_ids, current_disabled_tools
 
 
-def test_chat_denies_every_current_switch_and_every_envelope_line():
-    surface = surface_from_recipe(capability_recipe_for_key(CHAT))  # type: ignore[arg-type]
-    assert set(surface.disabled_tools) == set(all_switch_ids())
-    assert set(surface.omitted_projections) == set(all_projection_ids())
-    assert surface.omit_factory_catalog is True
-    assert surface.omit_desk_rules is True
+def test_chat_recipe_id_stays_bound():
+    chat_id = capability_preset_id(CHAT)
+    assert capability_recipe_for_id(chat_id) is not None
+    surface = surface_for(chat_id, None)
+    assert surface is not None
+    assert surface.recipe == CHAT
 
 
-def test_web_keeps_search_and_the_date():
-    surface = surface_from_recipe(capability_recipe_for_key(WEB))  # type: ignore[arg-type]
-    assert "web" not in surface.disabled_tools
-    assert "ask_user" in surface.disabled_tools
-    assert "files" in surface.disabled_tools
-    assert RUNTIME_DATE not in surface.omitted_projections
-    assert "file_index" not in all_projection_ids()
-    assert surface.omit_factory_catalog is True
+def test_full_keeps_every_switch_and_envelope_line():
+    surface = surface_from_recipe(capability_recipe_for_key(FULL))  # type: ignore[arg-type]
+    assert surface.disabled_tools == ()
+    assert surface.omitted_projections == ()
+    assert surface.omitted_factory_skills == ()
+    assert surface.omit_factory_catalog is False
     assert surface.omit_desk_rules is False
 
 
-def test_recipe_key_wins_over_a_stale_empty_deny_list():
+def test_chat_recipe_denies_every_current_switch_and_envelope_line():
+    surface = surface_from_recipe(capability_recipe_for_key(CHAT))  # type: ignore[arg-type]
+    assert set(surface.disabled_tools) == set(all_switch_ids())
+    assert set(surface.omitted_projections) == set(all_projection_ids())
+    assert set(surface.omitted_factory_skills) == set(all_factory_skill_names())
+    assert surface.omit_factory_catalog is True
+    assert surface.omit_desk_rules is True
+    assert surface.recipe == CHAT
+
+
+def test_stale_full_recipe_key_still_wins_until_cleared():
     row = SimpleNamespace(
-        recipe=CHAT,
-        disabled_tools=[],
+        recipe=FULL,
+        disabled_tools=["web"],
         omitted_projections=[],
-        omit_factory_catalog=False,
+        omitted_factory_skills=[],
         omit_desk_rules=False,
     )
     surface = surface_from_row(row)
-    assert "web" in surface.disabled_tools
+    assert surface.disabled_tools == ()
     clear_recipe(row)
-    assert surface_from_row(row).disabled_tools == ()
+    assert surface_from_row(row).disabled_tools == ("web",)
+
+
+def test_loosened_row_omits_one_factory_skill():
+    row = SimpleNamespace(
+        recipe=None,
+        disabled_tools=[],
+        omitted_projections=[],
+        omitted_factory_skills=["nope", "page_ui"],
+        omit_desk_rules=False,
+    )
+    assert surface_from_row(row).omitted_factory_skills == ("page_ui",)
 
 
 class _Skills:
@@ -75,34 +100,26 @@ class _Session:
 
 
 @pytest.mark.asyncio
-async def test_arm_applies_chat_recipe_on_the_owned_row():
-    row = SimpleNamespace(
-        user_id="u1",
-        recipe=CHAT,
-        disabled_tools=[],
-        omitted_projections=[],
-        omit_factory_catalog=False,
-        omit_desk_rules=False,
-        enabled_mcp_server_ids=[],
-    )
-    conv = SimpleNamespace(assembly_id="asm", user_id="u1")
-    token = await arm_conversation_assembly(_Session(row), conv)
+async def test_arm_virtual_chat_omits_tools_and_desk_rules():
+    conv = SimpleNamespace(assembly_id=capability_preset_id(CHAT), user_id="u1")
+    token = await arm_conversation_assembly(_Session(None), conv)
     try:
         assert "web" in current_disabled_tools()
         assert current_omit_factory_catalog() is True
         assert current_omit_desk_rules() is True
+        assert current_skill_membership() is None
     finally:
         disarm_conversation_assembly(token)
     assert current_omit_desk_rules() is False
 
 
 @pytest.mark.asyncio
-async def test_arm_virtual_web_preset_has_no_row():
-    conv = SimpleNamespace(assembly_id=capability_preset_id(WEB), user_id="u1")
+async def test_arm_virtual_full_keeps_account_prompts():
+    conv = SimpleNamespace(assembly_id=capability_preset_id(FULL), user_id="u1")
     token = await arm_conversation_assembly(_Session(None), conv)
     try:
-        assert "web" not in current_disabled_tools()
-        assert "files" in current_disabled_tools()
-        assert current_omit_desk_rules() is False
+        assert current_disabled_tools() == frozenset()
+        assert current_skill_membership() is None
+        assert current_omit_factory_catalog() is False
     finally:
         disarm_conversation_assembly(token)

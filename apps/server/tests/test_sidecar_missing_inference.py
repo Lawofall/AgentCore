@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock
 from agentcore.core.error_codes import ErrorCode
 from agentcore.runtime.suspension import AskUserSuspension
 from agentcore.sidecar.server import SidecarServer
+from tests.sidecar_session import sidecar_session
 
 
 def _recorder() -> tuple[list[dict[str, Any]], Any]:
@@ -87,7 +88,7 @@ def test_start_turn_rejects_without_inference_credentials(tmp_path, monkeypatch)
                         "userMessageId": "u-missing",
                         "messageId": "22222222-2222-4222-8222-222222222222",
                         "traceId": "a" * 32,
-                        "folderId": None,
+                        "session": sidecar_session(),
                     },
                 }
             )
@@ -147,6 +148,7 @@ def test_resume_rejects_without_inference_before_claim(tmp_path, monkeypatch):
                         "conversationId": conversation_id,
                         "decision": "continue",
                         "traceId": "b" * 32,
+                        "session": sidecar_session(),
                     },
                 }
             )
@@ -212,7 +214,7 @@ def test_start_turn_clears_inference_when_explicit_null(tmp_path, monkeypatch):
                         "userMessageId": "u-clear",
                         "messageId": "22222222-2222-4222-8222-222222222222",
                         "traceId": "a" * 32,
-                        "folderId": None,
+                        "session": sidecar_session(),
                     },
                 }
             )

@@ -9,18 +9,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from agentcore.db.models import AssemblySkill, LlmModelProfile
 
-_MCP_IDS: ContextVar[frozenset[str] | None] = ContextVar(
-    "assembly_mcp_server_ids", default=None
-)
-_SKILLS: ContextVar[dict[str, str] | None] = ContextVar(
-    "assembly_skill_membership", default=None
-)
-_OMIT_FACTORY: ContextVar[bool] = ContextVar(
-    "omit_factory_catalog", default=False
-)
-_OMIT_DESK: ContextVar[bool] = ContextVar(
-    "omit_desk_rules", default=False
-)
+_MCP_IDS: ContextVar[frozenset[str] | None] = ContextVar("assembly_mcp_server_ids", default=None)
+_SKILLS: ContextVar[dict[str, str] | None] = ContextVar("assembly_skill_membership", default=None)
+_OMIT_DESK: ContextVar[bool] = ContextVar("omit_desk_rules", default=False)
 
 
 def current_mcp_server_ids() -> frozenset[str] | None:
@@ -33,21 +24,8 @@ def current_skill_membership() -> dict[str, str] | None:
     return _SKILLS.get()
 
 
-def current_omit_factory_catalog() -> bool:
-    """True when this turn's assembly leaves the three factory skill rows off."""
-    return _OMIT_FACTORY.get()
-
-
-def bind_omit_factory_catalog(omitted: bool) -> Token[bool]:
-    return _OMIT_FACTORY.set(bool(omitted))
-
-
-def reset_omit_factory_catalog(token: Token[bool]) -> None:
-    _OMIT_FACTORY.reset(token)
-
-
 def current_omit_desk_rules() -> bool:
-    """True when this turn does not read folder rules (极简)."""
+    """True when this turn does not read folder rules (blank snapshot)."""
     return _OMIT_DESK.get()
 
 
@@ -81,10 +59,9 @@ async def arm_conversation_assembly(
         surface = surface_for(aid, None)
         if surface is None:
             return _unbound()
-        return _bound(surface, skills={}, plugs=frozenset())
-    result = await session.execute(
-        select(AssemblySkill).where(AssemblySkill.assembly_id == aid)
-    )
+        # Official 完整 has no membership row: account 交代 follow the documents.
+        return _bound(surface, skills=None, plugs=frozenset())
+    result = await session.execute(select(AssemblySkill).where(AssemblySkill.assembly_id == aid))
     skills = {skill.document_id: skill.apply_mode for skill in result.scalars()}
     surface = surface_for(aid, row)
     assert surface is not None
@@ -95,10 +72,11 @@ async def arm_conversation_assembly(
 def _bound(
     surface: object,
     *,
-    skills: dict[str, str],
+    skills: dict[str, str] | None,
     plugs: frozenset[str],
 ) -> tuple[Token, Token, Token, Token, Token, Token]:
     from agentcore.runtime.context.envelope_switches import bind_envelope_omissions
+    from agentcore.runtime.skills.factory_switches import bind_omitted_factory_skills
     from agentcore.tools.switchboard import bind_disabled_tool_groups
 
     return (
@@ -106,7 +84,7 @@ def _bound(
         bind_envelope_omissions(list(surface.omitted_projections)),  # type: ignore[attr-defined]
         _MCP_IDS.set(plugs),
         _SKILLS.set(skills),
-        bind_omit_factory_catalog(bool(surface.omit_factory_catalog)),  # type: ignore[attr-defined]
+        bind_omitted_factory_skills(list(surface.omitted_factory_skills)),  # type: ignore[attr-defined]
         bind_omit_desk_rules(bool(surface.omit_desk_rules)),  # type: ignore[attr-defined]
     )
 
@@ -114,6 +92,7 @@ def _bound(
 def _unbound() -> tuple[Token, Token, Token, Token, Token, Token]:
     """No assembly row: tools and envelope stay all-on, and 交代 / plugs are unfiltered."""
     from agentcore.runtime.context.envelope_switches import bind_envelope_omissions
+    from agentcore.runtime.skills.factory_switches import bind_omitted_factory_skills
     from agentcore.tools.switchboard import bind_disabled_tool_groups
 
     return (
@@ -121,7 +100,7 @@ def _unbound() -> tuple[Token, Token, Token, Token, Token, Token]:
         bind_envelope_omissions([]),
         _MCP_IDS.set(None),
         _SKILLS.set(None),
-        bind_omit_factory_catalog(False),
+        bind_omitted_factory_skills([]),
         bind_omit_desk_rules(False),
     )
 
@@ -132,6 +111,7 @@ def disarm_conversation_assembly(token: object) -> None:
     from typing import cast
 
     from agentcore.runtime.context.envelope_switches import reset_envelope_omissions
+    from agentcore.runtime.skills.factory_switches import reset_omitted_factory_skills
     from agentcore.tools.switchboard import reset_disabled_tool_groups
 
     (
@@ -147,7 +127,7 @@ def disarm_conversation_assembly(token: object) -> None:
             Token[frozenset[str]],
             Token[frozenset[str] | None],
             Token[dict[str, str] | None],
-            Token[bool],
+            Token[frozenset[str]],
             Token[bool],
         ],
         token,
@@ -156,5 +136,5 @@ def disarm_conversation_assembly(token: object) -> None:
     reset_envelope_omissions(envelope_token)
     _MCP_IDS.reset(mcp_token)
     _SKILLS.reset(skill_token)
-    reset_omit_factory_catalog(factory_token)
+    reset_omitted_factory_skills(factory_token)
     reset_omit_desk_rules(desk_token)

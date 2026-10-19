@@ -23,6 +23,7 @@ from agentcore.observability.cost_log import log_cost_recorded
 from agentcore.runtime.events import EventSink, error_event, handoff_job_started
 from agentcore.runtime.journal import persist_turn_journal
 from agentcore.runtime.pipeline import run_chat_pipeline
+from agentcore.runtime.turn.snapshot import ConversationSnapshot
 from agentcore.workspace.handoff import snapshot_local
 from agentcore.workspace.locate import LocalBinding, build_server_workspace
 from agentcore.workspace.snapshots import create_snapshot, restore_into_workspace
@@ -146,6 +147,7 @@ async def run_handoff_job(
             sink=sink,
             user_id=user_id,
             backend=backend,
+            conversation=ConversationSnapshot.default(),
             approvals_enabled=False,
             llm_credentials=llm_credentials,
         )

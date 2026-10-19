@@ -48,6 +48,9 @@ class LLMCredentials:
     # Carried so ``build_provider`` can set leaf display names without re-querying DB.
     # Never used as the log ``provider`` field — that stays ``source`` / vendor prefix.
     label: str | None = None
+    # Saved vendor identity (``openai`` / ``opencode_go`` / ``custom`` …). Protocol
+    # dispatch reads this, not whether ``base_url`` matches a preset URL.
+    vendor_id: str = "custom"
     # Which platform-pool member funded this call. Alias or stable hash of
     # (api_key, base_url) — never key plaintext / last-4. Logs + cost_calls only;
     # never SSE error context. None on BYOK / vendor.

@@ -17,8 +17,7 @@ export interface PreviewFixture {
 // Committed turn-fold vectors with `preview !== false` are preview scenarios.
 // `preview: false` stays in the conformance harness (`isTurnFixture`) only.
 // Documents are opened through the shared supersets source adapter so
-// tape/recording-shaped inputs (and legacy kind/ts dialect) can feed the same
-// replay path.
+// tape/recording-shaped inputs can feed the same replay path.
 const modules = import.meta.glob(
   "../../../../../packages/protocol-conformance/fixtures/*.json",
   { eager: true },

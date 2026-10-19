@@ -43,6 +43,7 @@ from agentcore.runtime.suspension import (
     turn_evidence_ledger,
     turn_history,
 )
+from agentcore.runtime.turn.snapshot import ConversationSnapshot
 from agentcore.workspace.protocol import WorkspaceBackend
 
 logger = get_logger(__name__)
@@ -91,7 +92,6 @@ async def continue_ceo_pipeline(
     sink: EventSink,
     backend: WorkspaceBackend,
     history: list[dict] | None = None,
-    table_id: str | None = None,
     folder_id: str | None = None,
     llm_credentials: LLMCredentials | None = None,
     profile_set: ProfileSet | None = None,
@@ -100,6 +100,7 @@ async def continue_ceo_pipeline(
     suspension_saver: SuspensionSaver | None = None,
     suspension_deleter: SuspensionDeleter | None = None,
     llm_supports_tools: bool | None = None,
+    conversation: ConversationSnapshot | None = None,
     permission_axes: WorkspaceBoundary | None = None,
     trace_id: str | None = None,
 ) -> dict:
@@ -108,8 +109,13 @@ async def continue_ceo_pipeline(
     Folds the CEO window from the journal and runs the captain resumer. Skips
     ``recover_turn`` / checkpoint settle — there is no decision card.
     """
-    if permission_axes is None:
-        permission_axes = DEFAULT_PERMISSION_AXES
+    if conversation is not None:
+        permission_axes = conversation.permission_axes
+        prefer_delegate = conversation.prefer_delegate
+    else:
+        if permission_axes is None:
+            permission_axes = DEFAULT_PERMISSION_AXES
+        prefer_delegate = False
     profiles = turn_profiles_for_turn(profile_set, llm_credentials)
     captain_run_id = captain_run_id or new_id()
     bind_credential_pricing_context(llm_credentials)
@@ -208,7 +214,6 @@ async def continue_ceo_pipeline(
             llm=llm,
             sink=sink,
             backend=backend,
-            table_id=table_id,
             conversation_id=conversation_id,
             message_id=message_id,
             captain_run_id=captain_run_id,
@@ -219,6 +224,7 @@ async def continue_ceo_pipeline(
             journal_entries=journal_entries,
             profiles=profiles,
             permission_axes=permission_axes,
+            prefer_delegate=prefer_delegate,
             session_saver=session_saver,
             session_loader=session_loader,
             suspension_saver=suspension_saver,
@@ -301,7 +307,6 @@ async def continue_ceo_pipeline(
                 message_id=message_id,
                 captain_run_id=captain_run_id,
                 captain_state=captain_state,
-                vision_cost_sink=wired.vision_cost_sink,
                 sink=sink,
                 audit_recorder=audit_recorder,
                 roster_writer=roster_writer,
@@ -323,7 +328,6 @@ async def continue_ceo_pipeline(
             audit_recorder=audit_recorder,
             roster_writer=roster_writer,
             journal_writer=journal_writer,
-            vision_cost_runs=wired.vision_cost_sink,
             pre_pause_reasoning=pre_pause_reasoning,
         )
 

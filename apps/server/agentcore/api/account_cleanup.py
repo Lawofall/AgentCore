@@ -12,13 +12,11 @@ from drifting apart (one place to add a resource when the data model grows).
 from agentcore.db.repositories import (
     ConversationRepository,
     ConversationShareRepository,
-    DocRepository,
-    DocShareRepository,
     LlmModelProfileRepository,
     SkillStoreRepository,
-    TableRepository,
     UserLlmProviderRepository,
 )
+from agentcore.db.repositories.mcp_servers import UserMcpServerRepository
 from agentcore.db.repositories.search import UserSearchProviderRepository
 from agentcore.folders.service import FolderDeskService
 from agentcore.storage.assets import AssetStorage
@@ -43,19 +41,13 @@ async def cleanup_account_resources(
     outlives the account), drops all BYOK providers, search providers, model profiles, and Git PAT,
     removes the avatar object, cascades collaboration-desk membership
     (owner folders stay for retention; member → drop membership rows + pending invites),
-    hides creation-tool docs on folders this user owns, revokes public 文档
-    shares on those desks plus any 文档 links this user minted, and drops skill-store
-    listings/installs/reports. Installed skill document copies stay.
+    and drops skill-store listings/installs/reports. Installed skill document copies stay.
     ``avatar_key`` must be captured by the caller *before* the user row is anonymized
     (soft-delete nulls it). Each step is independently idempotent, so re-running on
     an already-注销 account is harmless. The append-only cost ledger and the
     platform search-count ledger are intentionally untouched.
     """
     await conversations.soft_delete_all_for_user(user_id)
-    await TableRepository(conversations._session).soft_delete_all_for_user(user_id)
-    await DocRepository(conversations._session).soft_delete_on_owned_folders(user_id)
-    await DocShareRepository(conversations._session).revoke_all_on_owned_folders(user_id)
-    await DocShareRepository(conversations._session).revoke_all_for_user(user_id)
     await shares.revoke_all_for_user(user_id)
     await llm_providers.delete_all_for_user(user_id)
     await UserSearchProviderRepository(conversations._session).delete_all_for_user(user_id)
@@ -68,6 +60,7 @@ async def cleanup_account_resources(
 
         await _Repo(conversations._session).delete_all_for_user(user_id)
     await delete_git_credentials_for_user(conversations._session, user_id)
+    await UserMcpServerRepository(conversations._session).delete_all_for_user(user_id)
     if avatar_key:
         await assets.delete(avatar_key)
     if folder_desk is not None:

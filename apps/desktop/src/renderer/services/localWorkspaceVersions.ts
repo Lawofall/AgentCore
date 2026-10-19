@@ -1,7 +1,7 @@
 /**
  * 本地工作区「命名版本」四件套 —— 云端快照四件套（`services/workspace.ts` 的
  * `listSnapshots` / `createSnapshot` / `restoreSnapshot`）的本机对位实现。
- * 产品不再提供本机创建 / 列表 / 恢复 UI；本模块与 sidecar 仍保留，已留下的 zip 不删。
+ * 产品入口在文件页「本机文件夹」根右键「版本…」（与云端同一块面板，后端走本模块）。
  *
  * 盘上落在 `AgentCore/versions/<version_id>/{meta.json,content.zip}`（内部区，不会被
  * grep / 索引 / 下个回合基线看见）。分两条 IPC：

@@ -280,8 +280,8 @@ export function BoundaryTable({
 
 const DEFAULT_SETTINGS_ROWS: { label: string; desc: string; to: string }[] = [
   {
-    label: "装配",
-    desc: "账号默认组合与组合管理",
+    label: "能力",
+    desc: "这场用哪些工具、交代和插头",
     to: APP_PATHS.more.model,
   },
   {
@@ -290,14 +290,24 @@ const DEFAULT_SETTINGS_ROWS: { label: string; desc: string; to: string }[] = [
     to: APP_PATHS.more.providers,
   },
   {
+    label: "联网搜索",
+    desc: "选用平台搜索，或连接自己的搜索",
+    to: APP_PATHS.more.search,
+  },
+  {
     label: "提示词",
     desc: "所有对话共用的提示词，在工具箱查看与调整",
     to: APP_PATHS.toolbox.guidelines,
   },
   { label: "用量", desc: "查看花费与额度", to: APP_PATHS.more.usage },
   {
+    label: "订阅",
+    desc: "免费版、基础版、高级版、旗舰版；链动小铺购买后贴兑换码开通",
+    to: APP_PATHS.more.subscription,
+  },
+  {
     label: "通用",
-    desc: "界面主题与联网搜索",
+    desc: "字号、发送方式、主题与缩放",
     to: APP_PATHS.more.general,
   },
   {
@@ -306,11 +316,6 @@ const DEFAULT_SETTINGS_ROWS: { label: string; desc: string; to: string }[] = [
     to: APP_PATHS.more.shortcuts,
   },
   { label: "关于", desc: "版本、产品手册与法律信息", to: APP_PATHS.more.about },
-  {
-    label: "赞助",
-    desc: "如果本产品对你有所帮助，欢迎您的慷慨赞助支持创作。",
-    to: APP_PATHS.more.sponsor,
-  },
 ];
 
 /** 设置速查行——内容源可传入 rows；旧章 SettingsTable 仍用默认列表。 */

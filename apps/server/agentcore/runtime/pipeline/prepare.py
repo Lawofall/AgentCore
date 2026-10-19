@@ -11,7 +11,7 @@ from dataclasses import dataclass
 import agentcore.runtime.pipeline as pipeline_pkg
 from agentcore.config import settings
 from agentcore.core.logging import get_logger
-from agentcore.core.types import new_id
+from agentcore.core.types import is_uuid_id, new_id
 from agentcore.db.base import async_session_factory
 from agentcore.db.repositories import FolderRepository
 from agentcore.desktop.channel import DesktopClientChannel
@@ -24,7 +24,6 @@ from agentcore.runtime.context import (
     detect_workspace_git,
     resolve_channel_profile,
 )
-from agentcore.runtime.costing import RunCost
 from agentcore.runtime.events import EventSink
 from agentcore.runtime.interaction import default_interaction_registry
 from agentcore.runtime.resolve.prepare import (
@@ -50,6 +49,28 @@ from agentcore.workspace.locate import (
 from agentcore.workspace.protocol import WorkspaceBackend
 
 logger = get_logger(__name__)
+
+
+async def vision_declared_for_turn(
+    user_id: str,
+    model_id: str,
+    credentials: LLMCredentials | None,
+) -> bool:
+    """Load this account's vision-accept refs and test the turn's main identity."""
+    from agentcore.db.repositories import UserRepository
+    from agentcore.llm.vision_declare import vision_declared
+
+    if (
+        credentials is None
+        or credentials.source != "user"
+        or not (credentials.provider_id or "").strip()
+        or not (model_id or "").strip()
+        or not is_uuid_id(user_id)
+    ):
+        return False
+    async with async_session_factory() as session:
+        refs = await UserRepository(session).vision_accept_refs(user_id)
+    return vision_declared(model_id, credentials, refs)
 
 
 async def list_consult_entries(registry: ToolRegistry, user_id: str) -> list:
@@ -88,42 +109,6 @@ async def _probe_local_workspace(
             ),
         )
     return exec_languages, git_fact, desk_visibly_empty, material_paths
-
-
-async def _resolve_table_context(
-    *,
-    table_id: str | None,
-    table_selection: list[str] | None,
-    user_id: str,
-    conversation_id: str,
-    folder_id: str | None,
-    attachments: list[dict] | None,
-) -> tuple[str | None, str]:
-    if table_id is None:
-        from agentcore.table.bind import lookup_table_id_for_turn
-
-        try:
-            table_id = await lookup_table_id_for_turn(
-                user_id=user_id,
-                conversation_id=conversation_id,
-                folder_id=folder_id,
-                attachments=attachments,
-            )
-        except Exception:
-            table_id = None
-    table_context = ""
-    if table_id:
-        from agentcore.table.context import render_table_context, sanitize_table_selection
-
-        try:
-            table_context = await render_table_context(
-                table_id=table_id,
-                user_id=user_id,
-                selected_ids=sanitize_table_selection(table_selection),
-            )
-        except Exception:
-            table_context = ""
-    return table_id, table_context
 
 
 async def _timed_phase[T](phase: str, awaitable: Awaitable[T]) -> T:
@@ -228,9 +213,7 @@ class PreparedTurn:
     worker_envelope: str
     worker_tools: ToolRegistry
     skill_registry: object
-    table_context: str
     base_tool_context: ToolContext
-    vision_cost_sink: list[RunCost]
     attachment_context: str
     user_message: str
     native_image_parts: list[dict]
@@ -247,8 +230,6 @@ async def prepare_fresh_turn(
     backend: WorkspaceBackend,
     sink: EventSink,
     folder_id: str | None,
-    table_id: str | None = None,
-    table_selection: list[str] | None = None,
     attachments: list[dict] | None,
     permission_axes,
     llm_credentials: LLMCredentials | None,
@@ -384,9 +365,13 @@ async def prepare_fresh_turn(
     from agentcore.llm.image_accept import model_accepts_images
 
     main_model = profiles.model_for("chat") if profiles is not None else ""
-    main_native_vision = model_accepts_images(main_model)
+    main_native_vision = model_accepts_images(
+        main_model,
+        declared=await vision_declared_for_turn(
+            user_id, main_model, llm_credentials
+        ),
+    )
     native_image_parts: list[dict] = []
-    vision_cost_sink: list[RunCost] = []
     # Built before the attachment block: its ``code_execute`` steer must follow this
     # turn's real worker assembly, never a second predicate. MCP / consult wiring
     # below only adds tools and cannot flip the execution class.
@@ -420,7 +405,7 @@ async def prepare_fresh_turn(
 
     from agentcore.runtime.deep_research_auto import load_deep_research_auto_state
 
-    attachment_prompt, on_demand_entries, table_resolved, deep_research_state = (
+    attachment_prompt, on_demand_entries, deep_research_state = (
         await _gather_cancel_on_fail(
             _timed_phase(
                 "attachments",
@@ -435,18 +420,9 @@ async def prepare_fresh_turn(
                 ),
             ),
             _worker_on_demand(),
-            _resolve_table_context(
-                table_id=table_id,
-                table_selection=table_selection,
-                user_id=user_id,
-                conversation_id=conversation_id,
-                folder_id=folder_id,
-                attachments=attachments,
-            ),
             load_deep_research_auto_state(conversation_id),
         )
     )
-    table_id, table_context = table_resolved
     deep_research_auto, deep_research_auto_debate_count = deep_research_state
     attachment_context = merge_attachment_and_mention_context(
         attachment_prompt.envelope, agent_mentions
@@ -512,7 +488,6 @@ async def prepare_fresh_turn(
         ),
         deep_research_auto=deep_research_auto,
         deep_research_auto_debate_count=deep_research_auto_debate_count,
-        table_id=table_id,
         desktop_channel=desktop_channel,
         workspace_channel=workspace_channel,
         accepts_images=main_native_vision,
@@ -574,9 +549,7 @@ async def prepare_fresh_turn(
         worker_envelope=worker_envelope,
         worker_tools=worker_tools,
         skill_registry=skill_registry,
-        table_context=table_context,
         base_tool_context=base_tool_context,
-        vision_cost_sink=vision_cost_sink,
         attachment_context=attachment_context,
         user_message=user_message,
         native_image_parts=native_image_parts,

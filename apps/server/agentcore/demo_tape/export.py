@@ -177,13 +177,7 @@ def build_tape_from_recording(
             # legitimately rewind; clamp any jitter so pacing math stays simple.
             t_ms = max(t_ms, last_t)
             last_t = t_ms
-            # Preserve explicit null from either dialect.
-            if "timestamp" in ev:
-                ts = ev.get("timestamp")
-            elif "ts" in ev:
-                ts = ev.get("ts")
-            else:
-                ts = None
+            ts = ev.get("timestamp") if "timestamp" in ev else None
             events.append(
                 {
                     "type": et,

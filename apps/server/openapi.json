@@ -1124,7 +1124,7 @@
         "type": "object"
       },
       "AdminOverview": {
-        "description": "Landing dashboard (``GET /v1/admin/overview``, admin-only) — platform pulse.\n\nToday's vitals (active users / turn health / cost), account tallies, the 7-day\ncost + turn trends, deployment health, and the most recent errors (drillable\ninto 会话复盘). Money is integer nano-CNY; ``CostBreakdown.cny_total`` is yuan.",
+        "description": "Landing dashboard (``GET /v1/admin/overview``, admin-only) — platform pulse.\n\nToday's vitals (active users / turn health / cost), account tallies, live\nonline accounts, the 7-day cost + turn trends, deployment health, and the\nmost recent errors (drillable into 会话复盘). Money is integer nano-CNY;\n``CostBreakdown.cny_total`` is yuan.",
         "properties": {
           "active_users_today": {
             "title": "Active Users Today",
@@ -1173,6 +1173,10 @@
             "title": "Users Active",
             "type": "integer"
           },
+          "users_online": {
+            "title": "Users Online",
+            "type": "integer"
+          },
           "users_total": {
             "title": "Users Total",
             "type": "integer"
@@ -1185,6 +1189,7 @@
           "users_total",
           "users_active",
           "admins",
+          "users_online",
           "recent_daily_cost",
           "recent_daily_turns",
           "database_ok",
@@ -1956,17 +1961,6 @@
       "AdminUserDetail": {
         "description": "One account's drill-down (``GET /v1/admin/users/{id}/detail``, admin-only).\n\nStitches the per-user views an operator needs to understand an account: the\nfull record (``user``), the account BYOK default chat/background model names +\nprovider count (from the ``users`` pointers / ``user_llm_providers`` — never the\nAPI key), this account's usage (today/month/\ntrend/by-model — the per-user counterpart of ``AdminUsageSummary``),\nits recent conversations, and its recent turn activity (``turn_metrics``, each\ndrillable into 会话复盘), plus active login ``sessions`` (refresh-token families,\nsame shape as ``GET /v1/auth/sessions``). Money is integer nano-CNY;\n``CostBreakdown.cny_total`` is yuan. ``billing_mode`` frames cost honestly\n(byok = own-key spend).",
         "properties": {
-          "background_model": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Background Model"
-          },
           "billing_mode": {
             "title": "Billing Mode",
             "type": "string"
@@ -2179,6 +2173,50 @@
             "title": "Role",
             "type": "string"
           },
+          "seat_pending_plan": {
+            "anyOf": [
+              {
+                "enum": [
+                  "starter",
+                  "plus",
+                  "flagship"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seat Pending Plan"
+          },
+          "seat_plan": {
+            "anyOf": [
+              {
+                "enum": [
+                  "starter",
+                  "plus",
+                  "flagship"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seat Plan"
+          },
+          "seat_until": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seat Until"
+          },
           "status": {
             "enum": [
               "active",
@@ -2369,6 +2407,50 @@
             ],
             "title": "Role",
             "type": "string"
+          },
+          "seat_pending_plan": {
+            "anyOf": [
+              {
+                "enum": [
+                  "starter",
+                  "plus",
+                  "flagship"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seat Pending Plan"
+          },
+          "seat_plan": {
+            "anyOf": [
+              {
+                "enum": [
+                  "starter",
+                  "plus",
+                  "flagship"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seat Plan"
+          },
+          "seat_until": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seat Until"
           },
           "status": {
             "enum": [
@@ -2852,7 +2934,7 @@
         "properties": {
           "policy": {
             "$ref": "#/components/schemas/WorkspaceBoundary",
-            "description": "New-session default boundary: read | folder | computer"
+            "description": "New-session default boundary: read | folder | computer | full"
           }
         },
         "required": [
@@ -2865,7 +2947,7 @@
         "properties": {
           "policy": {
             "$ref": "#/components/schemas/WorkspaceBoundary",
-            "default": "folder"
+            "default": "computer"
           }
         },
         "title": "AutonomyView",
@@ -3450,7 +3532,7 @@
         "type": "object"
       },
       "CapabilityTool": {
-        "description": "A tool in the capability catalog: its public schema + who may call it.\n\nThe COMPLETE catalog — CEO orchestration primitives (``delegate`` / ``revise`` /\n``consult`` / ``ask_user``) and the worker-only ``escalate``.\n``available_to`` is a subset of ``[\"ceo\", \"worker\"]`` so the UI can show which\nside of the team holds each tool.\n``blurb`` is the toolbox shelf description only — not the consult directory\nor the tool schema ``description``.",
+        "description": "A tool in the capability catalog: its public schema + who may call it.\n\nThe COMPLETE catalog — CEO orchestration primitives (``delegate`` / ``revise`` /\n``consult`` / ``ask_user``) and the worker-only ``escalate``.\n``available_to`` is a subset of ``[\"ceo\", \"worker\"]`` so the UI can show which\nside of the team holds each tool.\n``blurb`` is the toolbox shelf description only — not the consult directory\nor the tool schema ``description``.\n``description_prefer`` is the root-CEO prefer-delegate button text. Empty\nexcept for ``delegate``. Nested captain descriptions are not catalogued.",
         "properties": {
           "approval": {
             "$ref": "#/components/schemas/ToolApproval"
@@ -3469,6 +3551,12 @@
           },
           "description": {
             "title": "Description",
+            "type": "string"
+          },
+          "description_prefer": {
+            "default": "",
+            "description": "Root-CEO prefer-delegate schema description. Empty except for ``delegate``. Toolbox inspector switches between ``description`` (注意力尺) and this (优先派). Nested captain descriptions are not catalogued.",
+            "title": "Description Prefer",
             "type": "string"
           },
           "face": {
@@ -4221,31 +4309,34 @@
         "title": "CloneRepoResponse",
         "type": "object"
       },
-      "ConnectCleverSeeRequest": {
+      "ComposerModelKnobs": {
+        "description": "Last effort / context for one catalog ref.",
         "properties": {
-          "api_key": {
-            "default": "",
-            "title": "Api Key",
-            "type": "string"
-          }
-        },
-        "title": "ConnectCleverSeeRequest",
-        "type": "object"
-      },
-      "ConnectSearxngRequest": {
-        "properties": {
-          "api_key": {
-            "default": "",
-            "title": "Api Key",
-            "type": "string"
+          "context_budget": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Shorter context ceiling in tokens. Null = that model's own window.",
+            "title": "Context Budget"
           },
-          "base_url": {
-            "default": "",
-            "title": "Base Url",
-            "type": "string"
+          "reasoning_effort": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reasoning Effort"
           }
         },
-        "title": "ConnectSearxngRequest",
+        "title": "ComposerModelKnobs",
         "type": "object"
       },
       "ContextCutCommitRequest": {
@@ -4418,6 +4509,52 @@
           "page_size"
         ],
         "title": "ConversationListResponse",
+        "type": "object"
+      },
+      "ConversationModelOverride": {
+        "description": "A complete composer snapshot: this conversation, or the account last-used.\n\nNull on the conversation row = this chat never pinned a brain (follow the\nassembly). Null ``reasoning_effort`` / ``context_budget`` / ``worker`` inside\na snapshot = vendor default / model window / follow main — not assembly.",
+        "properties": {
+          "context_budget": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Shorter context ceiling in tokens (128000 / 256000 / 512000). Null = the main model's own window.",
+            "title": "Context Budget"
+          },
+          "main": {
+            "$ref": "#/components/schemas/ModelProfileSlot"
+          },
+          "reasoning_effort": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reasoning Effort"
+          },
+          "worker": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModelProfileSlot"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "main"
+        ],
+        "title": "ConversationModelOverride",
         "type": "object"
       },
       "ConversationReadRequest": {
@@ -4822,6 +4959,11 @@
             "title": "Deep Research Auto",
             "type": "boolean"
           },
+          "delegate_mode": {
+            "default": false,
+            "title": "Delegate Mode",
+            "type": "boolean"
+          },
           "folder_id": {
             "anyOf": [
               {
@@ -4863,6 +5005,16 @@
             "default": 0,
             "title": "Message Count",
             "type": "integer"
+          },
+          "model_override": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConversationModelOverride"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "permission_axes": {
             "$ref": "#/components/schemas/PermissionAxesModel"
@@ -5095,6 +5247,11 @@
             ],
             "title": "Client Request Id"
           },
+          "delegate_mode": {
+            "default": false,
+            "title": "Delegate Mode",
+            "type": "boolean"
+          },
           "folder_id": {
             "anyOf": [
               {
@@ -5117,6 +5274,16 @@
               }
             ],
             "title": "Local Container Root Id"
+          },
+          "model_override": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConversationModelOverride"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "permission_axes": {
             "anyOf": [
@@ -5157,30 +5324,6 @@
           "path"
         ],
         "title": "CreateDirRequest",
-        "type": "object"
-      },
-      "CreateDocRequest": {
-        "properties": {
-          "folder_id": {
-            "title": "Folder Id",
-            "type": "string"
-          },
-          "title": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Title"
-          }
-        },
-        "required": [
-          "folder_id"
-        ],
-        "title": "CreateDocRequest",
         "type": "object"
       },
       "CreateFolderRequest": {
@@ -5270,11 +5413,18 @@
         "type": "object"
       },
       "CreateLlmModelProfileRequest": {
-        "description": "New assembly. Copies the starred assembly, including its model.",
+        "description": "New user assembly. Always a snapshot of official 完整, not a locked recipe.",
         "properties": {
           "name": {
             "maxLength": 200,
             "title": "Name",
+            "type": "string"
+          },
+          "origin": {
+            "const": "full",
+            "default": "full",
+            "description": "Snapshot of official 完整 (tools, envelope, factory catalog on).",
+            "title": "Origin",
             "type": "string"
           },
           "set_as_default": {
@@ -5320,12 +5470,53 @@
             "maxLength": 100,
             "title": "Label",
             "type": "string"
+          },
+          "vendor_id": {
+            "description": "Vendor identity for protocol dispatch (openai / opencode_go / custom …). Independent of base_url.",
+            "maxLength": 40,
+            "title": "Vendor Id",
+            "type": "string"
           }
         },
         "required": [
-          "api_key"
+          "api_key",
+          "vendor_id"
         ],
         "title": "CreateLlmProviderRequest",
+        "type": "object"
+      },
+      "CreateMcpServerRequest": {
+        "properties": {
+          "bearer": {
+            "anyOf": [
+              {
+                "maxLength": 4000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional static bearer token (AES-GCM at rest; never returned).",
+            "title": "Bearer"
+          },
+          "name": {
+            "default": "",
+            "maxLength": 100,
+            "title": "Name",
+            "type": "string"
+          },
+          "url": {
+            "maxLength": 2000,
+            "minLength": 8,
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "title": "CreateMcpServerRequest",
         "type": "object"
       },
       "CreateNoticeRequest": {
@@ -5521,6 +5712,63 @@
         "title": "CreatePlatformCredentialRequest",
         "type": "object"
       },
+      "CreateRedemptionCodesRequest": {
+        "properties": {
+          "count": {
+            "maximum": 200.0,
+            "minimum": 1.0,
+            "title": "Count",
+            "type": "integer"
+          },
+          "sku": {
+            "enum": [
+              "starter",
+              "plus",
+              "flagship"
+            ],
+            "title": "Sku",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sku",
+          "count"
+        ],
+        "title": "CreateRedemptionCodesRequest",
+        "type": "object"
+      },
+      "CreateRedemptionCodesResponse": {
+        "description": "Plaintext codes are returned once. They are not stored.",
+        "properties": {
+          "batch_id": {
+            "title": "Batch Id",
+            "type": "string"
+          },
+          "codes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Codes",
+            "type": "array"
+          },
+          "sku": {
+            "enum": [
+              "starter",
+              "plus",
+              "flagship"
+            ],
+            "title": "Sku",
+            "type": "string"
+          }
+        },
+        "required": [
+          "batch_id",
+          "sku",
+          "codes"
+        ],
+        "title": "CreateRedemptionCodesResponse",
+        "type": "object"
+      },
       "CreateShareRequest": {
         "description": "Optional expiry when minting a public share link.\n\n``expires_in_days=None`` means the link never auto-expires (explicit opt-in).\nOmitted / default ``30`` matches the platform security default.",
         "properties": {
@@ -5564,25 +5812,8 @@
         "title": "CreateSnapshotRequest",
         "type": "object"
       },
-      "CreateTableRequest": {
-        "properties": {
-          "title": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Title"
-          }
-        },
-        "title": "CreateTableRequest",
-        "type": "object"
-      },
       "DailyCost": {
-        "description": "One UTC day's total spend — a point in the dashboard 7-day trend (§7.3D).",
+        "description": "One UTC day's total spend — a point in the dashboard trend sparkline.",
         "properties": {
           "cost_total": {
             "title": "Cost Total",
@@ -6403,171 +6634,6 @@
           "task"
         ],
         "title": "DispatchHandoffRequest",
-        "type": "object"
-      },
-      "DocBodyWriteRequest": {
-        "properties": {
-          "baseline": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Baseline"
-          },
-          "body": {
-            "additionalProperties": true,
-            "title": "Body",
-            "type": "object"
-          }
-        },
-        "required": [
-          "body"
-        ],
-        "title": "DocBodyWriteRequest",
-        "type": "object"
-      },
-      "DocDetail": {
-        "description": "A doc plus its markdown body (editor load payload).",
-        "properties": {
-          "body": {
-            "additionalProperties": true,
-            "title": "Body",
-            "type": "object"
-          },
-          "can_write": {
-            "title": "Can Write",
-            "type": "boolean"
-          },
-          "created_at": {
-            "format": "date-time",
-            "title": "Created At",
-            "type": "string"
-          },
-          "folder_id": {
-            "title": "Folder Id",
-            "type": "string"
-          },
-          "folder_name": {
-            "title": "Folder Name",
-            "type": "string"
-          },
-          "id": {
-            "title": "Id",
-            "type": "string"
-          },
-          "title": {
-            "title": "Title",
-            "type": "string"
-          },
-          "updated_at": {
-            "format": "date-time",
-            "title": "Updated At",
-            "type": "string"
-          },
-          "version": {
-            "title": "Version",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "id",
-          "title",
-          "folder_id",
-          "folder_name",
-          "version",
-          "can_write",
-          "created_at",
-          "updated_at",
-          "body"
-        ],
-        "title": "DocDetail",
-        "type": "object"
-      },
-      "DocSummary": {
-        "properties": {
-          "can_write": {
-            "title": "Can Write",
-            "type": "boolean"
-          },
-          "created_at": {
-            "format": "date-time",
-            "title": "Created At",
-            "type": "string"
-          },
-          "folder_id": {
-            "title": "Folder Id",
-            "type": "string"
-          },
-          "folder_name": {
-            "title": "Folder Name",
-            "type": "string"
-          },
-          "id": {
-            "title": "Id",
-            "type": "string"
-          },
-          "title": {
-            "title": "Title",
-            "type": "string"
-          },
-          "updated_at": {
-            "format": "date-time",
-            "title": "Updated At",
-            "type": "string"
-          },
-          "version": {
-            "title": "Version",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "id",
-          "title",
-          "folder_id",
-          "folder_name",
-          "version",
-          "can_write",
-          "created_at",
-          "updated_at"
-        ],
-        "title": "DocSummary",
-        "type": "object"
-      },
-      "DocWriteResult": {
-        "properties": {
-          "conflict": {
-            "default": false,
-            "title": "Conflict",
-            "type": "boolean"
-          },
-          "doc": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/DocDetail"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "ok": {
-            "title": "Ok",
-            "type": "boolean"
-          },
-          "version": {
-            "title": "Version",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "ok",
-          "version"
-        ],
-        "title": "DocWriteResult",
         "type": "object"
       },
       "DocumentContentRequest": {
@@ -8336,6 +8402,59 @@
         "title": "HandoffJobSummary",
         "type": "object"
       },
+      "HiddenModelRefsUpdate": {
+        "description": "``PUT /v1/users/me/models/hidden`` — replace picker membership.",
+        "properties": {
+          "enabled_refs": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "BYOK refs on pickers. Null leaves the stored allowlist unchanged (older clients that only send refs).",
+            "title": "Enabled Refs"
+          },
+          "refs": {
+            "description": "Refs kept off pickers (platform opt-out; leftover BYOK denylist).",
+            "items": {
+              "type": "string"
+            },
+            "title": "Refs",
+            "type": "array"
+          }
+        },
+        "title": "HiddenModelRefsUpdate",
+        "type": "object"
+      },
+      "HiddenModelRefsView": {
+        "properties": {
+          "enabled_refs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Enabled Refs",
+            "type": "array"
+          },
+          "refs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Refs",
+            "type": "array"
+          }
+        },
+        "required": [
+          "refs"
+        ],
+        "title": "HiddenModelRefsView",
+        "type": "object"
+      },
       "HistoryToolCall": {
         "properties": {
           "function": {
@@ -8677,16 +8796,6 @@
       "LlmModelProfileView": {
         "description": "One assembly, including its model columns.",
         "properties": {
-          "background": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ModelProfileSlot"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
           "context_budget": {
             "anyOf": [
               {
@@ -8751,17 +8860,13 @@
             "title": "Name",
             "type": "string"
           },
-          "omit_factory_catalog": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "When true, this assembly does not carry the three factory skill rows. consult stays only if user on-demand rows remain. Null means the factory rows are still on.",
-            "title": "Omit Factory Catalog"
+          "omitted_factory_skills": {
+            "description": "Official HOW names this assembly leaves off the consult directory. Empty = every factory row stays. A name on the list is missing from the directory and consult. New skills default on once the recipe is released.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Omitted Factory Skills",
+            "type": "array"
           },
           "reasoning_effort": {
             "anyOf": [
@@ -8779,7 +8884,6 @@
               {
                 "enum": [
                   "chat",
-                  "web",
                   "full"
                 ],
                 "type": "string"
@@ -8788,7 +8892,7 @@
                 "type": "null"
               }
             ],
-            "description": "Official recipe still locked on this assembly. Null once tools, the envelope, the factory catalog, or plugs are edited, or the row was never a recipe.",
+            "description": "Official recipe still locked on this assembly. Null on user snapshots. Official 完整 / 极简 themselves are virtual ids.",
             "title": "Recipe"
           },
           "updated_at": {
@@ -8802,16 +8906,6 @@
               }
             ],
             "title": "Updated At"
-          },
-          "vision": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ModelProfileSlot"
-              },
-              {
-                "type": "null"
-              }
-            ]
           },
           "warnings": {
             "description": "Ignorable BYOK model reachability hints from the last save (empty on list/get). Save still succeeds when non-empty.",
@@ -8916,12 +9010,18 @@
               }
             ],
             "title": "Updated At"
+          },
+          "vendor_id": {
+            "description": "Vendor identity for protocol dispatch (openai / opencode_go / custom …)",
+            "title": "Vendor Id",
+            "type": "string"
           }
         },
         "required": [
           "id",
           "label",
           "base_url",
+          "vendor_id",
           "status"
         ],
         "title": "LlmProviderView",
@@ -9387,6 +9487,138 @@
         "title": "MarkReadRequest",
         "type": "object"
       },
+      "McpOAuthStartRequest": {
+        "properties": {
+          "return_origin": {
+            "default": "",
+            "maxLength": 500,
+            "title": "Return Origin",
+            "type": "string"
+          }
+        },
+        "title": "McpOAuthStartRequest",
+        "type": "object"
+      },
+      "McpOAuthStartResponse": {
+        "properties": {
+          "authorization_url": {
+            "title": "Authorization Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "authorization_url"
+        ],
+        "title": "McpOAuthStartResponse",
+        "type": "object"
+      },
+      "McpServerListResponse": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/McpServerView"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "data",
+          "total"
+        ],
+        "title": "McpServerListResponse",
+        "type": "object"
+      },
+      "McpServerTestResponse": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "last_error": {
+            "title": "Last Error",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "tools": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tools",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "tools",
+          "last_error"
+        ],
+        "title": "McpServerTestResponse",
+        "type": "object"
+      },
+      "McpServerView": {
+        "properties": {
+          "auth_kind": {
+            "title": "Auth Kind",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "has_token": {
+            "title": "Has Token",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "last_error": {
+            "title": "Last Error",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "url",
+          "auth_kind",
+          "status",
+          "has_token",
+          "last_error",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "McpServerView",
+        "type": "object"
+      },
       "MemoryUpdateItemView": {
         "description": "One applied memory change in a 记忆已更新 card (Agent记忆与知识系统 §1.6).\n\n``file`` is a friendly label (偏好 / 画像 / 主题·<slug>); ``scope`` is ``global`` or\n``project`` (the conversation's project layer); ``content`` is the bullet text for an\nadd/update or the matched text for a remove. ``target`` is the synthetic memory-leaf\npath the card deep-links to (desktop ``memorySource`` scheme; \"\" = no leaf).\n``project_id`` is the folder id when scope is project (最近更新 deep-link). Shape\nmirrors ``memory/maintenance.py`` ``MemoryUpdateItem`` (the stored\n``memory_updates.items`` JSONB). ``action`` is the closed ``MemoryUpdateAction`` set.",
         "properties": {
@@ -9679,13 +9911,6 @@
               "$ref": "#/components/schemas/EvidenceLedgerEntryRest"
             },
             "title": "Evidence Ledger",
-            "type": "array"
-          },
-          "followups": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Followups",
             "type": "array"
           },
           "generation_ms": {
@@ -10095,7 +10320,7 @@
         "type": "object"
       },
       "ModelCatalogItem": {
-        "description": "One selectable (or greyed-out) model in the user's catalog.\n\nProduct identity is ``ref``. Internally ``(id, origin, provider_id)`` is still unique\n— the same model id may appear under several BYOK providers (and once as a platform\nrow), so the picker groups by provider.",
+        "description": "One selectable (or greyed-out) model in the user's catalog.\n\nProduct identity is ``ref``. Internally ``(id, origin, provider_id)`` is still unique\n— the same model id may appear under several BYOK providers (and once as a platform\nrow). Composer pickers are a flat list; the settings page groups by channel.",
         "properties": {
           "available": {
             "default": true,
@@ -10112,7 +10337,7 @@
                 "type": "null"
               }
             ],
-            "description": "Curated display badge rendered as-is by clients (e.g. 免费额度). Null when none — never inferred from model id suffixes.",
+            "description": "Display badge rendered as-is by clients. Curated SKU marks (e.g. 免费额度) only. Platform origin is unmarked. Null when none — never inferred from model id suffixes.",
             "title": "Badge"
           },
           "capabilities": {
@@ -10134,6 +10359,12 @@
             ],
             "description": "Context window in tokens (display hint; null if unknown).",
             "title": "Context Length"
+          },
+          "custom": {
+            "default": false,
+            "description": "True when this BYOK row was opened by hand-fill (enabled_refs) rather than vendor seed or GET /models. Clients may badge it 自定义. Inference ignores this flag.",
+            "title": "Custom",
+            "type": "boolean"
           },
           "display_name": {
             "title": "Display Name",
@@ -10236,8 +10467,43 @@
             "title": "Byok Configured",
             "type": "boolean"
           },
+          "composer_model": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConversationModelOverride"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Account last-used composer snapshot. New chats start from this; null = follow the starred assembly until the picker writes one."
+          },
+          "composer_model_knobs": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ComposerModelKnobs"
+            },
+            "description": "Last effort / context per catalog ref (@platform/{id} or @byok/{provider_id}/{id}). Switching a model restores that leaf; missing key = vendor default / window.",
+            "title": "Composer Model Knobs",
+            "type": "object"
+          },
           "current": {
             "$ref": "#/components/schemas/ModelCatalogCurrent"
+          },
+          "enabled_refs": {
+            "description": "BYOK catalog refs this account opened onto composer pickers. Connecting a provider does not add its directory here; Settings · 模型 is the inventory. Inference ignores this set.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Enabled Refs",
+            "type": "array"
+          },
+          "hidden_refs": {
+            "description": "Catalog refs this account hid from composer pickers. Platform rows default on; a ref here stays off the picker. The models list is the full catalog; inference ignores this set.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Hidden Refs",
+            "type": "array"
           },
           "models": {
             "items": {
@@ -10256,7 +10522,7 @@
         "type": "object"
       },
       "ModelCostLine": {
-        "description": "One model's call-level spend over a window — admin per-model payroll.\n\nAggregated from ``cost_calls`` (``GROUP BY model``), never from\n``cost_events.model`` (that column only records the run's first call; multi-model\nruns would mis-attribute). Money is integer nano-CNY; ``tokens_total`` is\n``SUM(input + output + reasoning)``. Clients format ¥ as ``cost_total / 1e9``.",
+        "description": "One model's call-level spend over a window (account 用量 / admin 看板).\n\nAggregated from ``cost_calls`` (``GROUP BY model``), never from\n``cost_events.model`` (that column only records the run's first call; multi-model\nruns would mis-attribute). Money is integer nano-CNY; ``tokens_total`` is\n``SUM(input + output + reasoning)``. Clients format ¥ as ``cost_total / 1e9``.",
         "properties": {
           "calls": {
             "title": "Calls",
@@ -10289,6 +10555,58 @@
         "title": "ModelCostLine",
         "type": "object"
       },
+      "ModelDisplayNameUpdate": {
+        "description": "``PUT /v1/users/me/models/display-names`` — one BYOK catalog alias.",
+        "properties": {
+          "display_name": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Shown name for this connected model. Null or blank reverts to the catalog brand. Platform refs are rejected.",
+            "title": "Display Name"
+          },
+          "ref": {
+            "description": "Catalog identity ``@byok/{provider_id}/{id}``.",
+            "title": "Ref",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ref"
+        ],
+        "title": "ModelDisplayNameUpdate",
+        "type": "object"
+      },
+      "ModelDisplayNameView": {
+        "properties": {
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "ref": {
+            "title": "Ref",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ref"
+        ],
+        "title": "ModelDisplayNameView",
+        "type": "object"
+      },
       "ModelPriceCard": {
         "description": "Curated unit prices per 1M tokens as decimal strings (money is never float).",
         "properties": {
@@ -10317,8 +10635,14 @@
           "currency": {
             "const": "CNY",
             "default": "CNY",
-            "description": "ISO-4217. Catalog cards are curated CNY, not live USD.",
+            "description": "ISO-4217. Catalog cards are curated selling CNY (1 积分 = ¥1 卖价).",
             "title": "Currency",
+            "type": "string"
+          },
+          "multiplier": {
+            "default": "1",
+            "description": "Sell rate vs that model's official CNY card, decimal string. Platform Flash is 0.25; Claude 0.3; GPT-6 0.18; 1 = official. Picker row shows this. BYOK rows stay 1.",
+            "title": "Multiplier",
             "type": "string"
           },
           "output": {
@@ -10331,13 +10655,25 @@
               }
             ],
             "title": "Output"
+          },
+          "quota_multiplier": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Credit-spend rate vs platform Flash off-peak sell (1M input + 1M output), integer string. 1 = same 积分 as Flash. Null on BYOK / unpriced. Official-vs-vendor sell rate stays in multiplier. Picker card shows this.",
+            "title": "Quota Multiplier"
           }
         },
         "title": "ModelPriceCard",
         "type": "object"
       },
       "ModelProfileSlot": {
-        "description": "One slot in a model combination (main / worker / background / vision).",
+        "description": "One slot in a model combination (main / worker).",
         "properties": {
           "model": {
             "maxLength": 200,
@@ -10407,7 +10743,7 @@
             "type": "string"
           },
           "required_protocol": {
-            "description": "Protocol this catalog row needs that is unavailable on this origin. Platform greys both; BYOK OpenCode already speaks anthropic_messages.",
+            "description": "Protocol this catalog row needs that is unavailable on this origin. Platform greys unpriced off-protocol ids; priced Claude / GPT stay selectable. BYOK OpenCode already speaks both protocols.",
             "enum": [
               "openai_responses",
               "anthropic_messages"
@@ -10713,6 +11049,19 @@
         "title": "NoticeSummary",
         "type": "object"
       },
+      "OfficialDeepSeekProviderView": {
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label"
+        ],
+        "title": "OfficialDeepSeekProviderView",
+        "type": "object"
+      },
       "PasswordForgotRequest": {
         "properties": {
           "email": {
@@ -10870,7 +11219,7 @@
         "properties": {
           "boundary": {
             "$ref": "#/components/schemas/WorkspaceBoundary",
-            "default": "folder"
+            "default": "computer"
           }
         },
         "title": "PermissionAxesModel",
@@ -11547,7 +11896,7 @@
         "type": "object"
       },
       "RecordTurnResponse": {
-        "description": "The persisted ids for a recorded local turn (the desktop reconciles its\noptimistic user/assistant bubbles against these; ``title`` is set only when this\nturn minted the conversation's first title; ``followups`` is always null on new\nturns — chips mint is offline; historical rows may still carry the column).\n\n``noop=True`` means the server intentionally skipped an assistant row (empty\nbody + no process state). Desktop may delete the outbox only when\n``assistant_message_id`` is set **or** ``noop`` is True — never on a bare null id\nwhen the turn carried runs/journal/segments.",
+        "description": "The persisted ids for a recorded local turn (the desktop reconciles its\noptimistic user/assistant bubbles against these; ``title`` is set only when this\nturn minted the conversation's first title).\n\n``noop=True`` means the server intentionally skipped an assistant row (empty\nbody + no process state). Desktop may delete the outbox only when\n``assistant_message_id`` is set **or** ``noop`` is True — never on a bare null id\nwhen the turn carried runs/journal/segments.",
         "properties": {
           "assistant_message_id": {
             "anyOf": [
@@ -11559,20 +11908,6 @@
               }
             ],
             "title": "Assistant Message Id"
-          },
-          "followups": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Followups"
           },
           "noop": {
             "default": false,
@@ -11599,6 +11934,129 @@
           "user_message_id"
         ],
         "title": "RecordTurnResponse",
+        "type": "object"
+      },
+      "RedeemSeatRequest": {
+        "properties": {
+          "code": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "title": "RedeemSeatRequest",
+        "type": "object"
+      },
+      "RedemptionCodeLine": {
+        "properties": {
+          "batch_id": {
+            "title": "Batch Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "prefix": {
+            "title": "Prefix",
+            "type": "string"
+          },
+          "redeemed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Redeemed At"
+          },
+          "redeemed_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Redeemed By"
+          },
+          "sku": {
+            "enum": [
+              "starter",
+              "plus",
+              "flagship"
+            ],
+            "title": "Sku",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "unused",
+              "redeemed",
+              "void"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "sku",
+          "status",
+          "prefix",
+          "batch_id",
+          "created_at"
+        ],
+        "title": "RedemptionCodeLine",
+        "type": "object"
+      },
+      "RedemptionCodeListResponse": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/RedemptionCodeLine"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
+          "unused_flagship": {
+            "title": "Unused Flagship",
+            "type": "integer"
+          },
+          "unused_plus": {
+            "title": "Unused Plus",
+            "type": "integer"
+          },
+          "unused_starter": {
+            "title": "Unused Starter",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "data",
+          "total",
+          "unused_starter",
+          "unused_plus",
+          "unused_flagship"
+        ],
+        "title": "RedemptionCodeListResponse",
         "type": "object"
       },
       "RegenerateMessageRequest": {
@@ -12659,24 +13117,22 @@
         "title": "RunsPayload",
         "type": "object"
       },
-      "SearchConnectionFailureRequest": {
-        "properties": {
-          "message": {
-            "default": "",
-            "maxLength": 300,
-            "title": "Message",
-            "type": "string"
-          }
-        },
-        "title": "SearchConnectionFailureRequest",
-        "type": "object"
-      },
       "SearchConnectionResponse": {
         "properties": {
-          "cleversee": {
+          "deepseek": {
             "anyOf": [
               {
                 "$ref": "#/components/schemas/SearchSlotResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "official_deepseek_provider": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OfficialDeepSeekProviderView"
               },
               {
                 "type": "null"
@@ -12686,21 +13142,10 @@
           "quota": {
             "$ref": "#/components/schemas/SearchQuotaView"
           },
-          "searxng": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/SearchSlotResponse"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
           "selected": {
             "enum": [
               "platform",
-              "cleversee",
-              "searxng"
+              "deepseek"
             ],
             "title": "Selected",
             "type": "string"
@@ -12805,6 +13250,35 @@
         "title": "SearchItem",
         "type": "object"
       },
+      "SearchQuotaStatus": {
+        "description": "Platform search uses in the same UTC day / month windows as the cost meters.\n\n``0`` on a limit means that window is unlimited. Own DeepSeek search does not\ncount. Reset instants stay on the search-connection payload.",
+        "properties": {
+          "daily_limit": {
+            "title": "Daily Limit",
+            "type": "integer"
+          },
+          "daily_used": {
+            "title": "Daily Used",
+            "type": "integer"
+          },
+          "monthly_limit": {
+            "title": "Monthly Limit",
+            "type": "integer"
+          },
+          "monthly_used": {
+            "title": "Monthly Used",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "daily_used",
+          "daily_limit",
+          "monthly_used",
+          "monthly_limit"
+        ],
+        "title": "SearchQuotaStatus",
+        "type": "object"
+      },
       "SearchQuotaView": {
         "properties": {
           "daily_limit": {
@@ -12855,19 +13329,8 @@
         "type": "object"
       },
       "SearchRouteView": {
-        "description": "Sidecar-visible route. Never includes an API key.",
+        "description": "Sidecar-visible route. Never includes an API key or a direct URL.",
         "properties": {
-          "base_url": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Base Url"
-          },
           "kind": {
             "enum": [
               "platform",
@@ -12879,7 +13342,7 @@
           "protocol": {
             "enum": [
               "searxng",
-              "cleversee"
+              "deepseek"
             ],
             "title": "Protocol",
             "type": "string"
@@ -12894,16 +13357,11 @@
               }
             ],
             "title": "Provider Id"
-          },
-          "proxy": {
-            "title": "Proxy",
-            "type": "boolean"
           }
         },
         "required": [
           "kind",
-          "protocol",
-          "proxy"
+          "protocol"
         ],
         "title": "SearchRouteView",
         "type": "object"
@@ -12940,8 +13398,7 @@
           "engine": {
             "enum": [
               "platform",
-              "cleversee",
-              "searxng"
+              "deepseek"
             ],
             "title": "Engine",
             "type": "string"
@@ -12981,6 +13438,11 @@
             ],
             "title": "Message"
           },
+          "source": {
+            "const": "provider",
+            "title": "Source",
+            "type": "string"
+          },
           "status": {
             "enum": [
               "connected",
@@ -12992,9 +13454,63 @@
         },
         "required": [
           "status",
-          "base_url"
+          "base_url",
+          "source"
         ],
         "title": "SearchSlotResponse",
+        "type": "object"
+      },
+      "SeatStatus": {
+        "description": "Current published seat on the account (设置 · 订阅 / 用量).",
+        "properties": {
+          "pending_plan": {
+            "anyOf": [
+              {
+                "enum": [
+                  "starter",
+                  "plus",
+                  "flagship"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pending Plan"
+          },
+          "plan": {
+            "enum": [
+              "basic",
+              "starter",
+              "plus",
+              "flagship"
+            ],
+            "title": "Plan",
+            "type": "string"
+          },
+          "store_url": {
+            "default": "",
+            "title": "Store Url",
+            "type": "string"
+          },
+          "until": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Until"
+          }
+        },
+        "required": [
+          "plan"
+        ],
+        "title": "SeatStatus",
         "type": "object"
       },
       "SendChatMessageRequest": {
@@ -13116,13 +13632,6 @@
             "default": false,
             "title": "Requires Tools",
             "type": "boolean"
-          },
-          "table_selection": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Table Selection",
-            "type": "array"
           }
         },
         "required": [
@@ -14104,374 +14613,6 @@
         "title": "SuspensionKind",
         "type": "string"
       },
-      "TableColumn": {
-        "properties": {
-          "id": {
-            "title": "Id",
-            "type": "string"
-          },
-          "label": {
-            "title": "Label",
-            "type": "string"
-          },
-          "options": {
-            "anyOf": [
-              {
-                "items": {
-                  "additionalProperties": true,
-                  "type": "object"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Options"
-          },
-          "type": {
-            "title": "Type",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "label",
-          "type"
-        ],
-        "title": "TableColumn",
-        "type": "object"
-      },
-      "TableConversationResponse": {
-        "properties": {
-          "conversation_id": {
-            "title": "Conversation Id",
-            "type": "string"
-          }
-        },
-        "required": [
-          "conversation_id"
-        ],
-        "title": "TableConversationResponse",
-        "type": "object"
-      },
-      "TableDetail": {
-        "properties": {
-          "active_view_id": {
-            "title": "Active View Id",
-            "type": "string"
-          },
-          "columns": {
-            "items": {
-              "$ref": "#/components/schemas/TableColumn"
-            },
-            "title": "Columns",
-            "type": "array"
-          },
-          "conversation_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Conversation Id"
-          },
-          "created_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Created At"
-          },
-          "id": {
-            "title": "Id",
-            "type": "string"
-          },
-          "rows": {
-            "items": {
-              "$ref": "#/components/schemas/TableRowOut"
-            },
-            "title": "Rows",
-            "type": "array"
-          },
-          "schema_version": {
-            "title": "Schema Version",
-            "type": "integer"
-          },
-          "source_path": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Source Path"
-          },
-          "title": {
-            "title": "Title",
-            "type": "string"
-          },
-          "updated_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Updated At"
-          },
-          "views": {
-            "items": {
-              "$ref": "#/components/schemas/TableViewOut"
-            },
-            "title": "Views",
-            "type": "array"
-          }
-        },
-        "required": [
-          "id",
-          "title",
-          "schema_version",
-          "columns",
-          "rows",
-          "views",
-          "active_view_id"
-        ],
-        "title": "TableDetail",
-        "type": "object"
-      },
-      "TableOpsRequest": {
-        "properties": {
-          "confirm": {
-            "default": false,
-            "title": "Confirm",
-            "type": "boolean"
-          },
-          "ops": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "minItems": 1,
-            "title": "Ops",
-            "type": "array"
-          },
-          "schema_baseline": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Schema Baseline"
-          }
-        },
-        "required": [
-          "ops"
-        ],
-        "title": "TableOpsRequest",
-        "type": "object"
-      },
-      "TableOpsResult": {
-        "properties": {
-          "batch_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Batch Id"
-          },
-          "conflict": {
-            "default": false,
-            "title": "Conflict",
-            "type": "boolean"
-          },
-          "error": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Error"
-          },
-          "level": {
-            "title": "Level",
-            "type": "string"
-          },
-          "needs_confirmation": {
-            "default": false,
-            "title": "Needs Confirmation",
-            "type": "boolean"
-          },
-          "ok": {
-            "title": "Ok",
-            "type": "boolean"
-          },
-          "summary": {
-            "title": "Summary",
-            "type": "string"
-          },
-          "table": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/TableDetail"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        },
-        "required": [
-          "ok",
-          "level",
-          "summary"
-        ],
-        "title": "TableOpsResult",
-        "type": "object"
-      },
-      "TableRowOut": {
-        "properties": {
-          "cells": {
-            "additionalProperties": true,
-            "title": "Cells",
-            "type": "object"
-          },
-          "id": {
-            "title": "Id",
-            "type": "string"
-          },
-          "position": {
-            "title": "Position",
-            "type": "number"
-          }
-        },
-        "required": [
-          "id",
-          "cells",
-          "position"
-        ],
-        "title": "TableRowOut",
-        "type": "object"
-      },
-      "TableSummary": {
-        "properties": {
-          "conversation_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Conversation Id"
-          },
-          "created_at": {
-            "format": "date-time",
-            "title": "Created At",
-            "type": "string"
-          },
-          "id": {
-            "title": "Id",
-            "type": "string"
-          },
-          "row_count": {
-            "title": "Row Count",
-            "type": "integer"
-          },
-          "schema_version": {
-            "title": "Schema Version",
-            "type": "integer"
-          },
-          "source_path": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Source Path"
-          },
-          "title": {
-            "title": "Title",
-            "type": "string"
-          },
-          "updated_at": {
-            "format": "date-time",
-            "title": "Updated At",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "title",
-          "schema_version",
-          "row_count",
-          "created_at",
-          "updated_at"
-        ],
-        "title": "TableSummary",
-        "type": "object"
-      },
-      "TableViewOut": {
-        "properties": {
-          "config": {
-            "additionalProperties": true,
-            "title": "Config",
-            "type": "object"
-          },
-          "display_mode": {
-            "title": "Display Mode",
-            "type": "string"
-          },
-          "id": {
-            "title": "Id",
-            "type": "string"
-          },
-          "is_default": {
-            "default": false,
-            "title": "Is Default",
-            "type": "boolean"
-          },
-          "name": {
-            "title": "Name",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "name",
-          "display_mode",
-          "config"
-        ],
-        "title": "TableViewOut",
-        "type": "object"
-      },
       "TeamBatchInFlight": {
         "description": "本波 kickoff 编制已派出、尚未全部收工。``worker_count`` 不含 captain / 历史队员。",
         "properties": {
@@ -15432,6 +15573,27 @@
             ],
             "title": "Deep Research Auto"
           },
+          "delegate_mode": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delegate Mode"
+          },
+          "model_override": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConversationModelOverride"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "pinned": {
             "anyOf": [
               {
@@ -15506,23 +15668,6 @@
         "title": "UpdateDirectorySettingsRequest",
         "type": "object"
       },
-      "UpdateDocRequest": {
-        "properties": {
-          "title": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Title"
-          }
-        },
-        "title": "UpdateDocRequest",
-        "type": "object"
-      },
       "UpdateFolderMemberRequest": {
         "properties": {
           "role": {
@@ -15570,18 +15715,8 @@
         "type": "object"
       },
       "UpdateLlmModelProfileRequest": {
-        "description": "Partial update. Explicit null on worker/background/vision clears that slot.\n\nChanging the model does not release a locked recipe.",
+        "description": "Partial update. Explicit null on worker clears that slot.\n\nChanging the model does not release a locked recipe.",
         "properties": {
-          "background": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ModelProfileSlot"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
           "context_budget": {
             "anyOf": [
               {
@@ -15631,17 +15766,20 @@
             ],
             "title": "Name"
           },
-          "omit_factory_catalog": {
+          "omitted_factory_skills": {
             "anyOf": [
               {
-                "type": "boolean"
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
               },
               {
                 "type": "null"
               }
             ],
-            "description": "Omit the three factory skill rows on this assembly. Omitted = unchanged.",
-            "title": "Omit Factory Catalog"
+            "description": "Official HOW names to leave off this assembly. Omitted = unchanged. Empty list = every factory row stays.",
+            "title": "Omitted Factory Skills"
           },
           "reasoning_effort": {
             "anyOf": [
@@ -15654,16 +15792,6 @@
               }
             ],
             "title": "Reasoning Effort"
-          },
-          "vision": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ModelProfileSlot"
-              },
-              {
-                "type": "null"
-              }
-            ]
           },
           "worker": {
             "anyOf": [
@@ -15717,9 +15845,65 @@
               }
             ],
             "title": "Label"
+          },
+          "vendor_id": {
+            "anyOf": [
+              {
+                "maxLength": 40,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Vendor identity for protocol dispatch. Independent of base_url.",
+            "title": "Vendor Id"
           }
         },
         "title": "UpdateLlmProviderRequest",
+        "type": "object"
+      },
+      "UpdateMcpServerRequest": {
+        "properties": {
+          "bearer": {
+            "anyOf": [
+              {
+                "maxLength": 4000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bearer"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "minLength": 8,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "title": "UpdateMcpServerRequest",
         "type": "object"
       },
       "UpdateMembershipRequest": {
@@ -16041,23 +16225,6 @@
         "title": "UpdateProfileRequest",
         "type": "object"
       },
-      "UpdateTableRequest": {
-        "properties": {
-          "title": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Title"
-          }
-        },
-        "title": "UpdateTableRequest",
-        "type": "object"
-      },
       "UpdatesPolicyResponse": {
         "description": "Desktop update policy: kill switch + hard minimum client version.",
         "properties": {
@@ -16118,6 +16285,152 @@
           "token"
         ],
         "title": "UpsertGitCredentialRequest",
+        "type": "object"
+      },
+      "UsageActivityLine": {
+        "description": "One conversation (or account-level AI 改写) in the usage activity list.",
+        "properties": {
+          "conversation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Id"
+          },
+          "cost": {
+            "$ref": "#/components/schemas/CostBreakdown"
+          },
+          "deleted": {
+            "default": false,
+            "title": "Deleted",
+            "type": "boolean"
+          },
+          "estimated_cost": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CostBreakdown"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "kind": {
+            "enum": [
+              "conversation",
+              "assist"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "last_at": {
+            "format": "date-time",
+            "title": "Last At",
+            "type": "string"
+          },
+          "models": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Models",
+            "type": "array"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "turns": {
+            "title": "Turns",
+            "type": "integer"
+          },
+          "usage": {
+            "$ref": "#/components/schemas/UsageBreakdown"
+          }
+        },
+        "required": [
+          "kind",
+          "title",
+          "usage",
+          "cost",
+          "last_at",
+          "turns"
+        ],
+        "title": "UsageActivityLine",
+        "type": "object"
+      },
+      "UsageActivityPage": {
+        "description": "Paginated conversation spend (``GET /usage/activity``).\n\n``usage`` / ``cost`` / ``estimated_cost`` are the filtered window totals\n(every matching conversation, not the current page). ``total`` is the\nconversation-row count for that same filter.",
+        "properties": {
+          "cost": {
+            "$ref": "#/components/schemas/CostBreakdown"
+          },
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/UsageActivityLine"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "estimated_cost": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CostBreakdown"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
+          "usage": {
+            "$ref": "#/components/schemas/UsageBreakdown"
+          },
+          "window": {
+            "enum": [
+              "today",
+              "7d",
+              "month"
+            ],
+            "title": "Window",
+            "type": "string"
+          }
+        },
+        "required": [
+          "data",
+          "total",
+          "usage",
+          "cost",
+          "page",
+          "page_size",
+          "window"
+        ],
+        "title": "UsageActivityPage",
         "type": "object"
       },
       "UsageBreakdown": {
@@ -16195,7 +16508,7 @@
         "type": "object"
       },
       "UsageSummary": {
-        "description": "Account dashboard payload (``GET /usage/summary``).\n\nMoney fields are nano-CNY; ``CostBreakdown.cny_total`` is already yuan.\nAPI no longer ships an FX rate.",
+        "description": "Account dashboard payload (``GET /usage/summary``).\n\nMoney fields are nano-CNY; ``CostBreakdown.cny_total`` is already yuan.\nAPI no longer ships an FX rate. Activity rows are a separate list endpoint.",
         "properties": {
           "billing_mode": {
             "title": "Billing Mode",
@@ -16203,6 +16516,13 @@
           },
           "month": {
             "$ref": "#/components/schemas/UsageWindow"
+          },
+          "month_by_model": {
+            "items": {
+              "$ref": "#/components/schemas/ModelCostLine"
+            },
+            "title": "Month By Model",
+            "type": "array"
           },
           "quota": {
             "$ref": "#/components/schemas/QuotaStatus"
@@ -16214,6 +16534,12 @@
             "title": "Recent Daily Cost",
             "type": "array"
           },
+          "search": {
+            "$ref": "#/components/schemas/SearchQuotaStatus"
+          },
+          "seat": {
+            "$ref": "#/components/schemas/SeatStatus"
+          },
           "today": {
             "$ref": "#/components/schemas/UsageWindow"
           }
@@ -16223,7 +16549,9 @@
           "month",
           "recent_daily_cost",
           "quota",
-          "billing_mode"
+          "search",
+          "billing_mode",
+          "seat"
         ],
         "title": "UsageSummary",
         "type": "object"
@@ -16494,6 +16822,45 @@
         "title": "ValidationError",
         "type": "object"
       },
+      "VisionAcceptUpdate": {
+        "description": "``PUT /v1/users/me/models/vision-accept`` — one BYOK catalog declare.",
+        "properties": {
+          "accept": {
+            "description": "True = this connected model accepts native image parts. False clears the declare. Platform refs are rejected.",
+            "title": "Accept",
+            "type": "boolean"
+          },
+          "ref": {
+            "description": "Catalog identity ``@byok/{provider_id}/{id}``.",
+            "title": "Ref",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ref",
+          "accept"
+        ],
+        "title": "VisionAcceptUpdate",
+        "type": "object"
+      },
+      "VisionAcceptView": {
+        "properties": {
+          "accept": {
+            "title": "Accept",
+            "type": "boolean"
+          },
+          "ref": {
+            "title": "Ref",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ref",
+          "accept"
+        ],
+        "title": "VisionAcceptView",
+        "type": "object"
+      },
       "WorkspaceBindingResponse": {
         "description": "A conversation's resolved workspace mode + where its binding lives.\n\n``mode`` / ``root_id`` follow the turn-routing口径 (``resolve_local_binding``):\nan explicit ``local_root_id`` OR the desktop's ``local_container_root_id`` default\nboth count as local. ``source`` distinguishes how the effective bind was chosen\nso the client can present「显式绑定」vs「容器默认」without guessing.",
         "properties": {
@@ -16548,11 +16915,12 @@
         "type": "object"
       },
       "WorkspaceBoundary": {
-        "description": "What this conversation may do. One value, not three axes.\n\n``read`` — look only. ``folder`` — change this folder and run inside it\n(default). ``computer`` — folder plus the local Host face. Stored as\n``permission_axes.boundary``. Checkpoints, breakers, and always-confirm\ncommands are orthogonal.",
+        "description": "What this conversation may do. One value, not three axes.\n\n``read`` — look only. ``folder`` — change this folder and run inside it.\n``computer`` — folder plus the local Host face (factory default; web /\nno local engine clamp to folder). ``full`` — skip remaining confirmation\ncards (push / install / attach / MCP); Host only on a local engine.\nStored as ``permission_axes.boundary``. Breaker DENY / FORCE stay orthogonal.",
         "enum": [
           "read",
           "folder",
-          "computer"
+          "computer",
+          "full"
         ],
         "title": "WorkspaceBoundary",
         "type": "string"
@@ -16933,7 +17301,7 @@
     },
     "/shared/{token}": {
       "get": {
-        "description": "Public, read-only view of a frozen share snapshot (no auth).\n\nConversation and 文档 shares share the ``/shared/<id>`` URL. A revoked /\nunknown / malformed token returns the same 404 page (never an existence leak).",
+        "description": "Public, read-only view of a frozen conversation share snapshot (no auth).\n\nA revoked / unknown / malformed token returns the same 404 page (never an\nexistence leak).",
         "operationId": "view_shared_shared__token__get",
         "parameters": [
           {
@@ -19152,7 +19520,7 @@
     },
     "/v1/admin/overview": {
       "get": {
-        "description": "控制台概览 (landing dashboard): today's platform pulse (active users + turn\nhealth + cost), account tallies, the 7-day cost / turn trends, deployment\nhealth, and a short recent-errors feed.\n\nA curated one-call home view that *reuses the same aggregates* as the 用量 /\n观测 / 系统 surfaces (so the headline numbers never drift from the drill-down\npages) plus one extra metric — distinct active users today. Each error row\ncarries its ``conversation_id`` to drill into 会话复盘.",
+        "description": "控制台概览 (landing dashboard): today's platform pulse (active users + turn\nhealth + cost), account tallies, live online accounts, the 7-day cost / turn\ntrends, deployment health, and a short recent-errors feed.\n\nA curated one-call home view that *reuses the same aggregates* as the 用量 /\n观测 / 系统 surfaces (so the headline numbers never drift from the drill-down\npages) plus one extra metric — distinct active users today. Each error row\ncarries its ``conversation_id`` to drill into 会话复盘.",
         "operationId": "overview_v1_admin_overview_get",
         "parameters": [
           {
@@ -19219,7 +19587,7 @@
     },
     "/v1/admin/platform-credentials": {
       "get": {
-        "description": "List platform-pool members. Ciphertext only; ``masked_key`` is last-4.",
+        "description": "List platform-pool members. Ciphertext only; ``masked_key`` is a fingerprint.",
         "operationId": "list_platform_credentials_v1_admin_platform_credentials_get",
         "parameters": [
           {
@@ -19591,6 +19959,276 @@
         "summary": "Clear Platform Credential Runtime",
         "tags": [
           "admin",
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/redemption-codes": {
+      "get": {
+        "operationId": "list_redemption_codes_v1_admin_redemption_codes_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "sku",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "starter",
+                    "plus",
+                    "flagship"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sku"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "unused",
+                    "redeemed",
+                    "void"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RedemptionCodeListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Redemption Codes",
+        "tags": [
+          "admin"
+        ]
+      },
+      "post": {
+        "operationId": "create_redemption_codes_v1_admin_redemption_codes_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateRedemptionCodesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateRedemptionCodesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Redemption Codes",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/redemption-codes/{code_id}/void": {
+      "post": {
+        "operationId": "void_redemption_code_v1_admin_redemption_codes__code_id__void_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "code_id",
+            "required": true,
+            "schema": {
+              "title": "Code Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Void Redemption Code",
+        "tags": [
           "admin"
         ]
       }
@@ -20550,7 +21188,7 @@
     },
     "/v1/admin/users/{user_id}/detail": {
       "get": {
-        "description": "用户详情下钻 (用户管理 P0): one account's record + configured model names +\nits own usage (today / month / 7-day trend / by-model) + recent\nconversations + recent turn activity + active login sessions (加强可查).\n\nThe per-user counterpart of the platform 用量看板 — same windows / 口径 but scoped\nto one account — composed with the account's recent conversation roster (message\ncounts batched, no N+1) and its recent turns (each carries ``conversation_id`` to\ndrill into 会话复盘). Configured model names come from the account default\n模型组合 (``main_model`` / ``background_model``; never the API key) + provider\ncount from ``user_llm_providers``. Per-model stats scan ``cost_calls`` (last 30\ndays). Sessions reuse the owner ``AuthService.list_sessions`` shape (read-only).\nAdmin cross-user; 404 for an unknown id.",
+        "description": "用户详情下钻 (用户管理 P0): one account's record + configured model names +\nits own usage (today / month / 7-day trend / by-model) + recent\nconversations + recent turn activity + active login sessions (加强可查).\n\nThe per-user counterpart of the platform 用量看板 — same windows / 口径 but scoped\nto one account — composed with the account's recent conversation roster (message\ncounts batched, no N+1) and its recent turns (each carries ``conversation_id`` to\ndrill into 会话复盘). Configured model names come from the account default\n模型组合 (``main_model``; never the API key) + provider\ncount from ``user_llm_providers``. Per-model stats scan ``cost_calls`` (last 30\ndays). Sessions reuse the owner ``AuthService.list_sessions`` shape (read-only).\nAdmin cross-user; 404 for an unknown id.",
         "operationId": "user_detail_v1_admin_users__user_id__detail_get",
         "parameters": [
           {
@@ -26951,7 +27589,7 @@
     },
     "/v1/conversations/{conversation_id}/permission-axes": {
       "put": {
-        "description": "Switch the conversation boundary (升到「这台电脑」的确认由客户端负责).\n\nTakes effect on the next turn / durable resume (gate is built at turn entry).\nBody is ``{\"boundary\": \"read\" | \"folder\" | \"computer\"}``.",
+        "description": "Switch the conversation boundary (升到「这台电脑」/「完全权限」的确认由客户端负责).\n\nTakes effect on the next turn / durable resume (gate is built at turn entry).\nBody is ``{\"boundary\": \"read\" | \"folder\" | \"computer\" | \"full\"}``.",
         "operationId": "set_permission_axes_v1_conversations__conversation_id__permission_axes_put",
         "parameters": [
           {
@@ -31417,723 +32055,6 @@
         ]
       }
     },
-    "/v1/docs": {
-      "get": {
-        "operationId": "list_docs_v1_docs_get",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "folder_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Folder Id"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "access_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Access Token"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/DocSummary"
-                  },
-                  "title": "Response List Docs V1 Docs Get",
-                  "type": "array"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "List Docs",
-        "tags": [
-          "docs"
-        ]
-      },
-      "post": {
-        "operationId": "create_doc_v1_docs_post",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "access_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Access Token"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateDocRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DocSummary"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Create Doc",
-        "tags": [
-          "docs"
-        ]
-      }
-    },
-    "/v1/docs/{doc_id}": {
-      "delete": {
-        "operationId": "delete_doc_v1_docs__doc_id__delete",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "doc_id",
-            "required": true,
-            "schema": {
-              "title": "Doc Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "access_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Access Token"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/StatusResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Delete Doc",
-        "tags": [
-          "docs"
-        ]
-      },
-      "get": {
-        "operationId": "get_doc_v1_docs__doc_id__get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "doc_id",
-            "required": true,
-            "schema": {
-              "title": "Doc Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "access_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Access Token"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DocDetail"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Get Doc",
-        "tags": [
-          "docs"
-        ]
-      },
-      "patch": {
-        "operationId": "update_doc_v1_docs__doc_id__patch",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "doc_id",
-            "required": true,
-            "schema": {
-              "title": "Doc Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "access_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Access Token"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateDocRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DocSummary"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Update Doc",
-        "tags": [
-          "docs"
-        ]
-      }
-    },
-    "/v1/docs/{doc_id}/body": {
-      "put": {
-        "operationId": "write_doc_body_v1_docs__doc_id__body_put",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "doc_id",
-            "required": true,
-            "schema": {
-              "title": "Doc Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "access_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Access Token"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/DocBodyWriteRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DocWriteResult"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Write Doc Body",
-        "tags": [
-          "docs"
-        ]
-      }
-    },
-    "/v1/docs/{doc_id}/shares": {
-      "get": {
-        "operationId": "list_doc_shares_v1_docs__doc_id__shares_get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "doc_id",
-            "required": true,
-            "schema": {
-              "title": "Doc Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "access_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Access Token"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ShareListResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "List Doc Shares",
-        "tags": [
-          "docs"
-        ]
-      },
-      "post": {
-        "description": "First publish mints a URL (201). Later POSTs update that snapshot (200).",
-        "operationId": "publish_doc_share_v1_docs__doc_id__shares_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "doc_id",
-            "required": true,
-            "schema": {
-              "title": "Doc Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "access_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Access Token"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "anyOf": [
-                  {
-                    "$ref": "#/components/schemas/CreateShareRequest"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "title": "Body"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ShareSummary"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Publish Doc Share",
-        "tags": [
-          "docs"
-        ]
-      }
-    },
-    "/v1/docs/{doc_id}/shares/{share_id}": {
-      "delete": {
-        "operationId": "revoke_doc_share_v1_docs__doc_id__shares__share_id__delete",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "doc_id",
-            "required": true,
-            "schema": {
-              "title": "Doc Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "share_id",
-            "required": true,
-            "schema": {
-              "title": "Share Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "access_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Access Token"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/StatusResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Revoke Doc Share",
-        "tags": [
-          "docs"
-        ]
-      }
-    },
     "/v1/documents": {
       "get": {
         "description": "List a folder's direct children (``parent_id`` omitted = the user's top-level nodes).",
@@ -34330,66 +34251,6 @@
         "summary": "Fulfill Stream",
         "tags": [
           "fulfill"
-        ]
-      }
-    },
-    "/v1/inference/search_connection/failure": {
-      "post": {
-        "description": "Sidecar report: the keyless SearXNG it called just failed.",
-        "operationId": "inference_search_connection_failure_v1_inference_search_connection_failure_post",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SearchConnectionFailureRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/StatusResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Inference Search Connection Failure",
-        "tags": [
-          "inference"
         ]
       }
     },
@@ -37431,6 +37292,82 @@
         ]
       }
     },
+    "/v1/seats/redeem": {
+      "post": {
+        "description": "Consume one 链动小铺 card secret and open / extend the matching seat.",
+        "operationId": "redeem_seat_v1_seats_redeem_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RedeemSeatRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SeatStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Redeem Seat",
+        "tags": [
+          "seats"
+        ]
+      }
+    },
     "/v1/skill-catalog": {
       "get": {
         "description": "Official slot roster + this account's global on-demand skills.",
@@ -38239,192 +38176,64 @@
         ]
       }
     },
-    "/v1/tables": {
+    "/v1/usage/activity": {
       "get": {
-        "operationId": "list_tables_v1_tables_get",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "access_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Access Token"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/TableSummary"
-                  },
-                  "title": "Response List Tables V1 Tables Get",
-                  "type": "array"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "List Tables",
-        "tags": [
-          "tables"
-        ]
-      },
-      "post": {
-        "operationId": "create_table_v1_tables_post",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "access_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Access Token"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateTableRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TableDetail"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Create Table",
-        "tags": [
-          "tables"
-        ]
-      }
-    },
-    "/v1/tables/by-source": {
-      "get": {
-        "operationId": "get_table_by_source_v1_tables_by_source_get",
+        "description": "Recent spend grouped by conversation (用量活动表).\n\nOne row per conversation in the window; account-level AI 改写 is one extra\nrow with a null ``conversation_id``. ``model`` keeps rows that used that\nbilled model id and slices tokens/cost to it. Ordered by last spend.",
+        "operationId": "get_usage_activity_v1_usage_activity_get",
         "parameters": [
           {
             "in": "query",
-            "name": "path",
-            "required": true,
+            "name": "window",
+            "required": false,
             "schema": {
-              "minLength": 1,
-              "title": "Path",
+              "default": "month",
+              "enum": [
+                "today",
+                "7d",
+                "month"
+              ],
+              "title": "Window",
               "type": "string"
             }
           },
           {
             "in": "query",
-            "name": "folder_id",
+            "name": "model",
             "required": false,
             "schema": {
               "anyOf": [
                 {
+                  "maxLength": 50,
                   "type": "string"
                 },
                 {
                   "type": "null"
                 }
               ],
-              "title": "Folder Id"
+              "title": "Model"
             }
           },
           {
             "in": "query",
-            "name": "conversation_id",
+            "name": "page",
             "required": false,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Conversation Id"
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 50,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
             }
           },
           {
@@ -38465,7 +38274,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TableSummary"
+                  "$ref": "#/components/schemas/UsageActivityPage"
                 }
               }
             },
@@ -38482,401 +38291,15 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Get Table By Source",
+        "summary": "Get Usage Activity",
         "tags": [
-          "tables"
-        ]
-      }
-    },
-    "/v1/tables/{table_id}": {
-      "delete": {
-        "operationId": "delete_table_v1_tables__table_id__delete",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "table_id",
-            "required": true,
-            "schema": {
-              "title": "Table Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "access_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Access Token"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/StatusResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Delete Table",
-        "tags": [
-          "tables"
-        ]
-      },
-      "get": {
-        "operationId": "get_table_v1_tables__table_id__get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "table_id",
-            "required": true,
-            "schema": {
-              "title": "Table Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "access_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Access Token"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TableDetail"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Get Table",
-        "tags": [
-          "tables"
-        ]
-      },
-      "patch": {
-        "operationId": "update_table_v1_tables__table_id__patch",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "table_id",
-            "required": true,
-            "schema": {
-              "title": "Table Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "access_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Access Token"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateTableRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TableSummary"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Update Table",
-        "tags": [
-          "tables"
-        ]
-      }
-    },
-    "/v1/tables/{table_id}/conversation": {
-      "post": {
-        "operationId": "ensure_table_conversation_v1_tables__table_id__conversation_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "table_id",
-            "required": true,
-            "schema": {
-              "title": "Table Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "access_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Access Token"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TableConversationResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Ensure Table Conversation",
-        "tags": [
-          "tables"
-        ]
-      }
-    },
-    "/v1/tables/{table_id}/ops": {
-      "post": {
-        "operationId": "apply_table_ops_v1_tables__table_id__ops_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "table_id",
-            "required": true,
-            "schema": {
-              "title": "Table Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "access_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Access Token"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/TableOpsRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TableOpsResult"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Apply Table Ops",
-        "tags": [
-          "tables"
+          "usage"
         ]
       }
     },
     "/v1/usage/summary": {
       "get": {
-        "description": "Account dashboard: today's tokens/cost, the month's cost, the recent\ndaily-cost trend, and the quota.\n\nWindows are bounded at the current UTC day / month start (MVP — a per-user\ntimezone is a later refinement). ``recent_daily_cost`` is the last\n``_TREND_DAYS`` UTC days (zero-filled, oldest-first) for the sparkline.\nMoney is nano-CNY; ``CostBreakdown.cny_total`` is already yuan (no FX).\nPer-role split lives on the turn payroll\n(``GET /messages/{id}/cost``), not this monthly account view.\n\nThis is the account total, so it also carries spend that belongs to no\nconversation at all (AI 改写 — ``role=assist`` ledger rows).\n``requests`` counts assistant turns only, so those rows raise 花销 without\nraising 请求数.\n\n``quota`` mirrors what ``enforce_quota`` will actually apply to this user:\nper-user override columns first, else global ``quota_*`` — so the meters\nnever show a cap the gate wouldn't enforce.",
+        "description": "Account dashboard: today's tokens/cost, the month's cost, the 30-day\ndaily-cost trend, this month's by-model mix, platform search uses, and quota.\n\nWindows are bounded at the current UTC day / month start (MVP — a per-user\ntimezone is a later refinement). ``recent_daily_cost`` is the last\n``_TREND_DAYS`` UTC days (zero-filled, oldest-first) for the sparkline.\nMoney is nano-CNY; ``CostBreakdown.cny_total`` is already yuan (no FX).\nPer-role split lives on the turn payroll\n(``GET /messages/{id}/cost``), not this monthly account view.\nConversation-level rows live on ``GET /usage/activity``.\n\nThis is the account total, so it also carries spend that belongs to no\nconversation at all (AI 改写 — ``role=assist`` ledger rows).\n``requests`` counts assistant turns only, so those rows raise 花销 without\nraising 请求数.\n\n``quota`` mirrors what ``enforce_quota`` will actually apply to this user:\nper-user override columns first, else global ``quota_*`` — so the meters\nnever show a cap the gate wouldn't enforce.",
         "operationId": "get_usage_summary_v1_usage_summary_get",
         "parameters": [
           {
@@ -40364,6 +39787,520 @@
         ]
       }
     },
+    "/v1/users/me/mcp-servers": {
+      "get": {
+        "operationId": "list_mcp_servers_v1_users_me_mcp_servers_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/McpServerListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Mcp Servers",
+        "tags": [
+          "mcp-servers"
+        ]
+      },
+      "post": {
+        "operationId": "create_mcp_server_v1_users_me_mcp_servers_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateMcpServerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/McpServerView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Mcp Server",
+        "tags": [
+          "mcp-servers"
+        ]
+      }
+    },
+    "/v1/users/me/mcp-servers/oauth/callback": {
+      "get": {
+        "description": "Browser redirect from the authorization server — no login cookie required.",
+        "operationId": "mcp_oauth_callback_v1_users_me_mcp_servers_oauth_callback_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "code",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Code",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "State",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "error",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Error",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Mcp Oauth Callback",
+        "tags": [
+          "mcp-servers"
+        ]
+      }
+    },
+    "/v1/users/me/mcp-servers/{server_id}": {
+      "delete": {
+        "operationId": "delete_mcp_server_v1_users_me_mcp_servers__server_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_id",
+            "required": true,
+            "schema": {
+              "title": "Server Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Mcp Server",
+        "tags": [
+          "mcp-servers"
+        ]
+      },
+      "patch": {
+        "operationId": "update_mcp_server_v1_users_me_mcp_servers__server_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_id",
+            "required": true,
+            "schema": {
+              "title": "Server Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateMcpServerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/McpServerView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Mcp Server",
+        "tags": [
+          "mcp-servers"
+        ]
+      }
+    },
+    "/v1/users/me/mcp-servers/{server_id}/oauth/start": {
+      "post": {
+        "operationId": "start_mcp_oauth_v1_users_me_mcp_servers__server_id__oauth_start_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_id",
+            "required": true,
+            "schema": {
+              "title": "Server Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/McpOAuthStartRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/McpOAuthStartResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start Mcp Oauth",
+        "tags": [
+          "mcp-servers"
+        ]
+      }
+    },
+    "/v1/users/me/mcp-servers/{server_id}/test": {
+      "post": {
+        "operationId": "test_mcp_server_v1_users_me_mcp_servers__server_id__test_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_id",
+            "required": true,
+            "schema": {
+              "title": "Server Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/McpServerTestResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Test Mcp Server",
+        "tags": [
+          "mcp-servers"
+        ]
+      }
+    },
     "/v1/users/me/models": {
       "get": {
         "description": "List the models this user may pick + the account's currently-resolved default.",
@@ -40425,6 +40362,310 @@
           }
         },
         "summary": "List User Models",
+        "tags": [
+          "models"
+        ]
+      }
+    },
+    "/v1/users/me/models/composer": {
+      "put": {
+        "description": "Replace the account last-used snapshot and upsert that main's knobs.",
+        "operationId": "put_composer_model_v1_users_me_models_composer_put",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConversationModelOverride"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationModelOverride"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Composer Model",
+        "tags": [
+          "models"
+        ]
+      }
+    },
+    "/v1/users/me/models/display-names": {
+      "put": {
+        "description": "Set or clear the shown name for one connected (BYOK) catalog row.",
+        "operationId": "put_model_display_name_v1_users_me_models_display_names_put",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModelDisplayNameUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelDisplayNameView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Model Display Name",
+        "tags": [
+          "models"
+        ]
+      }
+    },
+    "/v1/users/me/models/hidden": {
+      "put": {
+        "description": "Replace which catalog refs belong on composer pickers.",
+        "operationId": "put_hidden_model_refs_v1_users_me_models_hidden_put",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HiddenModelRefsUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HiddenModelRefsView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Hidden Model Refs",
+        "tags": [
+          "models"
+        ]
+      }
+    },
+    "/v1/users/me/models/vision-accept": {
+      "put": {
+        "description": "Declare or clear native image accept for one connected (BYOK) catalog row.",
+        "operationId": "put_vision_accept_v1_users_me_models_vision_accept_put",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VisionAcceptUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VisionAcceptView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Vision Accept",
         "tags": [
           "models"
         ]
@@ -40495,9 +40736,9 @@
         ]
       }
     },
-    "/v1/users/me/search-connection/cleversee": {
+    "/v1/users/me/search-connection/deepseek": {
       "delete": {
-        "operationId": "disconnect_cleversee_v1_users_me_search_connection_cleversee_delete",
+        "operationId": "disconnect_deepseek_v1_users_me_search_connection_deepseek_delete",
         "parameters": [
           {
             "in": "header",
@@ -40554,88 +40795,13 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Disconnect Cleversee",
+        "summary": "Disconnect Deepseek",
         "tags": [
           "search-connection"
         ]
       },
       "post": {
-        "operationId": "connect_cleversee_v1_users_me_search_connection_cleversee_post",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "access_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Access Token"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ConnectCleverSeeRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SearchConnectionResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Connect Cleversee",
-        "tags": [
-          "search-connection"
-        ]
-      }
-    },
-    "/v1/users/me/search-connection/searxng": {
-      "delete": {
-        "operationId": "disconnect_searxng_v1_users_me_search_connection_searxng_delete",
+        "operationId": "connect_deepseek_v1_users_me_search_connection_deepseek_post",
         "parameters": [
           {
             "in": "header",
@@ -40692,80 +40858,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Disconnect Searxng",
-        "tags": [
-          "search-connection"
-        ]
-      },
-      "post": {
-        "operationId": "connect_searxng_v1_users_me_search_connection_searxng_post",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "access_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Access Token"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ConnectSearxngRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SearchConnectionResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Connect Searxng",
+        "summary": "Connect Deepseek",
         "tags": [
           "search-connection"
         ]

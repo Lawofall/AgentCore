@@ -1,14 +1,22 @@
-import { Button, Card, IconButton, Input } from "@/components/ui";
+import { SettingField, SettingsFormMessage } from "@/components/settings";
+import {
+  Button,
+  Card,
+  IconButton,
+  Input,
+  fieldSurfaceClass,
+} from "@/components/ui";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import {
   type ByokProviderId,
   DEFAULT_BYOK_PROVIDER_ID,
+  canonicalizeByokApiRoot,
   getByokProviderPreset,
   isCustomByokProvider,
   listByokProviderOptions,
-  normalizeByokBaseUrl,
-  resolveByokProviderFromConfig,
+  parseByokVendorId,
 } from "@/lib/byokProviderPresets";
+import { cn } from "@/lib/utils";
 import { ApiError } from "@/services/api";
 import {
   type LlmProviderView,
@@ -17,7 +25,7 @@ import {
   updateLlmProvider,
 } from "@/services/llmProviders";
 import { ExternalLink, Eye, EyeOff, Loader2 } from "lucide-react";
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 /** Shared chrome for `<select>` (no L2 Select yet). */
 export const MODEL_CONFIG_INPUT_CLASS =
@@ -26,6 +34,9 @@ export const MODEL_CONFIG_INPUT_CLASS =
 /** Same phrasing as LoginPage / lib/errors — admin sessions cannot use product APIs. */
 export const ADMIN_PRODUCT_FORBIDDEN_MESSAGE =
   "此账号为管理员账号，请使用管理后台登录";
+
+const BASE_URL_HINT =
+  "须为云端可访问的公网地址，内网通常不可用；只填域名会补 /v1，已有路径原样使用。";
 
 /**
  * 404/501 on model-config routes usually means the desktop build is calling a
@@ -57,11 +68,35 @@ export function modelConfigApiErrorMessage(
   return fallback;
 }
 
+/** Saved-key fingerprint chip — prefix…suffix from the server, never plaintext. */
+export function MaskedKeyChip({
+  value,
+  className,
+}: {
+  value: string;
+  className?: string;
+}) {
+  return (
+    <span
+      className={cn(
+        "inline-flex max-w-full truncate rounded-full bg-muted px-2.5 py-1 font-mono text-sm text-foreground",
+        className,
+      )}
+    >
+      {value}
+    </span>
+  );
+}
+
 export type ModelKeyFormProps = {
   /** Present = 编辑该服务商（PATCH）；缺省 = 新增一个服务商（POST）。 */
   providerId?: string;
   initialLabel?: string;
   initialBaseUrl?: string;
+  /** Saved vendor identity. Edit uses this; never inferred from Base URL. */
+  initialVendorId?: string;
+  /** Server fingerprint of the stored key (prefix…suffix). Edit only. */
+  initialMaskedKey?: string | null;
   onSaved: (provider: LlmProviderView) => void;
   onCancel?: () => void;
   /** Override primary CTA label (defaults: 保存 / 添加). */
@@ -75,14 +110,16 @@ export type ModelKeyFormProps = {
 /**
  * BYOK 服务商表单 — 设置·服务商的「添加服务商」/「编辑服务商」共用单一真相源。
  *
- * 主路径 = 厂商 + 名称 + Key（自定义另有 Base URL）。
- * 预设厂商：Base URL 进高级。自定义端点：Base URL 主路径必填。
- * 对话日常选用在「装配」/ picker，不在本表单。
+ * 主路径 = 厂商 + 名称 + Key + Base URL。
+ * 预设厂商预填官方端点；自定义端点 Base URL 必填。
+ * 对话日常选模型在输入框，不在本表单。
  */
 export function ModelKeyForm({
   providerId,
   initialLabel = "",
   initialBaseUrl = "",
+  initialVendorId,
+  initialMaskedKey,
   onSaved,
   onCancel,
   submitLabel,
@@ -96,12 +133,20 @@ export function ModelKeyForm({
   const apiKeyId = `${formId}-api-key`;
   const baseUrlId = `${formId}-base-url`;
   const [apiKey, setApiKey] = useState("");
-  const [providerPreset, setProviderPreset] = useState<ByokProviderId>(() =>
-    resolveByokProviderFromConfig(initialBaseUrl),
-  );
+  const [replacingKey, setReplacingKey] = useState(false);
+  const apiKeyRef = useRef<HTMLInputElement>(null);
+  const [providerPreset, setProviderPreset] = useState<ByokProviderId>(() => {
+    if (initialVendorId) return parseByokVendorId(initialVendorId);
+    if (isEdit) return "custom";
+    return DEFAULT_BYOK_PROVIDER_ID;
+  });
   const [label, setLabel] = useState(() => {
     if (initialLabel.trim()) return initialLabel;
-    const preset = resolveByokProviderFromConfig(initialBaseUrl);
+    const preset = initialVendorId
+      ? parseByokVendorId(initialVendorId)
+      : isEdit
+        ? "custom"
+        : DEFAULT_BYOK_PROVIDER_ID;
     return isCustomByokProvider(preset)
       ? ""
       : getByokProviderPreset(preset).label;
@@ -118,16 +163,12 @@ export function ModelKeyForm({
   const preset = !isCustom ? getByokProviderPreset(providerPreset) : null;
   const keyHelpUrl =
     preset?.keyHelpUrl ?? "https://platform.openai.com/api-keys";
+  const savedFingerprint = isEdit ? (initialMaskedKey ?? "").trim() : "";
+  const showSavedChip = Boolean(savedFingerprint) && !replacingKey;
 
-  const baseUrlOverride =
-    !isCustom &&
-    preset != null &&
-    baseUrl.trim().length > 0 &&
-    normalizeByokBaseUrl(baseUrl) !== normalizeByokBaseUrl(preset.baseUrl) &&
-    !(preset.baseUrlAliases ?? []).some(
-      (alias) => normalizeByokBaseUrl(alias) === normalizeByokBaseUrl(baseUrl),
-    );
-  const [advancedOpen, setAdvancedOpen] = useState(() => baseUrlOverride);
+  useEffect(() => {
+    if (replacingKey) apiKeyRef.current?.focus();
+  }, [replacingKey]);
 
   const selectProvider = (next: ByokProviderId) => {
     setProviderPreset(next);
@@ -150,7 +191,8 @@ export function ModelKeyForm({
       if (isEdit && providerId) {
         const body: UpdateLlmProviderInput = {
           label: label.trim(),
-          base_url: baseUrl.trim() || null,
+          base_url: canonicalizeByokApiRoot(baseUrl.trim()) || null,
+          vendor_id: providerPreset,
         };
         // 省略 api_key 保留已存密文——只有用户重新填写时才带上。
         if (trimmedKey) body.api_key = trimmedKey;
@@ -160,7 +202,8 @@ export function ModelKeyForm({
           await createLlmProvider({
             label: label.trim(),
             api_key: trimmedKey,
-            base_url: baseUrl.trim() || null,
+            vendor_id: providerPreset,
+            base_url: canonicalizeByokApiRoot(baseUrl.trim()) || null,
           }),
         );
       }
@@ -177,13 +220,21 @@ export function ModelKeyForm({
         {isEdit ? "编辑服务商" : "添加服务商"}
       </p>
       <div className="mt-3 space-y-3">
-        <label className="block" htmlFor={providerPresetId}>
-          <span className="text-xs text-muted-foreground">厂商预设</span>
+        <SettingField
+          label="厂商预设"
+          htmlFor={providerPresetId}
+          layout="inline"
+          hint={
+            !isCustom
+              ? "选择后将预填名称与端点；日常选模型在输入框。"
+              : undefined
+          }
+        >
           <select
             id={providerPresetId}
             value={providerPreset}
             onChange={(e) => selectProvider(e.target.value as ByokProviderId)}
-            className={`mt-1 ${MODEL_CONFIG_INPUT_CLASS} font-sans`}
+            className={`${MODEL_CONFIG_INPUT_CLASS} font-sans`}
           >
             {listByokProviderOptions().map((opt) => (
               <option key={opt.id} value={opt.id}>
@@ -191,14 +242,8 @@ export function ModelKeyForm({
               </option>
             ))}
           </select>
-          {!isCustom && (
-            <p className="mt-1 text-xs text-muted-foreground">
-              选择后将预填名称与端点；日常选用请到「装配」。
-            </p>
-          )}
-        </label>
-        <label className="block" htmlFor={labelId}>
-          <span className="text-xs text-muted-foreground">名称</span>
+        </SettingField>
+        <SettingField label="名称" htmlFor={labelId} layout="inline">
           <Input
             id={labelId}
             type="text"
@@ -207,88 +252,87 @@ export function ModelKeyForm({
             placeholder="如 DeepSeek、火山方舟"
             autoComplete="off"
             spellCheck={false}
-            className="mt-1 w-full"
           />
-        </label>
-        <label className="block" htmlFor={apiKeyId}>
-          <span className="text-xs text-muted-foreground">
-            API Key{isEdit ? "（可选）" : ""}
-          </span>
-          <div className="relative mt-1">
-            <Input
-              id={apiKeyId}
-              type={reveal ? "text" : "password"}
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              placeholder={isEdit ? "留空则保留已保存的 Key" : "sk-..."}
-              autoComplete="off"
-              spellCheck={false}
-              className="w-full pr-9 font-mono"
-            />
-            <SimpleTooltip label={reveal ? "隐藏" : "显示"}>
-              <IconButton
-                onClick={() => setReveal((r) => !r)}
-                aria-label={reveal ? "隐藏" : "显示"}
-                className="absolute right-1 top-1/2 size-6 -translate-y-1/2"
-              >
-                {reveal ? <EyeOff size={14} /> : <Eye size={14} />}
-              </IconButton>
-            </SimpleTooltip>
-          </div>
-        </label>
-        {isCustom && (
+        </SettingField>
+        <SettingField label="API Key" htmlFor={apiKeyId}>
           <div>
-            <label className="block" htmlFor={baseUrlId}>
-              <span className="text-xs text-muted-foreground">Base URL</span>
-              <Input
-                id={baseUrlId}
-                type="text"
-                value={baseUrl}
-                onChange={(e) => setBaseUrl(e.target.value)}
-                placeholder="https://your-endpoint.example/v1"
-                autoComplete="off"
-                spellCheck={false}
-                className="mt-1 w-full font-mono"
-              />
-            </label>
-            <p className="mt-1 text-xs text-muted-foreground">
-              须为 AgentCore
-              云端可访问的公网地址；公司内网域名通常不可用。自定义地址通常需含
-              /v1（例 https://api.example.com/v1）。
-            </p>
-          </div>
-        )}
-        {!isCustom && (
-          <details
-            className="rounded-lg border border-border/60 bg-muted/20 p-3"
-            open={advancedOpen}
-            onToggle={(e) => setAdvancedOpen(e.currentTarget.open)}
-          >
-            <summary className="cursor-pointer text-xs font-medium text-foreground">
-              高级选项
-            </summary>
-            <div className="mt-3">
-              <label className="block" htmlFor={baseUrlId}>
-                <span className="text-xs text-muted-foreground">Base URL</span>
+            {showSavedChip ? (
+              <div
+                className={cn(
+                  fieldSurfaceClass,
+                  "flex h-8 w-full items-center gap-1 pl-2.5 pr-1 focus-within:border-primary focus-within:ring-2 focus-within:ring-ring",
+                )}
+                // biome-ignore lint/a11y/useSemanticElements: saved-key chip plus replace control, not a form fieldset.
+                role="group"
+                aria-labelledby={`${apiKeyId}-label`}
+              >
+                <span className="min-w-0 flex-1 truncate font-mono">
+                  {savedFingerprint}
+                </span>
+                <button
+                  type="button"
+                  className="inline-flex h-6 shrink-0 items-center rounded-lg px-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none"
+                  onClick={() => setReplacingKey(true)}
+                >
+                  更换
+                </button>
+              </div>
+            ) : (
+              <div className="relative">
                 <Input
-                  id={baseUrlId}
-                  type="text"
-                  value={baseUrl}
-                  onChange={(e) => setBaseUrl(e.target.value)}
-                  placeholder={preset?.baseUrl}
+                  ref={apiKeyRef}
+                  id={apiKeyId}
+                  type={reveal ? "text" : "password"}
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  placeholder={isEdit ? "粘贴新的 Key 以替换" : "sk-..."}
                   autoComplete="off"
                   spellCheck={false}
-                  className="mt-1 w-full font-mono"
+                  aria-labelledby={`${apiKeyId}-label`}
+                  className="w-full pr-9 font-mono"
                 />
-              </label>
-              <p className="mt-1 text-xs text-muted-foreground">
-                须为 AgentCore
-                云端可访问的公网地址；公司内网域名通常不可用。自定义地址通常需含
-                /v1（例 https://api.example.com/v1）。
-              </p>
-            </div>
-          </details>
-        )}
+                <SimpleTooltip label={reveal ? "隐藏" : "显示"}>
+                  <IconButton
+                    onClick={() => setReveal((r) => !r)}
+                    aria-label={reveal ? "隐藏" : "显示"}
+                    className="absolute right-1 top-1/2 size-6 -translate-y-1/2"
+                  >
+                    {reveal ? <EyeOff size={14} /> : <Eye size={14} />}
+                  </IconButton>
+                </SimpleTooltip>
+              </div>
+            )}
+            {isEdit && savedFingerprint && !showSavedChip ? (
+              <button
+                type="button"
+                className="mt-1 text-xs text-muted-foreground hover:underline"
+                onClick={() => {
+                  setApiKey("");
+                  setReveal(false);
+                  setReplacingKey(false);
+                }}
+              >
+                取消更换
+              </button>
+            ) : null}
+          </div>
+        </SettingField>
+        <SettingField label="Base URL" htmlFor={baseUrlId} hint={BASE_URL_HINT}>
+          <Input
+            id={baseUrlId}
+            type="text"
+            value={baseUrl}
+            onChange={(e) => setBaseUrl(e.target.value)}
+            placeholder={
+              isCustom
+                ? "https://your-endpoint.example/v1"
+                : (preset?.baseUrl ?? "")
+            }
+            autoComplete="off"
+            spellCheck={false}
+            className="font-mono"
+          />
+        </SettingField>
       </div>
       <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
         {onCancel && (
@@ -312,7 +356,7 @@ export function ModelKeyForm({
           {saving ? savingLabel : cta}
         </Button>
       </div>
-      {error && <p className="mt-3 text-xs text-destructive">{error}</p>}
+      <SettingsFormMessage className="mt-3">{error}</SettingsFormMessage>
       <a
         href={keyHelpUrl}
         target="_blank"

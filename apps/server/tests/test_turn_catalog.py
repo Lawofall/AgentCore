@@ -145,14 +145,35 @@ async def test_list_account_models_uses_resolver(monkeypatch) -> None:
 
     catalog = _catalog(_entry("plat-a"))
 
-    async def resolve(session: object, user_id: str) -> ModelCatalog:
+    async def resolve(session: object, user_id: str, **_kwargs) -> ModelCatalog:
         assert session == "db"
         assert user_id == "u-1"
         return catalog
 
+    class _Users:
+        async def hidden_model_refs(self, _user_id: str) -> tuple[str, ...]:
+            return ()
+
+        async def enabled_model_refs(self, _user_id: str) -> tuple[str, ...]:
+            return ()
+
+        async def model_display_names(self, _user_id: str) -> dict[str, str]:
+            return {}
+
+        async def composer_model_override(self, _user_id: str) -> dict | None:
+            return None
+
+        async def vision_accept_refs(self, _user_id: str) -> tuple[str, ...]:
+            return ()
+
     monkeypatch.setattr("agentcore.llm.catalog.resolve_model_catalog", resolve)
+    monkeypatch.setattr(
+        "agentcore.db.repositories.UserRepository",
+        lambda _session: _Users(),
+    )
     resp = await list_account_models(SimpleNamespace(user_id="u-1"), "db")  # type: ignore[arg-type]
     assert resp.models[0].id == "plat-a"
+    assert resp.enabled_refs == []
 
 
 def _debate_tool(ctx):  # noqa: ANN001

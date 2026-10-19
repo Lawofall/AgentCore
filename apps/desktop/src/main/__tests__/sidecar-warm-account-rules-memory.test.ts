@@ -133,7 +133,13 @@ function startTurnReq(
     userMessageId: overrides.userMessageId ?? "u1",
     messageId: "m-asst",
     userMessage: "hello",
-    folderId: overrides.folderId ?? "folder-1",
+    session: {
+      permissionAxes: { boundary: "folder" as const },
+      delegateMode: false,
+      folderId: overrides.folderId ?? "folder-1",
+      localRootId: null,
+      localSubpath: null,
+    },
     accountAuth: overrides.accountAuth,
     userId: overrides.userId,
   };

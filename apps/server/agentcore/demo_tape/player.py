@@ -683,7 +683,7 @@ async def play_tape_events(
 ) -> dict[str, Any]:
     """Play events from ``start_index``; pause on the next required card.
 
-    Event prep (normalize / remint / legacy captain ``run_id`` strip) is the shared
+    Event prep (normalize / remint) is the shared
     SINK source adapter (:mod:`agentcore.replay`). This player keeps demo-tape
     application decoration: pacing, wired durable-pause cards (ask_user),
     hot-path approval await via InteractionRegistry,

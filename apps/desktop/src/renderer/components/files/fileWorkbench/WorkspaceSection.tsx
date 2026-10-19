@@ -180,11 +180,15 @@ export function WorkspaceSection({
   /** Cloud workspace only — clone API requires cloud location. */
   const canClone = !isLocal && !offlineCloud && !!source?.caps.edit;
   /**
-   * 版本 / 软删区 —— 服务端对本机工作区一律 409，所以入口按能力
-   * 位 + ws 种类先行门控，不让用户点进一个必然失败的动作。本机工作区的版本与回收站是
-   * 另一条轨（盘上版本区 / 系统回收站），不在这里冒充。
+   * 云端版本 + 软删区走 REST（caps.snapshots）；服务端对本机一律 409。
+   * 本机「版本」走 sidecar / 盘上 `AgentCore/versions`，同一菜单项、另一条后端。
+   * 本机回收站仍是系统轨，不在这里冒充云端软删区。
    */
-  const canSnapshot = !isLocal && !offlineCloud && !!source?.caps.snapshots;
+  const canCloudSnapshot =
+    !isLocal && !offlineCloud && !!source?.caps.snapshots;
+  const canLocalVersions = isLocal && !localUnavailable && !!ws.rootId;
+  const canVersions = canCloudSnapshot || canLocalVersions;
+  const canTrash = canCloudSnapshot;
   const scratchGenerating = useConversationGenerating(conversationId ?? "");
 
   const folder = folderId
@@ -531,19 +535,19 @@ export function WorkspaceSection({
                 <ContextMenuSeparator />
               </>
             )}
-            {canSnapshot && (
-              <>
-                <ContextMenuItem onSelect={() => openPanel(WS_VERSIONS_PATH)}>
-                  <History size={14} className="shrink-0" />
-                  <span className="flex-1 truncate">版本…</span>
-                </ContextMenuItem>
-                <ContextMenuItem onSelect={() => openPanel(WS_TRASH_PATH)}>
-                  <Trash2 size={14} className="shrink-0" />
-                  <span className="flex-1 truncate">软删区…</span>
-                </ContextMenuItem>
-                <ContextMenuSeparator />
-              </>
+            {canVersions && (
+              <ContextMenuItem onSelect={() => openPanel(WS_VERSIONS_PATH)}>
+                <History size={14} className="shrink-0" />
+                <span className="flex-1 truncate">版本…</span>
+              </ContextMenuItem>
             )}
+            {canTrash && (
+              <ContextMenuItem onSelect={() => openPanel(WS_TRASH_PATH)}>
+                <Trash2 size={14} className="shrink-0" />
+                <span className="flex-1 truncate">软删区…</span>
+              </ContextMenuItem>
+            )}
+            {(canVersions || canTrash) && <ContextMenuSeparator />}
             {source?.revealInOsFileManager && (
               <>
                 <ContextMenuItem onSelect={() => void revealRoot()}>

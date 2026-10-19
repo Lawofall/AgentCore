@@ -190,6 +190,7 @@ def _pin_cloud_execution_posture_to_defaults(monkeypatch):
     monkeypatch.setattr(settings, "code_execute_cloud_enabled", False)
     monkeypatch.setattr(settings, "code_execute_cloud_unsafe_ack", False)
     monkeypatch.setattr(settings, "gvisor_enabled", False)
+    monkeypatch.setattr(settings, "seat_sweep_interval_seconds", 0)
     yield
 
 

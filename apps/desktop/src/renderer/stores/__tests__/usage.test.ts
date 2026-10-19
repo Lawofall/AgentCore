@@ -38,8 +38,21 @@ const summaryBody = {
     monthly_cost_nano: 5_000_000_000,
     daily_cost_nano: 0,
   },
+  search: {
+    daily_used: 0,
+    daily_limit: 40,
+    monthly_used: 0,
+    monthly_limit: 400,
+  },
+  month_by_model: [],
   billing_mode: "platform",
   recent_daily_cost: [],
+  seat: {
+    plan: "basic",
+    until: null,
+    pending_plan: null,
+    store_url: "",
+  },
 };
 
 const turnBody = {

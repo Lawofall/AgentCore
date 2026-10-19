@@ -6,6 +6,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 vi.mock("electron", () => ({
   ipcMain: { handle: vi.fn() },
   shell: { openExternal: vi.fn(async () => undefined) },
+  Notification: class {
+    static isSupported() {
+      return false;
+    }
+    show() {}
+  },
 }));
 
 vi.mock("../log-service", () => ({

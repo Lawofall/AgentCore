@@ -1,17 +1,19 @@
 """Cost & usage observability endpoints (单回合工资单 + 对话累计 + 账户仪表盘).
 
-组团时单回合花销按 Agent/角色拆开（工资单）；账户仪表盘给窗口总额 / 额度 / 趋势。
+组团时单回合花销按 Agent/角色拆开（工资单）；账户仪表盘给窗口总额 / 额度 / 趋势 /
+按模型构成；活动列表按对话一行。
 
-All three reads are scoped to the authenticated user via ``cost_events.user_id``,
-so a non-owner can never read another user's spend (IDOR-safe) — the message /
-conversation endpoints additionally 404 or return empty rather than leaking
-existence. The ledger (``cost_events``) is the truth source for real money spent
-(不变量 #1); ``Message.usage`` is only a display snapshot.
+All reads are scoped to the authenticated user via ``cost_events.user_id`` /
+``cost_calls.user_id``, so a non-owner can never read another user's spend
+(IDOR-safe) — the message / conversation endpoints additionally 404 or return
+empty rather than leaking existence. The ledger (``cost_calls`` +
+``cost_events``) is the truth source for real money spent (不变量 #1);
+``Message.usage`` is only a display snapshot.
 """
 
 from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
 from agentcore.api.cost_view import cost_breakdown, estimated_cost_breakdown, usage_breakdown
 from agentcore.api.dependencies import (
@@ -20,15 +22,22 @@ from agentcore.api.dependencies import (
     get_cost_event_repo,
     get_user_repo,
 )
+from agentcore.api.routes.seats import seat_status_for
 from agentcore.api.schemas import (
     AgentCostLine,
     ConversationCost,
     DailyCost,
+    ModelCostLine,
     QuotaStatus,
+    SearchQuotaStatus,
     TurnCost,
+    UsageActivityLine,
+    UsageActivityPage,
+    UsageActivityWindow,
     UsageSummary,
     UsageWindow,
 )
+from agentcore.billing.seat_service import ensure_current
 from agentcore.config import settings
 from agentcore.conversation.quota import QuotaLimits
 from agentcore.core.errors import NotFoundError
@@ -39,12 +48,14 @@ from agentcore.db.repositories import (
     UserRepository,
 )
 from agentcore.llm.pricing import CURRENCY_CNY
+from agentcore.tools.builtin.web.search_quota import search_quota_snapshot
 
 router = APIRouter(tags=["usage"])
 
 # Account dashboard trend window: the last N UTC days (incl today) shown as a
-# spend sparkline (§7.3D). Fixed length so the series is zero-filled and stable.
-_TREND_DAYS = 7
+# spend sparkline. Fixed length so the series is zero-filled and stable.
+_TREND_DAYS = 30
+_ACTIVITY_PAGE_MAX = 50
 
 
 def _sum_rows(rows: list[CostEvent]) -> tuple[dict, dict, dict, int]:
@@ -179,8 +190,8 @@ async def get_usage_summary(
     repo: CostEventRepository = Depends(get_cost_event_repo),
     user_repo: UserRepository = Depends(get_user_repo),
 ) -> UsageSummary:
-    """Account dashboard: today's tokens/cost, the month's cost, the recent
-    daily-cost trend, and the quota.
+    """Account dashboard: today's tokens/cost, the month's cost, the 30-day
+    daily-cost trend, this month's by-model mix, platform search uses, and quota.
 
     Windows are bounded at the current UTC day / month start (MVP — a per-user
     timezone is a later refinement). ``recent_daily_cost`` is the last
@@ -188,6 +199,7 @@ async def get_usage_summary(
     Money is nano-CNY; ``CostBreakdown.cny_total`` is already yuan (no FX).
     Per-role split lives on the turn payroll
     (``GET /messages/{id}/cost``), not this monthly account view.
+    Conversation-level rows live on ``GET /usage/activity``.
 
     This is the account total, so it also carries spend that belongs to no
     conversation at all (AI 改写 — ``role=assist`` ledger rows).
@@ -204,8 +216,11 @@ async def get_usage_summary(
 
     today = await repo.aggregate_for_window(user_id=user.user_id, since=day_start)
     month = await repo.aggregate_for_window(user_id=user.user_id, since=month_start)
+    month_by_model = await repo.aggregate_by_model_for_window(
+        user_id=user.user_id, since=month_start
+    )
 
-    # 近 7 日趋势: zero-fill the daily map into a fixed, oldest-first series ending
+    # 近 30 日趋势: zero-fill the daily map into a fixed, oldest-first series ending
     # today, so the sparkline is a stable length even for sparse spend.
     trend_start = day_start - timedelta(days=_TREND_DAYS - 1)
     daily = await repo.aggregate_daily_for_window(user_id=user.user_id, since=trend_start)
@@ -214,7 +229,11 @@ async def get_usage_summary(
         iso = (trend_start + timedelta(days=i)).date().isoformat()
         recent_daily_cost.append(DailyCost(date=iso, cost_total=daily.get(iso, 0)))
 
+    search_snap = await search_quota_snapshot(user.user_id, now=now)
+
     account = await user_repo.get_by_id(user.user_id)
+    if account is not None:
+        account = await ensure_current(user_repo, account, now=now)
 
     # Mirror the gate's limit resolution (per-user override → global quota_*).
     limits = (
@@ -242,5 +261,82 @@ async def get_usage_summary(
             monthly_cost_nano=limits.monthly_cost_nano,
             daily_cost_nano=limits.daily_cost_nano,
         ),
+        search=SearchQuotaStatus(
+            daily_used=search_snap.daily_used,
+            daily_limit=search_snap.daily_limit,
+            monthly_used=search_snap.monthly_used,
+            monthly_limit=search_snap.monthly_limit,
+        ),
+        month_by_model=[
+            ModelCostLine(
+                model=row["model"],
+                calls=int(row["calls"]),
+                tokens_total=int(row["tokens_total"]),
+                cost_total=int(row["cost_total"]),
+                cost_estimated_total=int(row.get("cost_estimated_total", 0) or 0),
+            )
+            for row in month_by_model
+        ],
         billing_mode=settings.billing_mode,
+        seat=seat_status_for(account if account is not None else user, now=now),
+    )
+
+
+def _activity_since(window: UsageActivityWindow, now: datetime) -> datetime:
+    day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    if window == "today":
+        return day_start
+    if window == "7d":
+        return day_start - timedelta(days=6)
+    return day_start.replace(day=1)
+
+
+@router.get("/usage/activity", response_model=UsageActivityPage)
+async def get_usage_activity(
+    user: AuthUser,
+    window: UsageActivityWindow = Query("month"),
+    model: str | None = Query(None, max_length=50),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=_ACTIVITY_PAGE_MAX),
+    repo: CostEventRepository = Depends(get_cost_event_repo),
+) -> UsageActivityPage:
+    """Recent spend grouped by conversation (用量活动表).
+
+    One row per conversation in the window; account-level AI 改写 is one extra
+    row with a null ``conversation_id``. ``model`` keeps rows that used that
+    billed model id and slices tokens/cost to it. Ordered by last spend.
+    """
+    now = datetime.now(UTC)
+    model_id = (model or "").strip() or None
+    agg = await repo.aggregate_activity_for_window(
+        user_id=user.user_id,
+        since=_activity_since(window, now),
+        model=model_id,
+        limit=page_size,
+        offset=(page - 1) * page_size,
+    )
+    return UsageActivityPage(
+        data=[
+            UsageActivityLine(
+                conversation_id=row["conversation_id"],
+                kind=row["kind"],
+                title=row["title"],
+                deleted=bool(row["deleted"]),
+                models=list(row["models"]),
+                usage=usage_breakdown(row["usage"]),
+                cost=cost_breakdown(row["cost"]),
+                estimated_cost=estimated_cost_breakdown(cost=row.get("estimated_cost") or {}),
+                last_at=row["last_at"],
+                turns=int(row["turns"]),
+            )
+            for row in agg["items"]
+        ],
+        total=int(agg["total"]),
+        usage=usage_breakdown(agg["usage"]),
+        cost=cost_breakdown(agg["cost"]),
+        estimated_cost=estimated_cost_breakdown(cost=agg.get("estimated_cost") or {}),
+        page=page,
+        page_size=page_size,
+        window=window,
+        model=model_id,
     )

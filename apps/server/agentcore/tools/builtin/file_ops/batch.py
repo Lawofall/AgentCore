@@ -113,17 +113,21 @@ class FileBatchTool:
                                 },
                                 "path": {
                                     "type": "string",
-                                    "description": "delete / mkdir 的相对路径",
+                                    "description": (
+                                        "delete / mkdir 的路径（工作区相对或本机绝对路径）"
+                                    ),
                                 },
                                 "source": {
                                     "type": "string",
-                                    "description": "move / copy 的源相对路径",
+                                    "description": (
+                                        "move / copy 的源（工作区相对或本机绝对路径）"
+                                    ),
                                 },
                                 "destination": {
                                     "type": "string",
                                     "description": (
-                                        "move / copy 的目标相对路径"
-                                        "（已存在则跳过、不覆盖）。"
+                                        "move / copy 的目标（工作区相对或本机绝对路径；"
+                                        "已存在则跳过、不覆盖）。"
                                     ),
                                 },
                             },

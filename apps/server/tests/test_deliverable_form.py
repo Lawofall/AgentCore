@@ -162,3 +162,7 @@ def test_ceo_schema_advertises_task_artifacts():
     assert "【存文档】" not in DELEGATE_DESCRIPTION
     assert "【改工程】" not in DELEGATE_DESCRIPTION
     assert "摸底抄骨架" not in DELEGATE_DESCRIPTION
+    from agentcore.tools.builtin.delegate.schema import DELEGATE_DESCRIPTION_PREFER
+
+    assert "【看】" not in DELEGATE_DESCRIPTION_PREFER
+    assert "摸底抄骨架" not in DELEGATE_DESCRIPTION_PREFER

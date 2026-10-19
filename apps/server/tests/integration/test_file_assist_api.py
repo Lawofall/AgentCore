@@ -22,8 +22,8 @@ from agentcore.llm.provider_service import LlmProviderService
 from tests.integration.conftest import register_and_login
 
 _MASTER_KEY = "a" * 64
-# Above the platform monthly cap (quota_monthly_cost_cny = ¥10) — and
-# also above the ¥10 单日成本 backstop, so a fresh over-quota turn is refused
+# Above the platform monthly cap (quota_monthly_cost_cny = ¥5) — and
+# also above the ¥5 单日成本 backstop, so a fresh over-quota turn is refused
 # whichever cost window trips first (both raise QUOTA_EXCEEDED).
 _OVER_MONTHLY_NANO = 20_000_000_000
 _REWRITE_PATH = "/v1/files/assist/rewrite"
@@ -68,7 +68,7 @@ async def _seed_spend(session_factory, *, user_id: str, conversation_id: str, to
 async def _store_key(session_factory, *, user_id: str, api_key: str) -> None:
     async with session_factory() as session:
         await LlmProviderService(session).create_provider(
-            user_id, label="DeepSeek", api_key=api_key
+            user_id, label="DeepSeek", api_key=api_key, vendor_id="deepseek"
         )
 
 

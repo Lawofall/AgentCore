@@ -1,9 +1,11 @@
 import {
   BYOK_PROVIDER_PRESETS,
   DEFAULT_BYOK_PROVIDER_ID,
+  canonicalizeByokApiRoot,
   getByokProviderPreset,
   listByokProviderOptions,
   normalizeByokBaseUrl,
+  parseByokVendorId,
   resolveByokProviderFromConfig,
 } from "@/lib/byokProviderPresets";
 import { describe, expect, it } from "vitest";
@@ -13,6 +15,33 @@ describe("normalizeByokBaseUrl", () => {
     expect(normalizeByokBaseUrl("HTTPS://API.OpenAI.com/v1/")).toBe(
       "https://api.openai.com/v1",
     );
+  });
+});
+
+describe("canonicalizeByokApiRoot", () => {
+  it("appends /v1 to origin-only relay URLs", () => {
+    expect(canonicalizeByokApiRoot("https://omyai.vip")).toBe(
+      "https://omyai.vip/v1",
+    );
+    expect(canonicalizeByokApiRoot("https://omyai.vip/")).toBe(
+      "https://omyai.vip/v1",
+    );
+    expect(canonicalizeByokApiRoot("https://api.apistokens.com")).toBe(
+      "https://api.apistokens.com/v1",
+    );
+  });
+
+  it("leaves preset official URLs and existing paths alone", () => {
+    expect(canonicalizeByokApiRoot("https://api.deepseek.com")).toBe(
+      "https://api.deepseek.com",
+    );
+    expect(canonicalizeByokApiRoot("https://omyai.vip/v1")).toBe(
+      "https://omyai.vip/v1",
+    );
+    expect(
+      canonicalizeByokApiRoot("https://ark.cn-beijing.volces.com/api/v3"),
+    ).toBe("https://ark.cn-beijing.volces.com/api/v3");
+    expect(canonicalizeByokApiRoot("")).toBe("");
   });
 });
 
@@ -112,6 +141,17 @@ describe("resolveByokProviderFromConfig", () => {
   });
 });
 
+describe("parseByokVendorId", () => {
+  it("keeps saved preset ids and falls unknown to custom", () => {
+    expect(parseByokVendorId("openai")).toBe("openai");
+    expect(parseByokVendorId("opencode_go")).toBe("opencode_go");
+    expect(parseByokVendorId("custom")).toBe("custom");
+    expect(parseByokVendorId("")).toBe("custom");
+    expect(parseByokVendorId(undefined)).toBe("custom");
+    expect(parseByokVendorId("https://api.openai.com/v1")).toBe("custom");
+  });
+});
+
 describe("getByokProviderPreset", () => {
   it("returns DeepSeek V4.1 Flash as the only official seed", () => {
     const preset = getByokProviderPreset("deepseek");
@@ -187,7 +227,12 @@ describe("getByokProviderPreset", () => {
     expect(preset.label).toBe("OpenCode Go");
     expect(preset.baseUrl).toBe("https://opencode.ai/zen/go/v1");
     expect(preset.defaultModel).toBe("deepseek-v4.1-flash");
-    expect(preset.models).toEqual(["deepseek-v4.1-flash", "glm-5.2"]);
+    expect(preset.models).toEqual([
+      "deepseek-v4.1-flash",
+      "glm-5.3",
+      "glm-5.3-flash",
+      "kimi-k3",
+    ]);
     expect(preset.hideFromPicker).toEqual([
       "deepseek-flash",
       "deepseek-v4-flash",

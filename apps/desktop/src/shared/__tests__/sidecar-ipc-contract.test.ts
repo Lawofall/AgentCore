@@ -1,5 +1,6 @@
 import sidecarIpc from "@agentcore/contract-types/sidecar-ipc.json";
 import {
+  type SidecarConversationSnapshot,
   type SidecarResumeRequest,
   type SidecarTurnResult,
   buildSidecarResumeRpcParams,
@@ -10,6 +11,14 @@ import { describe, expect, it } from "vitest";
 function assertExactKeys(obj: object, keys: readonly string[]): void {
   expect(Object.keys(obj).sort()).toEqual([...keys].sort());
 }
+
+const BARE_SESSION: SidecarConversationSnapshot = {
+  permissionAxes: { boundary: "folder" },
+  delegateMode: false,
+  folderId: null,
+  localRootId: null,
+  localSubpath: null,
+};
 
 describe("sidecar IPC contract (TS ↔ Python single source)", () => {
   it("SidecarTurnResult sample matches turnResult.keys + usageKeys", () => {
@@ -45,7 +54,7 @@ describe("sidecar IPC contract (TS ↔ Python single source)", () => {
       | "decision"
       | "note"
       | "selected"
-      | "permissionAxes"
+      | "session"
     > = {
       messageId: "m-asst",
       conversationId: "c1",
@@ -53,7 +62,10 @@ describe("sidecar IPC contract (TS ↔ Python single source)", () => {
       decision: "continue",
       note: "",
       selected: ["a"],
-      permissionAxes: { boundary: "read" },
+      session: {
+        ...BARE_SESSION,
+        permissionAxes: { boundary: "read" },
+      },
     };
     const withInference = buildSidecarResumeRpcParams(
       req,
@@ -104,18 +116,32 @@ describe("sidecar IPC contract (TS ↔ Python single source)", () => {
       ),
     ]);
     expect(withoutInference.selected).toEqual(["a"]);
-    expect(withoutInference.permissionAxes).toEqual({ boundary: "read" });
+    expect(withoutInference.session).toEqual({
+      permissionAxes: { boundary: "read" },
+      delegateMode: false,
+      folderId: null,
+      localRootId: null,
+      localSubpath: null,
+    });
 
     // Explicit null clears sidecar sticky env / prior turn.
     const clearBridge = buildSidecarResumeRpcParams(req, undefined, null);
     expect(clearBridge.browserBridge).toBeNull();
 
-    // 权限轴缺省 ⇒ 键不出现，sidecar 沿用当前值。
-    const withoutAxes = buildSidecarResumeRpcParams({
+    const withDelegate = buildSidecarResumeRpcParams({
       ...req,
-      permissionAxes: undefined,
+      session: { ...BARE_SESSION, delegateMode: true },
     });
-    expect("permissionAxes" in withoutAxes).toBe(false);
+    expect(
+      (withDelegate.session as SidecarConversationSnapshot).delegateMode,
+    ).toBe(true);
+    const delegateOff = buildSidecarResumeRpcParams({
+      ...req,
+      session: { ...BARE_SESSION, delegateMode: false },
+    });
+    expect(
+      (delegateOff.session as SidecarConversationSnapshot).delegateMode,
+    ).toBe(false);
   });
 
   it("buildSidecarResumeRpcParams 可选透传 userId", () => {
@@ -126,6 +152,7 @@ describe("sidecar IPC contract (TS ↔ Python single source)", () => {
       decision: "continue",
       note: "",
       selected: [],
+      session: BARE_SESSION,
       userId: "acct-uuid-1",
     });
     expect(withUser.userId).toBe("acct-uuid-1");
@@ -138,12 +165,13 @@ describe("sidecar IPC contract (TS ↔ Python single source)", () => {
       decision: "continue",
       note: "",
       selected: [],
+      session: BARE_SESSION,
     });
     expect(withoutUser.userId).toBeUndefined();
     expect("userId" in withoutUser).toBe(false);
   });
 
-  it("buildSidecarResumeRpcParams always includes folderId and localRootId/localSubpath (null default)", () => {
+  it("buildSidecarResumeRpcParams always includes session snapshot", () => {
     const omitted = buildSidecarResumeRpcParams({
       messageId: "m-asst",
       conversationId: "c1",
@@ -151,10 +179,9 @@ describe("sidecar IPC contract (TS ↔ Python single source)", () => {
       decision: "continue",
       note: "",
       selected: [],
+      session: BARE_SESSION,
     });
-    expect(omitted.folderId).toBeNull();
-    expect(omitted.localRootId).toBeNull();
-    expect(omitted.localSubpath).toBeNull();
+    expect(omitted.session).toEqual(BARE_SESSION);
     expect(omitted).not.toHaveProperty("rootId");
     expect(omitted).not.toHaveProperty("subpath");
 
@@ -165,13 +192,19 @@ describe("sidecar IPC contract (TS ↔ Python single source)", () => {
       decision: "continue",
       note: "",
       selected: [],
+      session: {
+        ...BARE_SESSION,
+        folderId: "fold-1",
+        localRootId: "root-1",
+        localSubpath: "src",
+      },
+    });
+    expect(bound.session).toEqual({
+      ...BARE_SESSION,
       folderId: "fold-1",
       localRootId: "root-1",
       localSubpath: "src",
     });
-    expect(bound.folderId).toBe("fold-1");
-    expect(bound.localRootId).toBe("root-1");
-    expect(bound.localSubpath).toBe("src");
   });
 
   it("resume IPC request required fields are a superset of renderer routing keys", () => {

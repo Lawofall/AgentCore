@@ -21,6 +21,7 @@ from agentcore.sidecar.protocol import (
 )
 from agentcore.sidecar.server import SidecarServer
 from agentcore.sidecar.server_pkg.turns import register_current_turn_run
+from tests.sidecar_session import sidecar_session
 
 
 def _recorder() -> tuple[list[dict[str, Any]], Any]:
@@ -256,7 +257,7 @@ async def test_sidecar_fifo_starter_asks_desktop_start_turn(tmp_path, monkeypatc
                     "userMessageId": item.user_message_id,
                     "messageId": item.message_id,
                     "traceId": item.trace_id,
-                    "folderId": None,
+                    "session": sidecar_session(),
                 },
             )
         )
@@ -547,7 +548,7 @@ async def test_sidecar_queue_id_emits_started_with_content(tmp_path, monkeypatch
                 "userMessageId": "11111111-1111-4111-8111-111111111111",
                 "messageId": "22222222-2222-4222-8222-222222222222",
                 "traceId": "a" * 32,
-                "folderId": None,
+                "session": sidecar_session(),
             },
         )
     )
@@ -634,7 +635,7 @@ async def test_deliver_message_during_history_fetch(tmp_path, monkeypatch):
                     "userMessageId": "11111111-1111-4111-8111-111111111111",
                     "messageId": "22222222-2222-4222-8222-222222222222",
                     "traceId": "a" * 32,
-                    "folderId": None,
+                    "session": sidecar_session(),
                     "turnId": "t-hist",
                     "conversationId": cid,
                     "userMessage": "q",

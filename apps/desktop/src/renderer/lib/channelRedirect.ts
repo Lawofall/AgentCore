@@ -2,8 +2,7 @@
  * Wrong-tool-channel steer. Code set lives in `@shared/channelRedirectCodes`
  * (must match Python ``CHANNEL_REDIRECT_CODES``).
  *
- * Wire `tool_use_end.status` is `redirect` (not `error`). Old journals stored
- * these as `status=error` + a redirect `failure.code`; fold normalizes them.
+ * Wire `tool_use_end.status` is `redirect` (not `error`).
  */
 
 import { CHANNEL_REDIRECT_CODES } from "@shared/channelRedirectCodes";
@@ -39,16 +38,13 @@ export function channelRedirectFace(code: string | undefined | null): {
 
 export type ToolWireStatus = "running" | "success" | "error" | "redirect";
 
-/** Live `redirect` plus journal compat (`error` + redirect code). */
+/** Live wire status. `error` stays `error` even when `failure.code` is a redirect code. */
 export function resolveToolWireStatus(
   status: string | undefined,
-  failure?: { code?: string | null } | null,
+  _failure?: { code?: string | null } | null,
 ): ToolWireStatus {
   if (status === "running") return "running";
   if (status === "redirect") return "redirect";
-  if (status === "error" && isChannelRedirectCode(failure?.code)) {
-    return "redirect";
-  }
   if (status === "error") return "error";
   return "success";
 }

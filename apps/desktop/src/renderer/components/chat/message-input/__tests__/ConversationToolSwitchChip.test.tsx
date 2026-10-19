@@ -1,13 +1,13 @@
 // @vitest-environment jsdom
 /**
- * 工具开关跟权限、模型一样：这场一份；没这场时记草稿；设为默认才写账户。
+ * 工具开关跟这场走；没这场时写下次新建会用的那份。
  */
 
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { notifySuccess } from "@/lib/toast";
 import { api } from "@/services/api";
 import { __resetToolSwitchStoresForTests } from "@/services/toolSwitches";
 import { useConversationStore } from "@/stores/conversation";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   cleanup,
   fireEvent,
@@ -25,13 +25,16 @@ vi.mock("@/lib/toast", () => ({
   notifyError: vi.fn(),
   notifySuccess: vi.fn(),
 }));
+vi.mock("@/lib/assemblyWrite", () => ({
+  refreshAssembliesAfterWrite: vi.fn(async () => undefined),
+}));
 
 const conversations = vi.hoisted(() => ({
   rows: [] as {
     id: string;
     title: string;
     disabledTools?: string[];
-    permissionAxes?: { boundary: "read" | "folder" | "computer" };
+    permissionAxes?: { boundary: "read" | "folder" | "computer" | "full" };
   }[],
 }));
 
@@ -71,12 +74,17 @@ function board(disabled: string[]) {
 }
 
 function renderChip() {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
   return render(
-    <MemoryRouter>
-      <TooltipProvider>
-        <ConversationToolSwitchChip />
-      </TooltipProvider>
-    </MemoryRouter>,
+    <QueryClientProvider client={client}>
+      <MemoryRouter>
+        <TooltipProvider>
+          <ConversationToolSwitchChip />
+        </TooltipProvider>
+      </MemoryRouter>
+    </QueryClientProvider>,
   );
 }
 
@@ -86,7 +94,6 @@ beforeEach(() => {
   useConversationStore.setState({ currentConversationId: null });
   get.mockReset();
   put.mockReset();
-  vi.mocked(notifySuccess).mockReset();
   get.mockImplementation(async (url: string) => {
     if (url.endsWith("/users/me/tool-switches")) return board([]);
     return board(["web"]);
@@ -99,7 +106,7 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("ConversationToolSwitchChip", () => {
-  it("没这场时拨开关写星标装配", async () => {
+  it("没这场时拨开关写下次新建会用的这份", async () => {
     renderChip();
     fireEvent.click(screen.getByLabelText("工具"));
     const web = await screen.findByRole("switch", { name: "上网" });
@@ -113,23 +120,7 @@ describe("ConversationToolSwitchChip", () => {
     });
   });
 
-  it("设为新会话默认把这场的名单写到星标装配", async () => {
-    conversations.rows = [{ id: "c1", title: "周报", disabledTools: ["web"] }];
-    useConversationStore.setState({ currentConversationId: "c1" });
-    renderChip();
-    fireEvent.click(screen.getByLabelText("工具"));
-    fireEvent.click(
-      await screen.findByRole("button", { name: "设为新会话默认" }),
-    );
-    await waitFor(() => {
-      expect(put).toHaveBeenCalledWith("/v1/users/me/tool-switches", {
-        disabled: ["web"],
-      });
-    });
-    expect(notifySuccess).toHaveBeenCalledWith("新会话将默认关掉 1 样");
-  });
-
-  it("已有这场时拨开关写这场，和默认不一样就写在徽章上", async () => {
+  it("已有这场时拨开关写这场，和账号回落不一样就写在徽章上", async () => {
     conversations.rows = [
       {
         id: "c1",

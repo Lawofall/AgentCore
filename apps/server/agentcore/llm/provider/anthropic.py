@@ -76,6 +76,7 @@ class AnthropicMessagesProvider:
         base_url: str,
         extra_headers: dict[str, str] | None = None,
         display_name: str | None = None,
+        vendor_id: str = "",
     ) -> None:
         self._name = name
         shown = (display_name or "").strip()
@@ -90,6 +91,7 @@ class AnthropicMessagesProvider:
         self._api_key = require_http_header_safe_api_key(api_key)
         self._base_url = base_url.rstrip("/")
         self._extra_headers = dict(extra_headers) if extra_headers else None
+        self._vendor_id = (vendor_id or "").strip()
         self._closed = False
         self._client = acquire_llm_http_client(self._base_url)
 
@@ -112,14 +114,17 @@ class AnthropicMessagesProvider:
             base_url=self._base_url,
             extra_headers=self._extra_headers,
             display_name=self._display_name,
+            vendor_id=self._vendor_id,
         )
 
     def _ensure_client_open(self) -> None:
         if self._closed:
             raise LLMClientClosedError()
 
-    def _call_headers(self) -> dict[str, str]:
-        return {
+    def _call_headers(self, payload: dict | None = None) -> dict[str, str]:
+        from agentcore.tools.defer_loading import anthropic_tool_search_headers
+
+        headers = {
             **_leaf_http_headers(
                 api_key=self._api_key,
                 base_url=self._base_url,
@@ -128,6 +133,9 @@ class AnthropicMessagesProvider:
             **_outbound_call_headers(self._base_url),
             "anthropic-version": ANTHROPIC_VERSION,
         }
+        if payload:
+            headers.update(anthropic_tool_search_headers(payload))
+        return headers
 
     def _insufficient_balance(self, *, status: int, body: bytes | None) -> LLMError:
         from agentcore.core.errors import LLMInsufficientBalanceError
@@ -234,7 +242,9 @@ class AnthropicMessagesProvider:
         raise LLMError(f"{self._display_name} 调用失败（HTTP {status_code}）")
 
     async def complete(self, request: LLMRequest) -> LLMResponse:
-        payload = build_messages_payload(request, stream=False)
+        payload = build_messages_payload(
+            request, stream=False, vendor_id=self._vendor_id
+        )
         start = time.monotonic()
         data = await self._request_with_retry(
             payload, scenario=request.scenario, patience=request.retry_patience_seconds
@@ -254,7 +264,9 @@ class AnthropicMessagesProvider:
         )
 
     async def stream(self, request: LLMRequest) -> AsyncIterator[LLMChunk]:
-        payload = build_messages_payload(request, stream=True)
+        payload = build_messages_payload(
+            request, stream=True, vendor_id=self._vendor_id
+        )
         last_error: Exception | None = None
         backoff = _INITIAL_BACKOFF
         connect_max, connect_backoff = connect_retry_policy(request.scenario)
@@ -276,7 +288,7 @@ class AnthropicMessagesProvider:
                     "POST",
                     _MESSAGES_PATH,
                     json=payload,
-                    headers=self._call_headers() or None,
+                    headers=self._call_headers(payload) or None,
                 ) as response:
                     in_flight = response
                     body = await response.aread() if response.status_code >= 400 else None
@@ -358,7 +370,7 @@ class AnthropicMessagesProvider:
                 response = await self._client.post(
                     _MESSAGES_PATH,
                     json=payload,
-                    headers=self._call_headers() or None,
+                    headers=self._call_headers(payload) or None,
                 )
                 body = response.content if response.status_code >= 400 else None
                 self._raise_for_status(

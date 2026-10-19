@@ -146,9 +146,9 @@ const FOLD_FAMILY: {
     result: "已导出 PDF：报告.pdf",
   },
   {
-    tool: "read_image",
-    label: "Read image",
-    args: { path: "shot.png", prompt: "描述" },
+    tool: "read",
+    label: "Read file",
+    args: { path: "shot.png" },
     result: "图里是一块白板",
   },
   {

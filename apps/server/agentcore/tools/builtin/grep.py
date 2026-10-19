@@ -74,7 +74,10 @@ class GrepTool:
                     },
                     "path": {
                         "type": "string",
-                        "description": "相对目录或单文件。",
+                        "description": (
+                            "相对目录或单文件，"
+                            "或本机绝对路径 / ~/Desktop|Downloads|Documents。"
+                        ),
                         "default": ".",
                     },
                     "glob": {

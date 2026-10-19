@@ -5,6 +5,7 @@ import {
   resolvedAskForStep,
 } from "@/components/chat/chatTurn";
 import { CLAMPED_PRE_CLASS, clampPreview } from "@/lib/clampPreview";
+import { trimMarkdownLeadingPad } from "@/lib/trimMarkdownLeadingPad";
 import { cn } from "@/lib/utils";
 import type { ProcessStep } from "@agentcore/protocol-conformance";
 import { Check, ChevronDown, ChevronRight, Wrench, X } from "lucide-react";
@@ -305,7 +306,7 @@ function LaneRowView({
   if (row.kind === "content") {
     return (
       <div className="max-w-full min-w-0 text-foreground">
-        <Markdown content={row.text} />
+        <Markdown content={trimMarkdownLeadingPad(row.text)} />
       </div>
     );
   }

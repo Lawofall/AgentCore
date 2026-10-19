@@ -35,7 +35,6 @@ import {
 import { useExecutionStore } from "@/stores/execution";
 import { clearInteractionPrompts } from "@/stores/interactionPrompts";
 import type { MessageStartPayload, SSEEvent } from "@/types/events";
-import { capTableSelection } from "@shared/tableSelection";
 import { unstable_batchedUpdates } from "react-dom";
 import { resetPartialTurnForReplay } from "./turns/replayReset";
 
@@ -108,6 +107,34 @@ export function dispatchFoldedSseEvent(
 ): void {
   dispatchSSEEvent(event, ctx);
   commitFoldedEventId(ctx.conversationId, event);
+}
+
+/**
+ * Frames that close the turn this SSE was observing.
+ *
+ * Occupancy (`isGenerating`, queued follow-ups) is a different axis: this
+ * connection's completion is the terminal event, not "the conversation
+ * still looks busy".
+ */
+function isTurnStreamTerminal(event: SSEEvent): boolean {
+  return event.type === "message_end" || event.type === "error";
+}
+
+/**
+ * This connection closed without a turn-terminal frame. That is a transport
+ * drop only while the assistant *this stream was writing* is still open.
+ * A queued next turn keeps the occupancy lamp on after `message_end`; that
+ * is not a drop and must not rejoin.
+ */
+function throwIfOpenTurnStreamDropped(
+  conversationId: string,
+  sawTerminal: boolean,
+): void {
+  if (sawTerminal) return;
+  const last = getRuntime(conversationId).messages.at(-1);
+  if (last?.role === "assistant" && last.isStreaming) {
+    throw new StreamError("network");
+  }
 }
 
 /**
@@ -405,10 +432,12 @@ export async function attachConversation(
 
     const catchUp: SSEEvent[] = [];
     let catchingUp = true;
+    let sawTerminal = false;
     await pumpSseBody(
       response,
       conversationId,
       (event) => {
+        if (isTurnStreamTerminal(event)) sawTerminal = true;
         if (catchingUp) {
           catchUp.push(event);
           return;
@@ -427,9 +456,7 @@ export async function attachConversation(
       throw new StreamError("network");
     }
 
-    if (getRuntime(conversationId).isGenerating) {
-      throw new StreamError("network");
-    }
+    throwIfOpenTurnStreamDropped(conversationId, sawTerminal);
     return "attached";
   } catch (err) {
     if (err instanceof DOMException && err.name === "AbortError") throw err;
@@ -543,23 +570,19 @@ async function runMessageStream(
       });
     }
 
-    await pumpSseBody(
-      response,
-      conversationId,
-      turnCommit
-        ? (event) => {
-            if (event.type === "turn_saved") turnCommit.committed = true;
-            dispatchFoldedSseEvent(event, {
-              conversationId,
-              source: "server",
-            });
-          }
-        : undefined,
-    );
+    let sawTerminal = false;
+    await pumpSseBody(response, conversationId, (event) => {
+      if (isTurnStreamTerminal(event)) sawTerminal = true;
+      if (turnCommit && event.type === "turn_saved") {
+        turnCommit.committed = true;
+      }
+      dispatchFoldedSseEvent(event, {
+        conversationId,
+        source: "server",
+      });
+    });
 
-    if (getRuntime(conversationId).isGenerating) {
-      throw new StreamError("network");
-    }
+    throwIfOpenTurnStreamDropped(conversationId, sawTerminal);
   } catch (err) {
     if (err instanceof DOMException && err.name === "AbortError") throw err;
     if (err instanceof StreamError) throw err;
@@ -607,8 +630,6 @@ export interface StreamConversationOptions {
   turnCommit?: TurnCommitReport;
   /** Cloud-path reason for ``X-AgentCore-Stream-Path-Reason`` (local-bound overbridge). */
   streamPathReason?: CloudStreamPathReason;
-  /** Table-session row-id snapshot (frozen at send). Omitted when empty. */
-  tableSelection?: readonly string[];
 }
 
 /** Send a user message and consume the SSE response stream (发送即有流).
@@ -624,16 +645,11 @@ export async function streamConversation({
   signal,
   turnCommit,
   streamPathReason,
-  tableSelection,
 }: StreamConversationOptions): Promise<void> {
   const payload: Record<string, unknown> = { content, delivery };
   if (attachments && attachments.length > 0) payload.attachments = attachments;
   if (agentMentions && agentMentions.length > 0) {
     payload.agent_mentions = agentMentions;
-  }
-  const selected = capTableSelection(tableSelection);
-  if (selected.length > 0) {
-    payload.table_selection = selected;
   }
   await runMessageStream(
     `/v1/conversations/${conversationId}/messages`,

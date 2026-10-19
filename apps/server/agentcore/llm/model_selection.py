@@ -35,12 +35,10 @@ from agentcore.llm.profiles import (
     get_profile,
 )
 from agentcore.llm.provider.protocol import LLMMessage, LLMRequest
-from agentcore.llm.resolve import ModelConfig, ModelOrigin, ModelSelection
+from agentcore.llm.resolve import ModelConfig, ModelOrigin
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
-
-_BACKGROUND_PURPOSES = frozenset({"title", "compaction"})
 
 __all__ = [
     "SelectedCall",
@@ -194,36 +192,12 @@ async def select_turn_profiles(
     )
 
 
-def _model_for_purpose(
-    purpose: str,
-    *,
-    chat_model: str,
-    user_background_model: str | None = None,
-) -> str:
-    """Resolve model name for ``purpose``; background prefers background_model."""
-    if purpose not in _BACKGROUND_PURPOSES:
-        return chat_model
-    if user_background_model and user_background_model.strip():
-        return user_background_model.strip()
-    platform_bg = (settings.platform_background_model or "").strip()
-    if platform_bg:
-        return platform_bg
-    return chat_model
-
-
-async def _expand_title_profile(
-    session: AsyncSession,
-    user_id: str,
-    conversation_id: str | None,
-):
-    """Assembly whose background/main slots title should read.
-
-    A conversation id uses that conversation's pin. Otherwise the account star.
-    """
-    from agentcore.llm.model_profiles import LlmModelProfileService
-
-    return await LlmModelProfileService(session).expand_for_conversation_id(
-        user_id, conversation_id
+def _chrome_model() -> str:
+    """Pinned platform title model. Empty env falls back to PLATFORM_MODEL then Flash."""
+    return (
+        (settings.platform_background_model or "").strip()
+        or (settings.platform_model or "").strip()
+        or PLATFORM_MODEL_FLASH
     )
 
 
@@ -242,58 +216,6 @@ def _platform_model_config(model: str, purpose: str) -> ModelConfig | None:
     )
 
 
-async def _byok_slot_config(
-    session: AsyncSession,
-    user_id: str,
-    selection: ModelSelection,
-    purpose: str,
-) -> ModelConfig | None:
-    from agentcore.llm.resolve import (
-        _decrypt_provider,
-        _load_provider,
-        _model_config_from_creds,
-    )
-
-    if selection.origin != "byok" or not selection.provider_id:
-        return None
-    row = await _load_provider(session, user_id, selection.provider_id)
-    if row is None:
-        return None
-    creds = _decrypt_provider(row, user_id)
-    if creds is None:
-        return None
-    return _model_config_from_creds(creds, selection.model, purpose)
-
-
-async def _title_config_when_catalog_open(
-    session: AsyncSession,
-    user_id: str,
-    *,
-    conversation_id: str | None,
-) -> ModelConfig | None:
-    """Title binding while the platform catalog is visible.
-
-    Explicit BYOK background slot wins. Explicit platform slot stays on the
-    platform chrome model. An empty slot follows this assembly's main model
-    and that model's key. ``None`` means the caller should use the BYOK fallback.
-    """
-    expanded = await _expand_title_profile(session, user_id, conversation_id)
-    bg = expanded.background
-    main = expanded.main
-    if bg is not None and bg.origin == "byok":
-        explicit = await _byok_slot_config(session, user_id, bg, "title")
-        if explicit is not None:
-            return explicit
-        chrome = _model_for_purpose("title", chat_model=settings.platform_model)
-        return _platform_model_config(chrome, "title")
-    if bg is not None and bg.origin == "platform":
-        chrome = _model_for_purpose("title", chat_model=settings.platform_model)
-        return _platform_model_config(chrome, "title")
-    if main.origin == "byok":
-        return await _byok_slot_config(session, user_id, main, "title")
-    return _platform_model_config(main.model, "title")
-
-
 async def select_model_config(
     session: AsyncSession,
     user_id: str,
@@ -309,14 +231,12 @@ async def select_model_config(
     (``preflight_llm_credentials`` / ``resolve_and_gate_background`` /
     ``run_background_llm``) is the authorization choke point.
 
-    Title reads the conversation's assembly when ``conversation_id`` is set, else
-    the account star. An explicit BYOK background slot outranks everything. An
-    empty slot follows that assembly's main model and key. An explicit platform
-    slot stays on the platform chrome model (``PLATFORM_BACKGROUND_MODEL`` or the
-    platform model) and still passes ``enforce_quota`` at the gate. Compaction is
-    continuity, not chrome: do **not** resolve fold credentials here;
-    ``run_compaction_llm`` follows the conversation's chat payer. The compaction
-    branch below remains for callers that still ask this function. Chat purpose
+    Title is chrome: platform catalog visible → ``PLATFORM_BACKGROUND_MODEL``
+    (default Flash) + quota at the gate. Combination background slots are not
+    read. Catalog closed / credentials missing → follow that conversation's main
+    (else the account star). Compaction is continuity, not chrome:
+    ``run_compaction_llm`` follows the conversation's chat payer; the branch
+    below stays aligned for callers that still ask this function. Chat purpose
     stays user-key-first unless the account default is an explicit platform pointer.
 
     Credential decrypt / platform key wiring stay in :mod:`resolve`; this function
@@ -329,36 +249,21 @@ async def select_model_config(
         _model_config_from_creds,
         platform_llm_credentials,
         resolve_background_user_fallback,
-        resolve_explicit_background_byok,
     )
 
     if purpose == "title":
         if platform_catalog_visible():
-            followed = await _title_config_when_catalog_open(
-                session, user_id, conversation_id=conversation_id
-            )
-            if followed is not None:
-                return followed
-        return await resolve_background_user_fallback(session, user_id, purpose)
+            cfg = _platform_model_config(_chrome_model(), "title")
+            if cfg is not None:
+                return cfg
+        return await resolve_background_user_fallback(
+            session, user_id, purpose, conversation_id=conversation_id
+        )
 
     if purpose == "compaction":
-        if platform_catalog_visible():
-            explicit = await resolve_explicit_background_byok(session, user_id, purpose)
-            if explicit is not None:
-                return explicit
-            platform_model = _model_for_purpose(
-                purpose, chat_model=settings.platform_model
-            )
-            platform = platform_llm_credentials(model=platform_model)
-            if platform is not None:
-                return ModelConfig(
-                    model=platform_model,
-                    base_url=platform.base_url,
-                    api_key=platform.api_key,
-                    source="platform",
-                    purpose=purpose,
-                )
-        return await resolve_background_user_fallback(session, user_id, purpose)
+        return await resolve_background_user_fallback(
+            session, user_id, purpose, conversation_id=conversation_id
+        )
 
     row, chat_model, origin = await _account_default(session, user_id)
     if origin == "byok" and row is not None:
@@ -366,11 +271,7 @@ async def select_model_config(
         if creds is not None:
             return _model_config_from_creds(creds, chat_model, purpose)
 
-    platform_model = (
-        chat_model
-        if origin == "platform"
-        else _model_for_purpose(purpose, chat_model=settings.platform_model)
-    )
+    platform_model = chat_model if origin == "platform" else settings.platform_model
     if platform_catalog_visible():
         platform = platform_llm_credentials(model=platform_model)
         if platform is not None:

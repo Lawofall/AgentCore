@@ -39,9 +39,9 @@ export interface Conversation {
   localRootId?: string | null;
   pinned?: boolean;
   archived?: boolean;
-  /** Conversation boundary: read | folder | computer. */
+  /** Conversation boundary: read | folder | computer | full. */
   permissionAxes?: {
-    boundary: "read" | "folder" | "computer";
+    boundary: "read" | "folder" | "computer" | "full";
   };
   /**
    * Switch ids turned off for this conversation. Empty = all on.
@@ -49,10 +49,22 @@ export interface Conversation {
    */
   disabledTools?: string[];
   /**
-   * 这场钉的装配。null = 还没钉（展开时用账号星标）。
+   * 这场钉的装配。null = 还没钉（展开时用账号回落）。
    * 源自 `ConversationSummary.assembly_id`。
    */
   assemblyId?: string | null;
+  /**
+   * 这场自己的模型。null / 缺省 = 跟装配走。
+   * 源自 `ConversationSummary.model_override`。
+   */
+  modelOverride?:
+    | import("@/lib/composerModelProfile").ConversationModelOverride
+    | null;
+  /**
+   * 输入区「统筹」。true = 优先派；false / 缺省 = 现行注意力尺。
+   * 源自 `ConversationSummary.delegate_mode`。
+   */
+  delegateMode?: boolean;
   /**
    * 较早对话已压缩（`ConversationSummary.context_compacted`）。
    * 时间线隔断以 ``compactedThrough`` 为准；不携带摘要正文。

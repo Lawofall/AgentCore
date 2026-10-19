@@ -249,6 +249,31 @@ def test_balance_detection_does_not_swallow_real_auth_failures():
     assert is_auth_rejection(401, None) is True
 
 
+def test_openai_compat_quota_codes_are_balance_not_auth():
+    from agentcore.llm.errors import is_auth_rejection, is_balance_exhausted
+
+    quota = b'{"error":{"message":"You exceeded your current quota","type":"insufficient_quota","code":"insufficient_quota"}}'
+    quota_zh = '{"error":{"message":"该令牌额度不足"}}'.encode()
+    assert is_balance_exhausted(quota) is True
+    assert is_balance_exhausted(quota_zh) is True
+    assert is_auth_rejection(401, quota) is False
+    assert is_auth_rejection(401, quota_zh) is False
+    assert is_auth_rejection(403, quota) is False
+
+
+@pytest.mark.parametrize("code", [401, 403])
+async def test_openai_compat_quota_is_balance_error_not_auth(code):
+    quota = b'{"error":{"message":"You exceeded your current quota","code":"insufficient_quota"}}'
+    provider = await _mock_provider(lambda request: httpx.Response(code, content=quota))
+    try:
+        with pytest.raises(LLMInsufficientBalanceError) as ei:
+            await provider.complete(_req())
+        assert not isinstance(ei.value, LLMAuthError)
+        assert ei.value.details.get("upstream_status") == code
+    finally:
+        await provider.close()
+
+
 @pytest.mark.parametrize("code", [401, 403])
 async def test_credits_error_on_go_is_credits_family_not_quota(code):
     from agentcore.llm.errors import OPENCODE_CREDITS_MESSAGE

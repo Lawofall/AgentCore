@@ -37,6 +37,7 @@ function savedProvider(over: Partial<LlmProviderView> = {}): LlmProviderView {
     id: "p-new",
     label: moonshot.label,
     base_url: moonshot.baseUrl,
+    vendor_id: "moonshot",
     status: "unchecked",
     masked_key: "••••abcd",
     ...over,
@@ -57,16 +58,6 @@ function providerSelect(): HTMLSelectElement {
   return screen.getAllByRole("combobox")[0] as HTMLSelectElement;
 }
 
-/** Open「高级选项」<details> so nested Base URL becomes accessible. */
-function openAdvancedOptions(): HTMLDetailsElement {
-  const details = screen.getByText("高级选项").closest("details");
-  if (!(details instanceof HTMLDetailsElement)) {
-    throw new Error("expected 高级选项 <details>");
-  }
-  details.open = true;
-  return details;
-}
-
 beforeEach(() => {
   vi.mocked(createLlmProvider).mockReset();
   vi.mocked(updateLlmProvider).mockReset();
@@ -85,7 +76,7 @@ describe("ModelKeyForm", () => {
     ).toBeTruthy();
   });
 
-  it("keeps models off the provider form; advanced holds Base URL for presets", () => {
+  it("keeps models off the provider form; Base URL sits on the main path", () => {
     renderForm();
 
     expect(screen.queryByText("默认模型")).toBeNull();
@@ -93,11 +84,10 @@ describe("ModelKeyForm", () => {
     expect(screen.getByText("厂商预设")).toBeTruthy();
     expect(screen.getByText("名称")).toBeTruthy();
     expect(screen.getByText(/^API Key/)).toBeTruthy();
-    expect(screen.getByText("高级选项")).toBeTruthy();
+    expect(screen.queryByText("高级选项")).toBeNull();
     expect(
-      screen.getByText(/选择后将预填名称与端点；日常选用请到「装配」/),
+      screen.getByText(/选择后将预填名称与端点；日常选模型在输入框/),
     ).toBeTruthy();
-    openAdvancedOptions();
     expect(screen.getByLabelText("Base URL")).toBeTruthy();
   });
 
@@ -116,6 +106,7 @@ describe("ModelKeyForm", () => {
         expect.objectContaining({
           label: moonshot.label,
           base_url: moonshot.baseUrl,
+          vendor_id: "moonshot",
           api_key: "sk-test-key",
         }),
       ),
@@ -135,34 +126,24 @@ describe("ModelKeyForm", () => {
     expect((screen.getByLabelText("名称") as HTMLInputElement).value).toBe(
       openai.label,
     );
-    openAdvancedOptions();
     expect((screen.getByLabelText("Base URL") as HTMLInputElement).value).toBe(
       openai.baseUrl,
     );
   });
 
-  it("keeps custom provider Base URL on main path and hides 高级选项", () => {
+  it("keeps custom provider Base URL on the main path", () => {
     renderForm();
     fireEvent.change(providerSelect(), { target: { value: "custom" } });
 
     expect(screen.getByLabelText("Base URL").tagName).toBe("INPUT");
     expect(screen.queryByText("高级选项")).toBeNull();
     expect(screen.queryByText("连接测试用模型")).toBeNull();
-    expect(
-      screen.getByText(
-        /自定义地址通常需含 \/v1（例 https:\/\/api\.example\.com\/v1）/,
-      ),
-    ).toBeTruthy();
+    expect(screen.getByText(/只填域名会补 \/v1/)).toBeTruthy();
   });
 
-  it("shows Base URL /v1 hint in advanced for preset vendors", () => {
+  it("shows Base URL /v1 hint for preset vendors", () => {
     renderForm();
-    openAdvancedOptions();
-    expect(
-      screen.getByText(
-        /自定义地址通常需含 \/v1（例 https:\/\/api\.example\.com\/v1）/,
-      ),
-    ).toBeTruthy();
+    expect(screen.getByText(/只填域名会补 \/v1/)).toBeTruthy();
   });
 
   it("offers OpenCode Go preset with its own endpoint", async () => {
@@ -188,7 +169,6 @@ describe("ModelKeyForm", () => {
     expect((screen.getByLabelText("名称") as HTMLInputElement).value).toBe(
       "OpenCode Go",
     );
-    openAdvancedOptions();
     expect((screen.getByLabelText("Base URL") as HTMLInputElement).value).toBe(
       "https://opencode.ai/zen/go/v1",
     );
@@ -208,17 +188,19 @@ describe("ModelKeyForm", () => {
         expect.objectContaining({
           label: "OpenCode Go",
           base_url: "https://opencode.ai/zen/go/v1",
+          vendor_id: "opencode_go",
           api_key: "sk-go",
         }),
       ),
     );
   });
 
-  it("resolves stored OpenCode Go and Zen base_urls to distinct presets", () => {
+  it("resolves stored vendor_id, not Base URL", () => {
     const { unmount } = renderForm({
       providerId: "p-go",
       initialLabel: "OpenCode Go",
       initialBaseUrl: "HTTPS://OPENCODE.AI/ZEN/GO/V1/",
+      initialVendorId: "opencode_go",
     });
     expect(providerSelect().value).toBe("opencode_go");
     unmount();
@@ -227,11 +209,76 @@ describe("ModelKeyForm", () => {
       providerId: "p-zen",
       initialLabel: "OpenCode Zen",
       initialBaseUrl: "https://opencode.ai/zen/v1",
+      initialVendorId: "opencode_zen",
     });
     expect(providerSelect().value).toBe("opencode_zen");
   });
 
-  it("saves a DeepSeek preset from the main path without opening advanced", async () => {
+  it("does not infer vendor from Base URL on edit", () => {
+    renderForm({
+      providerId: "p1",
+      initialLabel: "OpenAI",
+      initialBaseUrl: "https://api.openai.com/v1",
+    });
+    expect(providerSelect().value).toBe("custom");
+  });
+
+  it("keeps OpenAI vendor when Base URL is a custom relay", async () => {
+    vi.mocked(updateLlmProvider).mockResolvedValue(
+      savedProvider({
+        id: "p1",
+        label: "OpenAI",
+        base_url: "https://api.apistokens.com/v1",
+        vendor_id: "openai",
+      }),
+    );
+    renderForm({
+      providerId: "p1",
+      initialLabel: "OpenAI",
+      initialBaseUrl: "https://api.apistokens.com",
+      initialVendorId: "openai",
+    });
+    expect(providerSelect().value).toBe("openai");
+    fireEvent.click(screen.getByRole("button", { name: "保存" }));
+    await waitFor(() =>
+      expect(updateLlmProvider).toHaveBeenCalledWith(
+        "p1",
+        expect.objectContaining({
+          vendor_id: "openai",
+          base_url: "https://api.apistokens.com/v1",
+        }),
+      ),
+    );
+  });
+
+  it("appends /v1 when saving a custom origin-only Base URL", async () => {
+    vi.mocked(createLlmProvider).mockResolvedValue(
+      savedProvider({
+        vendor_id: "custom",
+        base_url: "https://omyai.vip/v1",
+        label: "中转",
+      }),
+    );
+    renderForm();
+    fireEvent.change(providerSelect(), { target: { value: "custom" } });
+    fireEvent.change(screen.getByLabelText("Base URL"), {
+      target: { value: "https://omyai.vip" },
+    });
+    fireEvent.change(screen.getByPlaceholderText("sk-..."), {
+      target: { value: "sk-test-key" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "添加" }));
+    await waitFor(() =>
+      expect(createLlmProvider).toHaveBeenCalledWith(
+        expect.objectContaining({
+          vendor_id: "custom",
+          base_url: "https://omyai.vip/v1",
+        }),
+      ),
+    );
+  });
+
+  it("saves a DeepSeek preset from the main path", async () => {
     vi.mocked(createLlmProvider).mockResolvedValue(savedProvider());
     renderForm();
 
@@ -247,6 +294,7 @@ describe("ModelKeyForm", () => {
         expect.objectContaining({
           label: deepseek.label,
           base_url: deepseek.baseUrl,
+          vendor_id: "deepseek",
           api_key: "sk-test-key",
         }),
       ),
@@ -259,6 +307,7 @@ describe("ModelKeyForm", () => {
       providerId: "p1",
       initialLabel: moonshot.label,
       initialBaseUrl: moonshot.baseUrl,
+      initialVendorId: "moonshot",
     });
 
     fireEvent.click(screen.getByRole("button", { name: "保存" }));
@@ -269,12 +318,79 @@ describe("ModelKeyForm", () => {
         expect.objectContaining({
           label: moonshot.label,
           base_url: moonshot.baseUrl,
+          vendor_id: "moonshot",
         }),
       ),
     );
     expect(updateLlmProvider).toHaveBeenCalledWith(
       "p1",
       expect.not.objectContaining({ default_model: expect.anything() }),
+    );
+  });
+
+  it("shows the saved key fingerprint instead of an empty password field", () => {
+    renderForm({
+      providerId: "p1",
+      initialLabel: moonshot.label,
+      initialBaseUrl: moonshot.baseUrl,
+      initialVendorId: "moonshot",
+      initialMaskedKey: "sk-9e3...5f06",
+    });
+
+    expect(screen.getByText("sk-9e3...5f06")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "更换" })).toBeTruthy();
+    expect(screen.queryByPlaceholderText("留空则保留已保存的 Key")).toBeNull();
+    expect(screen.queryByPlaceholderText("sk-...")).toBeNull();
+  });
+
+  it("reveals a replacement field and can revert to the fingerprint", async () => {
+    vi.mocked(updateLlmProvider).mockResolvedValue(savedProvider({ id: "p1" }));
+    renderForm({
+      providerId: "p1",
+      initialLabel: moonshot.label,
+      initialBaseUrl: moonshot.baseUrl,
+      initialVendorId: "moonshot",
+      initialMaskedKey: "sk-9e3...5f06",
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "更换" }));
+    const input = screen.getByPlaceholderText("粘贴新的 Key 以替换");
+    expect(input).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "取消更换" }));
+    expect(screen.getByText("sk-9e3...5f06")).toBeTruthy();
+    expect(screen.queryByPlaceholderText("粘贴新的 Key 以替换")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "保存" }));
+    await waitFor(() =>
+      expect(updateLlmProvider).toHaveBeenCalledWith(
+        "p1",
+        expect.not.objectContaining({ api_key: expect.anything() }),
+      ),
+    );
+  });
+
+  it("sends a new key after 更换", async () => {
+    vi.mocked(updateLlmProvider).mockResolvedValue(savedProvider({ id: "p1" }));
+    renderForm({
+      providerId: "p1",
+      initialLabel: moonshot.label,
+      initialBaseUrl: moonshot.baseUrl,
+      initialVendorId: "moonshot",
+      initialMaskedKey: "sk-9e3...5f06",
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "更换" }));
+    fireEvent.change(screen.getByPlaceholderText("粘贴新的 Key 以替换"), {
+      target: { value: "sk-new-key" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "保存" }));
+
+    await waitFor(() =>
+      expect(updateLlmProvider).toHaveBeenCalledWith(
+        "p1",
+        expect.objectContaining({ api_key: "sk-new-key" }),
+      ),
     );
   });
 });

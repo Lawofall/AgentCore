@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import time
+from datetime import UTC, datetime
+
+import pytest
 
 from agentcore.config import settings
 from agentcore.core.errors import RETRY_AFTER_FROM_HEADER
@@ -10,13 +13,14 @@ from agentcore.core.log_context import log_context
 from agentcore.llm.platform_pool import PlatformPoolMember, replace_platform_pool_snapshot
 from agentcore.llm.platform_pool_scheduler import (
     account_runtime_for_admin,
-    classify_go_limit_name,
+    classify_limit_name,
     clear_account_runtime_state,
     failover_member,
     pick_schedulable_platform_pool_member,
     record_platform_account_exhausted,
     record_platform_auth_block,
     record_platform_rate_limit,
+    subscription_month_bounds,
 )
 from agentcore.llm.platform_pool_state import (
     AccountRecord,
@@ -70,12 +74,38 @@ def _cool(
     )
 
 
-def test_classify_go_limit_name_tokens():
-    assert classify_go_limit_name("5 hour") == "window"
-    assert classify_go_limit_name("weekly") == "window"
-    assert classify_go_limit_name("monthly") == "monthly"
-    assert classify_go_limit_name("month") == "monthly"
-    assert classify_go_limit_name(None) == "unknown"
+def test_classify_limit_name_tokens():
+    assert classify_limit_name("5 hour") == "window"
+    assert classify_limit_name("weekly") == "window"
+    assert classify_limit_name("monthly") == "monthly"
+    assert classify_limit_name("month") == "monthly"
+    assert classify_limit_name(None) == "unknown"
+
+
+def test_subscription_month_after_anniversary():
+    now = datetime(2026, 8, 18, 12, 0, tzinfo=UTC)
+    start, reset = subscription_month_bounds(now, 15)
+    assert start == datetime(2026, 8, 15, 0, 0, tzinfo=UTC)
+    assert reset == datetime(2026, 9, 15, 0, 0, tzinfo=UTC)
+
+
+def test_subscription_month_before_anniversary():
+    now = datetime(2026, 8, 10, 8, 0, tzinfo=UTC)
+    start, reset = subscription_month_bounds(now, 15)
+    assert start == datetime(2026, 7, 15, 0, 0, tzinfo=UTC)
+    assert reset == datetime(2026, 8, 15, 0, 0, tzinfo=UTC)
+
+
+def test_subscription_month_day_31_clamps_in_february():
+    now = datetime(2026, 3, 5, 0, 0, tzinfo=UTC)
+    start, reset = subscription_month_bounds(now, 31)
+    assert start == datetime(2026, 2, 28, 0, 0, tzinfo=UTC)
+    assert reset == datetime(2026, 3, 31, 0, 0, tzinfo=UTC)
+
+
+def test_subscription_month_rejects_out_of_range_day():
+    with pytest.raises(ValueError, match="1-31"):
+        subscription_month_bounds(datetime(2026, 8, 18, 12, 0, tzinfo=UTC), 0)
 
 
 def test_fill_first_picks_oldest_while_healthy(monkeypatch):
@@ -318,6 +348,28 @@ def test_window_429_without_retry_after_cools_five_hours(monkeypatch):
     assert rec.status == "cooling"
     assert rec.recovery_at is not None
     assert rec.recovery_at > time.time() + 5 * 3600 - 2
+
+
+def test_unnamed_429_without_retry_after_cools_one_minute(monkeypatch):
+    monkeypatch.setattr(settings, "platform_api_key", "")
+    monkeypatch.setattr(settings, "platform_model_credentials", "")
+    a, b = _two()
+    record_platform_rate_limit(
+        api_key=a.api_key,
+        base_url=a.base_url,
+        retry_after_seconds=None,
+        retry_after_source="local_backoff",
+        limit_name=None,
+    )
+    creds = platform_llm_credentials()
+    assert creds is not None
+    assert creds.platform_credential_id == b.id
+    rec = get_pool_state_store().get(a.id)
+    assert rec is not None
+    assert rec.status == "cooling"
+    assert rec.recovery_at is not None
+    remaining = rec.recovery_at - time.time()
+    assert 60 - 2 < remaining <= 60
 
 
 def test_memory_store_expires_cooling():

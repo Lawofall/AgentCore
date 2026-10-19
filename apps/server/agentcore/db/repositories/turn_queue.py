@@ -26,7 +26,6 @@ class TurnQueueRepository:
         content: str,
         attachments: list[Any],
         agent_mentions: list[Any],
-        table_selection: list[Any],
         requires_tools: bool,
         x_client_platform: str | None,
         origin_device_id: str | None,
@@ -49,7 +48,6 @@ class TurnQueueRepository:
                     content=content,
                     attachments=list(attachments),
                     agent_mentions=list(agent_mentions),
-                    table_selection=list(table_selection),
                     requires_tools=requires_tools,
                     x_client_platform=x_client_platform,
                     origin_device_id=origin_device_id,
@@ -68,7 +66,6 @@ class TurnQueueRepository:
             row.content = content
             row.attachments = list(attachments)
             row.agent_mentions = list(agent_mentions)
-            row.table_selection = list(table_selection)
             row.requires_tools = requires_tools
             row.x_client_platform = x_client_platform
             row.origin_device_id = origin_device_id

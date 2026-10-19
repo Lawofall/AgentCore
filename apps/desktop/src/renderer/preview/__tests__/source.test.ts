@@ -7,7 +7,25 @@ import {
 } from "../source";
 
 describe("preview source adapter (consumer A / FOLD)", () => {
-  it("normalizes legacy kind/ts dialect on turn fixtures", () => {
+  it("opens turn fixtures on contract type/timestamp", () => {
+    const doc = openEventDocument({
+      name: "fx",
+      events: [
+        {
+          type: "content_delta",
+          payload: { delta: "hi" },
+          timestamp: "2026-01-01T00:00:00.000Z",
+        },
+      ],
+      projected: { status: "completed" },
+    });
+    expect(doc.kind).toBe("turn_fixture");
+    expect(doc.events[0]?.type).toBe("content_delta");
+    expect(doc.events[0]?.timestamp).toBe("2026-01-01T00:00:00.000Z");
+    expect(doc.hasPacing).toBe(false);
+  });
+
+  it("does not alias leftover kind/ts dialect", () => {
     const doc = openEventDocument({
       name: "legacy",
       events: [
@@ -19,21 +37,19 @@ describe("preview source adapter (consumer A / FOLD)", () => {
       ],
       projected: { status: "completed" },
     });
-    expect(doc.kind).toBe("turn_fixture");
-    expect(doc.events[0]?.type).toBe("content_delta");
-    expect(doc.events[0]?.timestamp).toBe("2026-01-01T00:00:00.000Z");
-    expect(doc.hasPacing).toBe(false);
+    expect(doc.events[0]?.type).toBe("");
+    expect(doc.events[0]?.timestamp).toBeNull();
   });
 
   it("opens tape documents and keeps t_ms (pacing ignored at fold)", () => {
     const doc = openEventDocument({
-      version: 1,
+      version: 2,
       meta: { title: "demo tape" },
       events: [
         {
-          kind: "run_started",
+          type: "run_started",
           payload: { run_id: "c1", kind: "captain" },
-          ts: "2026-01-01T00:00:00.000Z",
+          timestamp: "2026-01-01T00:00:00.000Z",
           t_ms: 0,
         },
       ],
@@ -54,9 +70,9 @@ describe("preview source adapter (consumer A / FOLD)", () => {
         {
           events: [
             {
-              kind: "content_delta",
+              type: "content_delta",
               payload: { delta: "a" },
-              ts: null,
+              timestamp: null,
               t_ms: 5,
             },
           ],

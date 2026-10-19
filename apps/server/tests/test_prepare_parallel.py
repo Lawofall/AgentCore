@@ -173,7 +173,6 @@ async def test_assemble_cancels_conversation_edits_when_toolset_raises(
         worker_envelope="",
         worker_tools=ToolRegistry(),
         skill_registry=object(),
-        table_context="",
         base_tool_context=ToolContext.create(
             execution_id="e",
             run_id="r",
@@ -182,7 +181,6 @@ async def test_assemble_cancels_conversation_edits_when_toolset_raises(
             user_id="u",
             conversation_id="c",
         ),
-        vision_cost_sink=[],
         attachment_context="",
         user_message="你好",
         native_image_parts=[],

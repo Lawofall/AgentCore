@@ -1,5 +1,8 @@
 import { AssemblySectionRedirect } from "@/pages/toolbox/assemblyPages";
-import { assemblyShelfPath } from "@/pages/toolbox/assemblyTabs";
+import {
+  assemblyShelfPath,
+  toolboxTabFromPath,
+} from "@/pages/toolbox/assemblyTabs";
 // @vitest-environment jsdom
 import { cleanup, render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
@@ -32,6 +35,10 @@ function renderRedirect(path: string) {
           element={<AssemblySectionRedirect tab="plugs" />}
         />
         <Route
+          path="/toolbox/model"
+          element={<AssemblySectionRedirect tab="overview" />}
+        />
+        <Route
           path="/more/model/prompts"
           element={<AssemblySectionRedirect tab="prompts" />}
         />
@@ -48,6 +55,15 @@ describe("工具箱落点", () => {
       "/more/model#prompts",
     );
     expect(assemblyShelfPath(null, "toolbox")).toBe("/toolbox");
+    expect(assemblyShelfPath("overview", "toolbox")).not.toContain("#model");
+  });
+
+  it("旧装配模型节落到货架首页", () => {
+    expect(toolboxTabFromPath("/toolbox/model")).toBe("overview");
+    expect(toolboxTabFromPath("/more/model/model")).toBe("overview");
+    renderRedirect("/toolbox/model");
+    expect(screen.getByText("/toolbox")).toBeTruthy();
+    expect(screen.queryByText("/toolbox#model")).toBeNull();
   });
 
   it("工具节落到工具锚点", () => {

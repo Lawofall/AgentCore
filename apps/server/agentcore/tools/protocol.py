@@ -23,8 +23,6 @@ from agentcore.tools.file_products import FileProduct
 
 if TYPE_CHECKING:
     from agentcore.desktop.channel import DesktopClientChannel
-    from agentcore.runtime.costing import RunCost
-    from agentcore.vision.protocol import VisionReader
     from agentcore.workspace.channel import WorkspaceChannel
     from agentcore.workspace.protocol import WorkspaceBackend
     from agentcore.workspace.write_claims import WriteCoordinator
@@ -76,17 +74,6 @@ class TurnExploreGate:
     pending: bool = False
     write_scope: WriteScope = "project"
     turn_created_folder_ids: set[str] = field(default_factory=set)
-
-
-@dataclass
-class TableBindSlot:
-    """Bound table id shared across ``dataclasses.replace`` copies.
-
-    Mid-turn csv ingest must be visible on the next ReAct round: engine
-    ``replace(on_phase=…)`` copies str fields by value.
-    """
-
-    table_id: str | None = None
 
 
 def fork_explore_write_scope(
@@ -405,11 +392,6 @@ class ToolContext:
     # Wait-escalate suspend channel. ``None`` for CEO / tests / unarmed turns — then
     # ``reason=wait`` degrades to finish-under-assumption (no user card).
     escalation: EscalationChannel | None = None
-    # Creation-tool 多维表格: this-turn bound table (``@`` csv or dedicated session).
-    # Lives on a shared slot so mid-turn ingest survives ``replace``. Tools talk to DB.
-    _table_bind: TableBindSlot = field(
-        default_factory=TableBindSlot, repr=False, compare=False
-    )
     # Desktop Client Tools: per-run channel for Host + MCP + external mount.
     # Set when the desktop client is online (local workspace **or** cloud +
     # ``desktop_online``) so tools can backfill via ClientTool SSE; ``None`` when
@@ -422,11 +404,6 @@ class ToolContext:
     # still leave the short-lived sidecar and land in the desktop main
     # process. ``None`` on cloud-only runs.
     workspace_channel: WorkspaceChannel | None = None
-    # 对话读图已退役：像素只走当前主力多模态（``accepts_images``）。
-    # 槽位 / VisionReader 字段保留以免 ``replace`` 旧测试崩，恒为 None。
-    vision_reader: VisionReader | None = None
-    # Historical ``role=vision`` ledger sink; unused after native-only images.
-    cost_sink: list[RunCost] | None = None
     # Current run's chat model accepts image parts (``model_accepts_images``).
     accepts_images: bool = False
     # 项目共享工作区 (folder 绑定). Set from ``folder_id``; inherited by workers.
@@ -537,12 +514,6 @@ class ToolContext:
         """Build a context owning a fresh :class:`WorkspaceSlot`."""
         write_scope = fields.pop("write_scope", None)
         pending = fields.pop("cold_start_explore_pending", None)
-        table_id = fields.pop("table_id", None)
-        if "_table_bind" not in fields:
-            bind = TableBindSlot()
-            if isinstance(table_id, str) and table_id.strip():
-                bind.table_id = table_id.strip()
-            fields["_table_bind"] = bind
         if "_explore_gate" not in fields:
             gate = TurnExploreGate()
             if pending is not None:
@@ -561,15 +532,6 @@ class ToolContext:
             ),
             **fields,
         )
-
-    @property
-    def table_id(self) -> str | None:
-        return self._table_bind.table_id
-
-    @table_id.setter
-    def table_id(self, value: str | None) -> None:
-        tid = value.strip() if isinstance(value, str) else ""
-        self._table_bind.table_id = tid or None
 
     @property
     def backend(self) -> WorkspaceBackend:
