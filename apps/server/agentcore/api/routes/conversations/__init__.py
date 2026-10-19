@@ -1,7 +1,7 @@
 """Conversation routes, split by domain into one aggregated ``APIRouter``.
 
-This package was split out of a single ``conversations.py`` along domain seams
-(file-splitting.mdc): CRUD, messages, interactions, local-mode binding, local→云
+This package was split out of a single ``conversations.py`` along domain seams:
+CRUD, messages, interactions, local-mode binding, local→云
 handoff, turn re-execution/resume, workspace snapshots, and workspace files.
 
 The sub-routers are included in the original file's definition order, so the

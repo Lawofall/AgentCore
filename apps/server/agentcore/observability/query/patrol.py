@@ -73,7 +73,7 @@ MUST_REVIEW_FAMILIES = frozenset(
 )
 """README 里点名「有量或新模式必审」的家族。命中即把该会话标 must_review。
 
-刻意只做**标注**，不做拦截、不自动开案——巡检纪律见 .cursor/rules/intercept-discipline.mdc。
+刻意只做**标注**，不做拦截、不自动开案——巡检纪律见 .cursor/rules/prompt-design.mdc。
 ``rate_limit_fail_open`` 是安全信号（限流失效），不是普通 warning。
 """
 

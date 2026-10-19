@@ -1,5 +1,5 @@
 ---
-description: 改完代码要跑验证时读——三档验证阶梯的窄化命令配方（pytest ::/-k/--lf、vitest 点名文件/-t/--related、shoot 场景过滤）、release:gate 五段分拆与失败续跑、反空转与跨包边界。跑 release:gate / 全量 pytest / 全量 vitest / pnpm shoot 前必读。
+description: 改完代码要跑验证、或排查接缝/漂移时读——三档验证阶梯、release:gate 分段续跑、接缝判 gap 前先 grep docs。跑 release:gate / 全量 pytest / 全量 vitest / pnpm shoot 前必读。
 alwaysApply: false
 ---
 
@@ -50,6 +50,12 @@ alwaysApply: false
 - 跨端 `pnpm gen:types` + `pnpm conformance` **仅当**真动了 `packages/contract-*` / OpenAPI schema / SSE 事件类型 / 桌面 fold（细则见 `protocol-conformance.mdc`）；没动契约别跑。
 - `pnpm -r` 系列够不到 `apps/server`（不在 workspace），别指望它覆盖后端。
 - **改共享类型 / 往 `packages/` 搬代码 → 点名 vitest 会「假绿」**：vitest 只转译不做类型检查，把共享类型悄悄窄化了也照样全绿。这类改动**必须**补跑各消费方 `pnpm --filter <app> typecheck`（按实际消费方取 desktop / admin）。
+
+## 接缝排查
+
+判「有后端无前端 / 有前端无后端」为 gap **之前，先 grep `docs/`** 看是否记为有意休眠 / 退役 / ⏳——大量「缺口」是 by-design。
+
+弱证据不冒充 bug。置信五档只对前两档动手：`GAP`（真缺口·修）/ `DRIFT`（漂移·修）/ `RESERVED`（前瞻预留）/ `BY-DESIGN`（有意·记档闭案）/ `UNSURE`（留观察）。探子回报的 GAP 先 Read 源码复核，别信行号。
 
 ## 子代理「真跑」不照信
 

@@ -1,5 +1,7 @@
 ---
-description: 日志规范——写日志时阅读。Logger 获取、事件命名、禁止项。
+description: 日志规范——写 agentcore 日志时自动带。Logger 获取、事件命名、禁止项。
+globs:
+  - "apps/server/agentcore/**/*.py"
 alwaysApply: false
 ---
 

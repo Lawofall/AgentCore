@@ -19,7 +19,8 @@ alwaysApply: true
 
 - **设计纪律**：正向推导：**用户需求 → 产品设计 → 技术实现**；动手前答三问：**谁用 / 解决什么真实问题 / 产品上如何呈现**。为复用旧实现而裁剪需求 → 停。
 - **证据按问题选**（禁止「生产实测 > …」单一高低档；生产日志是个案观测，不是产品规格）——**默认不打开生产日志**。打开后禁止用一窗推断「通常如此」，禁止用日志压过 HEAD 或已确认设计；禁止编造观测值与生产 ID；用户对话正文不进仓，只留 ID + 脱敏摘述。按问题选证据对照表 → `conversation-logs.mdc`。
-- **补丁绊线**：修复满足任一，**先停**、提根因重设计提案：1. 需新增兜底/对账/自愈/特例逻辑；2. 同一根因改 ≥2 层；3. 同一接缝第 3 次打补丁。拦截提案 → `intercept-discipline.mdc`。
+- **补丁绊线**：修复满足任一，**先停**、提根因重设计提案：1. 需新增兜底/对账/自愈/特例逻辑；2. 同一根因改 ≥2 层；3. 同一接缝第 3 次打补丁。拦截提案 → `prompt-design.mdc`。
+- **拆文件**：按职责 / 变更原因拆，不按行数。单一内聚可上千行不动。
 - **文件编辑安全**：禁止用脚本批量改源码；用 StrReplace 精确替换（`replace_all` 逐文件改）；改完用 **Read** 自检。
 - **并行开发 Git 约束**：`git status` / `git diff` 不代表本会话改动：1. 用 **Read** 校验自己的改动；2. git 对不上是并行噪音，接受并继续；3. 禁止排查 git 内部；4. 仅用户明确要求才跑 git，非请勿 commit。
 - **验证范围**：默认点名用例，禁止默认全量 `pnpm release:gate`；本仓库 UI 验收走点名 vitest 或桌面 e2e。细则 → `verify-scope.mdc`。
@@ -27,7 +28,7 @@ alwaysApply: true
 
 ## 新会话冷启动
 
-定位任务 → `docs/索引.md`「任务路由」；跑通 → `docs/02-架构/本地开发.md`；接缝 → `seam-audit.mdc`；离线预览 / 渲染冒烟配方 → `frontend-preview.mdc`；同一处界面拨几套改法 → `ui-schemes.mdc`；本地产品 AI / eval / probe → `local-llm-dogfood.mdc`（`dev` OpenCode Zen，禁默认踩 `PLATFORM_API_KEY`）；查产品 AI 日志 / 贴了 ID → `conversation-logs.mdc`；改产品 AI 提示词 → `prompt-design.mdc`；沉淀 → `memory.mdc`。产品介绍 → `README.md`。
+定位任务 → `docs/索引.md`「任务路由」；跑通 → `docs/02-架构/本地开发.md`。产品介绍 → `README.md`。
 
 ## 开发准则
 

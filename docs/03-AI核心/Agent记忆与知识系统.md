@@ -113,7 +113,7 @@ Worker / CEO 默认开场持 `search_conversations` / `read_conversation`。**�
 | 扫整棵工作区当规矩 / 独立登记表盖过文件 frontmatter | 只发现约定目录；带法写在文件上。空 `description` 仍不进按需目录 |
 | frontmatter 与 DB 列双写；解析失败猜默认值 | 两个可写副本必然分叉；失败须可见 |
 | `ai_maintained` 进 frontmatter | AI 能把系统稿写成用户交代、绕开写侧闸 |
-| 扫自由文猜「改规则 / 否认某条」 | `intercept-discipline` 点名否决的意图分类器 |
+| 扫自由文猜「改规则 / 否认某条」 | `prompt-design.mdc` 点名否决的意图分类器 |
 | 把产品能力目录写入交代 | 真源在产品；抄进正文会过时且挤按需目录 |
 | 向量 chunk 自动灌 prompt | 与「文件随时变」不合；agentic 自取永远新鲜 |
 

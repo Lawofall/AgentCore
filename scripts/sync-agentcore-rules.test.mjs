@@ -98,6 +98,6 @@ describe("transformAll", () => {
       Object.keys(files).every((name) => name.endsWith(".md")),
       true,
     );
-    assert.ok(Object.keys(files).length >= 20);
+    assert.equal(Object.keys(files).length, 16);
   });
 });

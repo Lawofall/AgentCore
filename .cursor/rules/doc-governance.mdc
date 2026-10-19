@@ -42,6 +42,7 @@ alwaysApply: false
 ## 规则文件
 
 - **真源**：`.cursor/rules/{关注点}.mdc`（英文短横线；frontmatter 含中文 description）。优先追加进已有文件，主题相关就别新建。
+- **要不要写**：下一个 AI 不读会不会重复踩坑 / 摸索很久？会 → 追加进已有 `{关注点}.mdc`（细节下沉 docs，rules 只短引用）。读代码顺手就有 → 不写。过时立即改或删。
 - **AgentCore 镜像**：产品发现路径是 `AgentCore/rules/*.md`（gitignore `/AgentCore/`，不入仓）。改 `.cursor/rules` 后跑 `pnpm sync:rules`；`pnpm sync:rules:check` 对账（无镜像目录时只验变换）。勿手改生成篇。
 - 镜像只到语义与结构。宿主工具名各按宿主替换（Cursor 的 StrReplace / Read / Task ↔ AgentCore 侧 `edit` / `read` / `delegate`；`globs` + `alwaysApply` ↔ `apply:` / `paths:`）。
 - glob 按触发收窄：配色 = 产品 UI tsx/css；布局 = 页面 / 壳 / primitive / `ChatView`；跨端 = capabilities / 壳 / 页面 / `apps/mobile`。不要 `**/*.tsx` 通配。

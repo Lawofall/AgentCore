@@ -10,6 +10,8 @@ alwaysApply: false
 
 # API 开发规范
 
+内部数据结构用 dataclass，API schema 用 Pydantic。`type | None` / `list[X]` / `collections.abc` 由 ruff `UP` 守。
+
 ## 路由
 
 - 所有路由注册在 `main.py`，统一 `prefix="/v1"`

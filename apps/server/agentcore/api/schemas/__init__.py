@@ -1,7 +1,7 @@
 """Pydantic request/response schemas for the API layer, split by domain.
 
-This package was split out of a single ``schemas.py`` along domain seams
-(file-splitting.mdc). This ``__init__`` re-exports the full public surface so the
+This package was split out of a single ``schemas.py`` along domain seams.
+This ``__init__`` re-exports the full public surface so the
 historical import path — ``from agentcore.api.schemas import X`` — keeps working
 unchanged across the codebase, and the OpenAPI spec (single source for the TS
 types, see scripts/dump_openapi.py) is byte-identical to the pre-split build.
