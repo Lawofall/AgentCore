@@ -863,7 +863,7 @@ describe("streamConversationViaSidecar", () => {
           localRootId: null,
           localSubpath: null,
           capability: expect.objectContaining({
-            assemblyId: "asm-full",
+            assemblyId: "asm-standard",
             skillMembership: null,
             omitDeskRules: false,
           }),
