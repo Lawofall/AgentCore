@@ -1453,6 +1453,8 @@ async def test_admin_conversation_replay_surfaces_user_attachments_and_mentions(
             "size_bytes": 2048,
             "thumb_path": None,
             "binary": True,
+            "archive_status": None,
+            "archive_dir": None,
         }
     ]
     assert "text" not in user_msg["attachments"][0]
