@@ -234,7 +234,6 @@ async function streamTextLines(
   const cap = limit == null ? null : Math.max(0, Math.floor(limit));
   const decoder = new TextDecoder(encoding, {
     fatal: encoding === "utf-8",
-    stream: true,
   });
   const selected: string[] = [];
   let total = 0;
