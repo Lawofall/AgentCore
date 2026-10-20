@@ -39,7 +39,7 @@ from pathlib import Path
 from xml.etree import ElementTree as ET
 
 from agentcore.core.logging import get_logger
-from agentcore.workspace.protocol import PathNotFound, WorkspaceBackend, WorkspaceError
+from agentcore.workspace.protocol import WorkspaceBackend, WorkspaceError
 
 logger = get_logger(__name__)
 
