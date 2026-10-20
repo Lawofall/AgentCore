@@ -362,6 +362,19 @@ async def test_grep_path_can_be_single_file(tmp_path: Path):
     assert "notes.md" not in result.output
 
 
+async def test_grep_hits_file_over_legacy_2mib_cap(tmp_path: Path):
+    """User text above the old 2 MiB skip is searchable (cap is the upload ceiling)."""
+    needle = "unique-grep-oversize-token"
+    line = ("." * 120) + needle + "\n"
+    repeats = (3 * 1024 * 1024) // len(line.encode("utf-8")) + 8
+    (tmp_path / "big.log").write_text(line * repeats, encoding="utf-8")
+    result = await GrepTool().execute(
+        {"pattern": needle, "path": "big.log"}, _ctx(tmp_path)
+    )
+    assert result.success is True
+    assert needle in (result.output or "")
+
+
 async def test_grep_single_file_path_ignores_glob(tmp_path: Path):
     """When ``path`` is a file, ``glob`` is moot — the file is already pinpointed."""
     _seed(tmp_path)

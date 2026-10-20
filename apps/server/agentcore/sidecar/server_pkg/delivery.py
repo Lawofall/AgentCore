@@ -63,6 +63,24 @@ class DeliveryMixin:
     def live_turn_task(self, conversation_id: str) -> asyncio.Task[None] | None:
         raise NotImplementedError
 
+    async def _persist_interjection_attachments(
+        self,
+        *,
+        conversation_id: str,
+        user_id: str,
+        attachments: list[dict],
+        sink: object,
+    ) -> list[dict]:
+        from agentcore.workspace.attachments import persist_attachments
+
+        if not attachments:
+            return attachments
+        backends = getattr(self, "_live_backends", {}) or {}
+        bag = list(backends.get(conversation_id) or ())
+        if not bag:
+            return attachments
+        return await persist_attachments(bag[-1], attachments)
+
     def _install_local_queue_starter(self) -> None:
         """FIFO drain uses this process's pipeline+outbox, not cloud ``stream_chat``."""
         set_queue_starter(self._start_queued_sidecar_turn)
@@ -214,7 +232,7 @@ class DeliveryMixin:
                 user_id=self._user_id,
                 attachments=att_dicts,
                 agent_mentions=mention_dicts,
-                persist_attachments_fn=None,
+                persist_attachments_fn=self._persist_interjection_attachments,
                 wait_for_start=False,
                 require_live=True,
                 user_message_id=user_message_id,

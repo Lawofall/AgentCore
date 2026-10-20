@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import Any, Literal
 
 from agentcore.core.types import ToolApproval, ToolFace
+from agentcore.runtime.command_policy import reject_cloud_system_install
 from agentcore.tools.builtin.long_running import long_running_command_match
 from agentcore.tools.builtin.package_install import (
     command_payload_argvs,
@@ -169,12 +170,20 @@ class RunTool:
         if _wants_background(arguments):
             if not command:
                 return _arg_error("background 启动需要 command")
+            if self._location == "server":
+                sys_err = reject_cloud_system_install(command)
+                if sys_err:
+                    return _arg_error(sys_err)
             cd_err = reject_workspace_cd(command)
             if cd_err:
                 return _arg_error(cd_err)
             return await self._dispatch_start(arguments, context)
         if not command:
             return _arg_error("请提供 command，或用 action=list|read|stop 管理后台进程")
+        if self._location == "server":
+            sys_err = reject_cloud_system_install(command)
+            if sys_err:
+                return _arg_error(sys_err)
         cwd = str(arguments.get("cwd") or "").strip() or None
         if cwd is not None and not is_safe_relpath(cwd):
             return _arg_error(

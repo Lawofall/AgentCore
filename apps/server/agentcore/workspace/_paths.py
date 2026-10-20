@@ -18,8 +18,7 @@ Parity gate (edit both sides or CI fails)::
 * **AI noise** — media / archives / fonts / native objects stay out of
   ``index_files`` / ``grep`` (content search). User UI ``list`` keeps them
   visible. **Name listing** (``file_list`` / ``glob`` / ``list_tree``) shows
-  images; archives still need ``attachments/`` / ``external/`` /
-  ``reveal_archives``. Native objects stay hidden from listing.
+  images and archives by name. Native objects stay hidden from listing.
 """
 
 import errno
@@ -205,8 +204,8 @@ AI_IMAGE_FILE_SUFFIXES: frozenset[str] = frozenset(
     }
 )
 
-# Archive subset of AI noise — visible under ``external/<alias>/`` list / when
-# ``glob`` pattern targets these suffixes. ↔ desktop ``AI_ARCHIVE_FILE_SUFFIXES``.
+# Archive subset of AI noise — listed by name (file_list / glob / list_tree);
+# grep / index_files still skip. ↔ desktop ``AI_ARCHIVE_FILE_SUFFIXES``.
 AI_ARCHIVE_FILE_SUFFIXES: frozenset[str] = frozenset(
     {
         ".zip",

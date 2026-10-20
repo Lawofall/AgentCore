@@ -25,13 +25,14 @@ import {
   toReason,
 } from "./pathGuard";
 import { ensureReady, getRoot } from "./roots";
+import { decodeStoredText, encodeStoredText } from "./textCodec";
 import { atomicWrite, resolveWritable } from "./workspace/write";
 
 // --- 文档编辑（CodeMirror 源码编辑器）读写：完整正文 + 写前 CAS ---
 //
 // 与预览路径分工：预览 readFile 截断 256KB 且判别图片/二进制；编辑必须拿到完整正文，
-// 截断后保存会丢尾，故走独立通道。编解码镜像参考实现：BOM/UTF-8/GBK 回退嗅探编码、
-// 按 NUL 字节判二进制、回写按原文 eol 还原换行。GBK 仅可读（回写需 iconv，暂不引依赖）。
+// 截断后保存会丢尾，故走独立通道。编解码与 AI read/replace 同族：BOM/UTF-8/GB18030、
+// 按 NUL 字节判二进制、回写按原文 eol 与编码还原换行。
 
 /** 前 8000 字节含 NUL 即判二进制（与服务端 / 参考实现一致）。 */
 export function sniffBinary(buf: Buffer): boolean {
@@ -42,33 +43,17 @@ export function sniffBinary(buf: Buffer): boolean {
   return false;
 }
 
-/** 解码：BOM → utf-8-bom；合法 UTF-8 → utf-8；否则按中文场景回退 GBK（仅可读）。 */
+/** 解码：BOM → utf-8-bom；合法 UTF-8 → utf-8；否则 GB18030（IPC 名 `gbk`）。 */
 export function decodeText(buf: Buffer): {
   encoding: FsEncoding;
   text: string;
 } {
-  if (
-    buf.length >= 3 &&
-    buf[0] === 0xef &&
-    buf[1] === 0xbb &&
-    buf[2] === 0xbf
-  ) {
-    return {
-      encoding: "utf-8-bom",
-      text: new TextDecoder("utf-8").decode(buf.subarray(3)),
-    };
-  }
-  try {
-    return {
-      encoding: "utf-8",
-      text: new TextDecoder("utf-8", { fatal: true }).decode(buf),
-    };
-  } catch {
-    return { encoding: "gbk", text: new TextDecoder("gbk").decode(buf) };
-  }
+  const decoded = decodeStoredText(buf);
+  if (decoded) return decoded;
+  return { encoding: "gbk", text: new TextDecoder("gb18030").decode(buf) };
 }
 
-/** 编码：先规一化为 `\n`，再按 eol 还原；utf-8-bom 补 BOM。GBK 不在此处（已被拒写）。 */
+/** 编码：先规一化为 `\n`，再按 eol 还原；utf-8-bom 补 BOM；gbk 按 GB18030 写回。 */
 export function encodeText(
   content: string,
   encoding: FsEncoding,
@@ -77,13 +62,7 @@ export function encodeText(
   const normalized = content.replace(/\r\n/g, "\n");
   const withEol =
     eol === "crlf" ? normalized.replace(/\n/g, "\r\n") : normalized;
-  if (encoding === "utf-8-bom") {
-    return Buffer.concat([
-      Buffer.from([0xef, 0xbb, 0xbf]),
-      Buffer.from(withEol, "utf-8"),
-    ]);
-  }
-  return Buffer.from(withEol, "utf-8");
+  return encodeStoredText(withEol, encoding);
 }
 
 export async function readFile(
@@ -160,10 +139,9 @@ export async function readFile(
         };
       }
       const truncated = st.size > TEXT_PREVIEW_CAP;
-      const content = data
-        .subarray(0, Math.min(bytesRead, TEXT_PREVIEW_CAP))
-        .toString("utf-8");
-      return { ok: true, data: { kind: "text", content, truncated } };
+      const slice = data.subarray(0, Math.min(bytesRead, TEXT_PREVIEW_CAP));
+      const { text } = decodeText(slice);
+      return { ok: true, data: { kind: "text", content: text, truncated } };
     } finally {
       await fh.close();
     }
@@ -211,14 +189,6 @@ export async function writeTextFile(
   input: FsWriteInput,
 ): Promise<FsWriteResult> {
   await ensureReady();
-  // GBK 回写需 iconv 编码器（暂不引依赖）：拒写，避免把文件静默改成 UTF-8。
-  if (input.encoding === "gbk") {
-    return {
-      ok: false,
-      reason: "unsupported",
-      message: "GBK 文件回写暂未启用",
-    };
-  }
   const root = getRoot(rootId);
   if (!root)
     return { ok: false, reason: "denied", message: "目录未授权或已移除" };

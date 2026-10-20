@@ -286,6 +286,8 @@ export function toMessage(m: BackendMessage): Message {
           sourceFolderId: a.source_folder_id ?? undefined,
           conversationId: a.conversation_id ?? undefined,
           documentId: a.document_id ?? undefined,
+          archiveStatus: a.archive_status ?? undefined,
+          archiveDir: a.archive_dir ?? undefined,
         }))
       : undefined,
     citations: m.citations?.length

@@ -9,7 +9,7 @@ Product nested ``delegate`` (depth≥1) **reseeds full** via
 :func:`reseed_nested_delegation_budget` before the nested scheduler runs — each
 sub-team schedules against ``engine_max_parallel_delegations`` so a 4-wide nest
 is not starved to ``12//N`` by sibling leads. Safe because nesting is hard-capped
-at ``MAX_DELEGATION_DEPTH`` (3) and per-lead spawn at ``MAX_WORKER_SUBDELEGATIONS``.
+at ``MAX_DELEGATION_DEPTH`` (2) and per-lead spawn at ``MAX_WORKER_SUBDELEGATIONS``.
 Raw WaveScheduler-in-WaveScheduler without a reseed still divides (unit tests).
 """
 

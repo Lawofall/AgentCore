@@ -72,6 +72,22 @@ RUN mkdir -p /out \
          python /fetch_ripgrep.py /out/rg && chmod 0755 /out/rg; \
        fi
 
+# ---- 7-Zip：附件 rar/7z 入场 + guest 菜单。官方 7zz（与 sidecar 同 pin），不是 p7zip。
+# 默认 25.01 linux-x64；大陆构建可用 GitHub 镜像（脚本内置）或 SEVENZ_SHA256=skip。
+FROM python:3.12-slim AS sevenzip
+ARG INSTALL_7Z=1
+ARG SEVENZ_VERSION=25.01
+ARG SEVENZ_TARGET=linux-x64
+ARG SEVENZ_SHA256=""
+ENV SEVENZ_VERSION=${SEVENZ_VERSION} \
+    SEVENZ_TARGET=${SEVENZ_TARGET} \
+    SEVENZ_SHA256=${SEVENZ_SHA256}
+COPY scripts/fetch_7zip.py /fetch_7zip.py
+RUN mkdir -p /out \
+    && if [ "$INSTALL_7Z" = "1" ]; then \
+         python /fetch_7zip.py /out && chmod 0755 /out/7zz; \
+       fi
+
 # ---- guest：云桌用户态（菜单）。guest 看见这份树，不是 sandboxd/API 活着的 /usr。
 # 解释器 = 系统 python3（/usr/local/bin，与 runtime venv 隔离）、node、bash、git、curl。
 # ① 中文字体：文档/图表产物（pptx、matplotlib）没有 CJK 会全是豆腐块。
@@ -81,6 +97,9 @@ RUN mkdir -p /out \
 # ⑦ curl：公网 HTTP 与 web_fetch 同政策后，bash / 脚本需要 HTTP 客户端。不装 wget。
 # ⑧ gcc / make：网页/手机克隆 native 仓要能编 C。用 build-essential（gcc、g++、make、
 #    libc 头文件）；不装 cmake / go / rust。只进 guest 阶，禁止装进 runtime /usr。
+# ⑨ unzip：zip 走系统 unzip。rar/7z 走官方 7zz（sevenzip 阶拷进 guest /usr/bin，
+#    与 API / sidecar 同 pin）。附件入场在 API 进程展开；菜单给回合中下载/生成的包。
+#    系统工具打进只读根，禁止模型 apt 现装。
 FROM python:3.12-slim AS guest
 
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright \
@@ -99,7 +118,7 @@ RUN set -eux; \
       fi; \
     fi; \
     apt-get update; \
-    apt-get install -y --no-install-recommends fonts-noto-cjk fontconfig nodejs npm git curl build-essential; \
+    apt-get install -y --no-install-recommends fonts-noto-cjk fontconfig nodejs npm git curl build-essential unzip; \
     rm -rf /var/lib/apt/lists/*
 
 # ③ 文档/数据常用库装进【系统 site-packages】（guest python3 可见）。
@@ -142,7 +161,8 @@ ENV PATH="/app/.venv/bin:$PATH" \
     GVISOR_GUEST_ROOTFS=/opt/agentcore/guest-rootfs
 
 # API / sandboxd 宿主用户态：git（结构化 git 工具与克隆端点）、CJK 字体（服务端 PDF）、
-# iproute2（sandboxd 在宿主持 `ip netns`）。node / curl / cloud_python / Chromium 只进 guest 树。
+# iproute2（sandboxd 在宿主持 `ip netns`）。rar/7z 入场走官方 7zz（sevenzip 阶）。
+# node / curl / cloud_python / Chromium / unzip 只进 guest 树。
 # APT_MIRROR：生产机默认阿里云；GHA/境外传空字符串保留官方源。
 ARG APT_MIRROR=mirrors.aliyun.com
 RUN set -eux; \
@@ -164,6 +184,9 @@ RUN set -eux; \
 COPY --from=runsc /out/ /usr/local/bin/
 # ④b ripgrep 二进制（INSTALL_RG=0 时占位空目录；缺 rg 时 grep 工具显式失败）。
 COPY --from=ripgrep /out/ /usr/local/bin/
+# ④c 官方 7zz（INSTALL_7Z=0 时占位空目录；缺则 rar/7z 入场诚实失败）。
+COPY --from=sevenzip /out/ /usr/local/bin/
+RUN if [ -e /usr/local/bin/7zz ]; then ln -sfn 7zz /usr/local/bin/7z; fi
 
 WORKDIR /app
 
@@ -189,7 +212,11 @@ COPY --from=builder --chown=app:app /app /app
 
 # Guest 用户态：与 runtime /usr 分开。OCI root 指向这里，禁止再 rbind 本镜像 /usr。
 COPY --from=guest /guest-root /opt/agentcore/guest-rootfs
+COPY --from=sevenzip /out/ /opt/agentcore/guest-rootfs/usr/bin/
 RUN set -eux; \
+    if [ -e /opt/agentcore/guest-rootfs/usr/bin/7zz ]; then \
+      ln -sfn 7zz /opt/agentcore/guest-rootfs/usr/bin/7z; \
+    fi; \
     uid=$(getent passwd app | cut -d: -f3); \
     gid=$(getent passwd app | cut -d: -f4); \
     grep -q '^app:' /opt/agentcore/guest-rootfs/etc/passwd \

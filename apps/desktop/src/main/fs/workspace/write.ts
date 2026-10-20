@@ -8,15 +8,16 @@ import {
   relative,
   resolve,
 } from "node:path";
-import type { WorkspaceOpResult } from "@shared/ipc-contract";
+import type { FsEncoding, WorkspaceOpResult } from "@shared/ipc-contract";
 import { shell } from "electron";
 import {
-  WORKSPACE_EXTRACT_SOURCE_MAX,
   WORKSPACE_READ_HEAD_MAX,
   WORKSPACE_READ_MAX,
+  WORKSPACE_REPLACE_MAX,
 } from "../constants";
 import { realInside, resolveLexical, toReason } from "../pathGuard";
 import type { StoredRoot } from "../roots";
+import { decodeStoredText, encodeStoredText } from "../textCodec";
 import { TRASH_REL, isInternalZoneRelPath } from "../workspaceIgnore";
 import { opErr, opOk } from "./result";
 import { isSessionGrantRoot } from "./sessionRoot";
@@ -108,7 +109,7 @@ export async function opReadBytes(
     typeof maxBytes === "number" && Number.isFinite(maxBytes) && maxBytes >= 1
       ? Math.floor(maxBytes)
       : WORKSPACE_READ_MAX;
-  const cap = Math.min(requested, WORKSPACE_EXTRACT_SOURCE_MAX);
+  const cap = Math.min(requested, WORKSPACE_REPLACE_MAX);
   if (st.size > cap) {
     return opErr("WorkspaceIOError", `文件过大，无法读取（${st.size}字节）`);
   }
@@ -594,14 +595,22 @@ export async function opReplace(
     return opErr("WorkspaceIOError", toReason(e));
   }
   if (!st.isFile()) return opErr("NotAFile", relPath);
+  if (st.size > WORKSPACE_REPLACE_MAX) {
+    return opErr(
+      "WorkspaceIOError",
+      `文件过大，无法读取（${st.size}字节）`,
+    );
+  }
 
   let content: string;
+  let encoding: FsEncoding;
   try {
     const buf = await fs.readFile(real.path);
-    // fatal 解码：非法 UTF-8 抛 TypeError → NotUTF8（对齐服务端 read_bytes().decode）。
-    content = new TextDecoder("utf-8", { fatal: true }).decode(buf);
+    const decoded = decodeStoredText(buf);
+    if (!decoded) return opErr("NotUTF8", relPath);
+    content = decoded.text;
+    encoding = decoded.encoding;
   } catch (e) {
-    if (e instanceof TypeError) return opErr("NotUTF8", relPath);
     return opErr("WorkspaceIOError", toReason(e));
   }
 
@@ -618,7 +627,7 @@ export async function opReplace(
     return opErr("NoMatch", relPath);
   }
   try {
-    await atomicWrite(real.path, Buffer.from(replaced.content, "utf-8"));
+    await atomicWrite(real.path, encodeStoredText(replaced.content, encoding));
   } catch (e) {
     return opErr("WorkspaceIOError", toReason(e));
   }

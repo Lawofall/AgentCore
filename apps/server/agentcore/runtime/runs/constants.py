@@ -29,13 +29,13 @@ MAX_GAP_FILL_ADDS = 3
 
 # Hard ceiling on delegation nesting across one turn's Run tree. The CEO's direct
 # workers are depth 1; a worker may itself delegate ONLY while its own
-# depth < this cap. Legal chain: CEO → depth1 → depth2 → depth3 leaf.
-# depth-3 sub-workers never receive a delegate tool. Bounds recursion (cost /
+# depth < this cap. Legal chain: CEO → depth1 captain → depth2 leaf.
+# depth-2 sub-workers never receive a delegate tool. Bounds recursion (cost /
 # latency / fan-out) on top of the tree-wide width budget (MAX_PARALLEL_DELEGATIONS).
-MAX_DELEGATION_DEPTH = 3
+MAX_DELEGATION_DEPTH = 2
 
 # Per worker-captain cap on sub-workers spawned across all nested delegate calls
-# in one turn (depth-1/2 leads; CEO uses MAX_DELEGATION_TASKS instead).
+# in one turn (depth-1 leads; CEO uses MAX_DELEGATION_TASKS instead).
 MAX_WORKER_SUBDELEGATIONS = 4
 
 # Contract-gate retries are SEPARATE from infra: a transient 429 does not

@@ -1,8 +1,10 @@
 """Pre-parse text-like binary attachments at residency time (附件分流预解析).
 
 分流：``.docx`` 用 python-docx（段落+表格）抽文本；pdf/pptx/odt/rtf 用 markitdown。
-写出与原件并存的 ``原名.ext.md``。``.txt`` / ``.md`` / HTML 等可直接 UTF-8 读的
-格式只内联正文（原件已是可读副本）；xlsx/csv/tsv 不把全表抽进 prompt，只产
+写出与原件并存的 ``原名.ext.md``。``.txt`` / ``.md`` / HTML 等可直接读的
+格式：小文件内联；超窗（2000 行或 2.4 万字）只给路径指针（原件已是可读副本，
+禁止把正文塞进 prompt / 消息行）；
+xlsx/csv/tsv 不把全表抽进 prompt，只产
 列名 / 行数 / 推断类型 / 样例行，原始数据留在工作区文件。扫描版
 PDF 首版不做 OCR，写入明确降级提示。解析失败不阻塞驻留，回落路径提示。
 
@@ -107,11 +109,18 @@ class ExtractResult:
 class PreparseResult:
     status: ParseStatus
     text: str = ""
-    """Full extracted text (or scan/failure note). Empty when skipped."""
+    """Inline body (or scan/failure note). Empty when skipped, or when a large
+    plain-text file is a path pointer (``truncated`` True; body stays on disk)."""
     parsed_workspace_path: str | None = None
     """Workspace-relative readable copy (``*.md``) or the original when already text."""
     detail: str = ""
     """Short machine-oriented reason for logs / tests."""
+    truncated: bool = False
+    """True when the file is larger than the inline window (pointer, not a body clip)."""
+    size_bytes: int | None = None
+    """On-disk size for large plain-text pointers."""
+    total_lines: int | None = None
+    """Line count for large plain-text pointers."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -268,15 +277,6 @@ def _convert_with_markitdown(
     else:
         result = md.convert_stream(BytesIO(data or b""), file_extension=ext)
     return (result.text_content or "").strip()
-
-
-def _decode_plain_text(data: bytes) -> str | None:
-    for encoding in ("utf-8", "utf-8-sig"):
-        try:
-            return data.decode(encoding).strip()
-        except UnicodeDecodeError:
-            continue
-    return None
 
 
 def _normalize_extract_ext(ext: str) -> str:
@@ -825,8 +825,6 @@ async def preparse_resident(
     Never raises for parse failures — returns ``FAILED`` / ``SKIPPED`` so the
     caller can keep the existing path-hint behaviour.
     """
-    from agentcore.workspace.limits import OFFICE_EXTRACT_CHANNEL_MAX_BYTES
-
     ext = extension_of(name, workspace_path)
     if ext in SKIP_EXTENSIONS:
         return PreparseResult(status=ParseStatus.SKIPPED, detail=f"skip_ext:{ext}")
@@ -835,12 +833,7 @@ async def preparse_resident(
 
     if ext in PLAIN_TEXT_EXTENSIONS:
         try:
-            try:
-                data = await backend.read_bytes(
-                    workspace_path, max_bytes=OFFICE_EXTRACT_CHANNEL_MAX_BYTES
-                )
-            except TypeError:
-                data = await backend.read_bytes(workspace_path)
+            window = await backend.read_lines(workspace_path, offset=1, limit=2000)
         except WorkspaceError as e:
             logger.warning(
                 "attachment.preparse_read_failed",
@@ -848,27 +841,34 @@ async def preparse_resident(
                 error=str(e),
             )
             return PreparseResult(status=ParseStatus.FAILED, detail=f"read:{e}")
-        try:
-            text = _decode_plain_text(data)
-            if text is None:
-                # Odd encoding — last resort via markitdown.
-                text = await asyncio.to_thread(_convert_with_markitdown, data, ext)
-        except Exception as e:
-            logger.warning(
-                "attachment.preparse_failed",
-                path=workspace_path,
-                name=name,
-                error=str(e),
-                error_type=type(e).__name__,
-            )
-            return PreparseResult(status=ParseStatus.FAILED, detail=f"convert:{type(e).__name__}")
-        if not text:
+        text = "\n".join(window.lines)
+        if not text.strip():
             return PreparseResult(status=ParseStatus.FAILED, detail="empty_plain_text")
+        _, clipped = truncate_for_prompt(text)
+        more_lines = window.end_line < window.total_lines
+        if clipped or more_lines:
+            size_bytes: int | None = None
+            try:
+                head = await backend.read_head(workspace_path, max_bytes=1)
+                size_bytes = head.size_bytes
+            except WorkspaceError:
+                pass
+            return PreparseResult(
+                status=ParseStatus.OK,
+                text="",
+                parsed_workspace_path=workspace_path,
+                detail="plain_text_pointer",
+                truncated=True,
+                size_bytes=size_bytes,
+                total_lines=window.total_lines,
+            )
         return PreparseResult(
             status=ParseStatus.OK,
             text=text,
             parsed_workspace_path=workspace_path,
             detail="plain_text",
+            truncated=False,
+            total_lines=window.total_lines,
         )
 
     try:

@@ -295,6 +295,7 @@ function main() {
 
   // 8. 内嵌 ripgrep（产品 AI grep；主进程 opGrep + sidecar AGENTCORE_RG_PATH 共用）。
   fetchDesktopRipgrep();
+  fetchDesktop7zip();
 
   console.log(`\n✅ 内置 Python 运行时就绪: ${outDir}`);
 }
@@ -321,6 +322,29 @@ function fetchDesktopRipgrep() {
   const rgPath = join(desktopDir, "resources", "rg", rgName);
   if (!existsSync(rgPath)) {
     throw new Error(`ripgrep 未写入预期路径: ${rgPath}`);
+  }
+}
+
+function fetchDesktop7zip() {
+  const fetchScript = join(serverDir, "scripts", "fetch_7zip.py");
+  if (!existsSync(fetchScript)) {
+    throw new Error(`缺少 7-Zip 获取脚本: ${fetchScript}`);
+  }
+  console.log("获取内嵌 7-Zip → resources/7z/");
+  const venvPy = isWin
+    ? join(serverDir, ".venv", "Scripts", "python.exe")
+    : join(serverDir, ".venv", "bin", "python");
+  if (existsSync(venvPy)) {
+    run(venvPy, [fetchScript, "--install-desktop"], { cwd: serverDir });
+  } else {
+    run("uv", ["run", "python", fetchScript, "--install-desktop"], {
+      cwd: serverDir,
+    });
+  }
+  const sevenName = isWin ? "7z.exe" : "7zz";
+  const sevenPath = join(desktopDir, "resources", "7z", sevenName);
+  if (!existsSync(sevenPath)) {
+    throw new Error(`7-Zip 未写入预期路径: ${sevenPath}`);
   }
 }
 

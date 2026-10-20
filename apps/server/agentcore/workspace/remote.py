@@ -27,11 +27,13 @@ from agentcore.core.logging import get_logger
 from agentcore.core.net import WEB_CONNECT_TIMEOUT, outbound_async_client
 from agentcore.tools.sandbox.protocol import ExecutionRequest, ExecutionResult
 from agentcore.workspace.cloud_credentials import get_workspaces_credentials
+from agentcore.workspace.file_kind import decode_stored_text, encode_stored_text
 from agentcore.workspace.limits import (
     FILE_TOO_LARGE_DETAIL,
     OFFICE_EXTRACT_DISK_MAX_BYTES,
     effective_read_bytes_cap,
     effective_read_head_cap,
+    replace_max_bytes,
 )
 from agentcore.workspace.protocol import (
     AlreadyExists,
@@ -184,10 +186,10 @@ class RemoteCloudWorkspace:
 
     async def read(self, path: str) -> str:
         data = await self.read_bytes(path)
-        try:
-            return data.decode("utf-8")
-        except UnicodeDecodeError as exc:
-            raise NotUTF8(path) from exc
+        decoded = decode_stored_text(data)
+        if decoded is None:
+            raise NotUTF8(path)
+        return decoded[0].replace("\r\n", "\n").replace("\r", "\n")
 
     async def write(self, path: str, content: str) -> int:
         await self.write_bytes(path, content.encode("utf-8"))
@@ -303,24 +305,17 @@ class RemoteCloudWorkspace:
     async def read_lines(
         self, path: str, *, offset: int = 1, limit: int | None = None
     ) -> ReadLinesResult:
-        text = await self.read(path)
-        lines = text.splitlines()
-        total = len(lines)
-        start = max(int(offset or 1), 1)
-        if start > total:
-            return ReadLinesResult(
-                lines=[], start_line=start, end_line=start - 1, total_lines=total
-            )
-        slice_ = lines[start - 1 :]
-        if limit is not None:
-            slice_ = slice_[: max(int(limit), 0)]
-        end = start + len(slice_) - 1 if slice_ else start - 1
-        return ReadLinesResult(
-            lines=list(slice_),
-            start_line=start,
-            end_line=end,
-            total_lines=total,
-        )
+        from agentcore.config import settings
+        from agentcore.workspace.text_window import read_text_lines_from_bytes
+
+        cap = int(settings.workspace_upload_max_bytes)
+        resp = await self._request("GET", self._file_suffix(path))
+        if resp.status_code >= 400:
+            _raise_http(resp, path=path)
+        data = resp.content
+        if len(data) > cap:
+            raise WorkspaceIOError(f"{FILE_TOO_LARGE_DETAIL}（{len(data)}字节）")
+        return read_text_lines_from_bytes(data, offset=offset, limit=limit)
 
     async def list_tree(
         self,
@@ -421,13 +416,21 @@ class RemoteCloudWorkspace:
     async def replace(
         self, path: str, old: str, new: str, *, all_: bool
     ) -> ReplaceOutcome:
-        text = await self.read(path)
+        raw = await self.read_bytes(path, max_bytes=replace_max_bytes())
+        decoded = decode_stored_text(raw)
+        if decoded is None:
+            raise NotUTF8(path)
+        text, encoding = decoded
         result = apply_text_replace(text, old, new, all_=all_)
         if isinstance(result, TextReplaceNoMatch):
             raise NoMatch(path)
         if isinstance(result, TextReplaceAmbiguous):
             raise AmbiguousMatch(result.count)
-        await self.write(path, result.content)
+        try:
+            payload = encode_stored_text(result.content, encoding)
+        except UnicodeEncodeError as exc:
+            raise WorkspaceIOError(str(exc)) from exc
+        await self.write_bytes(path, payload)
         return ReplaceOutcome(count=result.count, first_line=result.first_line)
 
     async def grep(self, query: GrepQuery) -> GrepResult:

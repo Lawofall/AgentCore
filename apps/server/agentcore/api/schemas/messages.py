@@ -96,6 +96,9 @@ class StoredAttachment(BaseModel):
     # True when the resident file is a binary blob. Text-like binaries may still
     # have been pre-parsed into a sibling ``*.md`` in the workspace (not stored here).
     binary: bool = False
+    # Ingest unpack of a container archive. Chip opens ``archive_dir`` (folder).
+    archive_status: str | None = None
+    archive_dir: str | None = None
 
 
 class SendMessageRequest(BaseModel):

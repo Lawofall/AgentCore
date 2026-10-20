@@ -6,6 +6,7 @@
 # pdfplumber：PDF 抽表。pypdf 按页抽文本，会把表格一行拆成多行，不要当抽表主路径。
 # 否决（体积 / 额外系统依赖 / 已覆盖 / 非大众场景）：
 # camelot、PyMuPDF、pytesseract、geopandas、scipy、pyarrow、xlrd、py7zr。
+# 压缩包走 guest/API 的系统 7z（官方 7zz，Dockerfile sevenzip 阶），不要把解压器塞进 site-packages。
 python-pptx
 python-docx
 openpyxl

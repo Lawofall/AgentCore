@@ -1,6 +1,6 @@
 {
   "name": "agentcore-admin",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "AgentCore 管理后台 - 平台运营者控制台 (独立 web 控制台)",
   "private": true,
   "type": "module",

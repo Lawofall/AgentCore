@@ -165,7 +165,6 @@ export function MarkdownFileEditor({
           eol: doc.eol,
         };
         latestMdRef.current = doc.text;
-        setReadOnly(doc.encoding === "gbk"); // GBK 回写未启用：只读打开，避免白编辑后存不下
         setContent(doc.text);
         setMode("preview"); // 阅读优先：点开默认渲染预览，编辑为次级动作
         setEditorKey((k) => k + 1);
@@ -193,7 +192,6 @@ export function MarkdownFileEditor({
     async (force = false) => {
       if (savingRef.current) return; // 已有写盘在途：丢弃重复触发
       const base = baselineRef.current;
-      if (base.encoding === "gbk") return; // GBK 只读：不回写
       if (!source.writeText) return;
       const md = editorRef.current?.getValue() ?? latestMdRef.current; // 编辑器已卸时回退
       if (md == null) return;
@@ -256,7 +254,7 @@ export function MarkdownFileEditor({
       )
         return;
       const base = baselineRef.current;
-      if (base.encoding === "gbk" || !source.writeText) return;
+      if (!source.writeText) return;
       const md = editorRef.current?.getValue() ?? latestMdRef.current;
       if (md == null) return;
       void source.writeText(path, {
@@ -585,13 +583,6 @@ export function MarkdownFileEditor({
         </div>
       )}
 
-      {readOnly && (
-        <div className="flex shrink-0 items-center gap-2 border-b border-border bg-muted/40 px-3 py-1.5 text-xs text-muted-foreground">
-          <AlertTriangle size={14} className="shrink-0" />
-          <span>此文件为 GBK 编码，暂不支持回写，已以只读方式打开。</span>
-        </div>
-      )}
-
       {conflict && (
         <div className="flex flex-wrap shrink-0 items-center gap-2 border-b border-primary/30 bg-primary/10 px-3 py-1.5 text-xs text-foreground">
           <AlertTriangle size={14} className="shrink-0 text-primary" />
@@ -629,8 +620,7 @@ export function MarkdownFileEditor({
           <CenterMsg title="加载中…" />
         ) : mode === "edit" ? (
           <div className="flex h-full flex-col">
-            {/* 工具栏只在可写时显示：只读（GBK）下文本变换会改文档却存不下，徒增困惑；
-                AI 评审期也隐藏，避免文本变换命令在未定稿的 diff 上改文档 */}
+            {/* 工具栏只在可写时显示；AI 评审期隐藏，避免在未定稿的 diff 上改文档 */}
             {!readOnly && !reviewing && (
               <SourceToolbar
                 getView={() => editorRef.current?.getView() ?? null}

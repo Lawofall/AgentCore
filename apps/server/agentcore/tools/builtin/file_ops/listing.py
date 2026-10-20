@@ -519,3 +519,108 @@ async def map_listing_failure(
             )
         return _error(f"{verb}失败：{exc}", start, user_face=False)
     raise exc
+
+
+async def list_archive_as_directory(
+    directory: str,
+    *,
+    context: ToolContext,
+    start: float,
+) -> ToolResult | None:
+    """If ``directory`` is a container archive, list members (or the sibling folder).
+
+    None when the path is not a pack — caller keeps the NotADirectory mapping.
+    """
+    from agentcore.storage._archive import ZipExtractLimitError
+    from agentcore.workspace.archive_unpack import (
+        UnpackFailedError,
+        UnpackPasswordError,
+        list_member_names,
+        unpack_dir_for,
+    )
+    from agentcore.workspace.file_kind import is_container_archive, sniff_bytes
+    from agentcore.workspace.protocol import NotAFile, ReadHeadResult
+
+    try:
+        head = await context.backend.read_head(directory)
+    except (PathNotFound, NotADirectory, NotAFile, WorkspaceError):
+        return None
+    if not isinstance(head, ReadHeadResult):
+        return None
+    sniff = sniff_bytes(head.data)
+    if not is_container_archive(sniff, directory):
+        return None
+
+    dest = unpack_dir_for(directory)
+    try:
+        listing = await context.backend.list(dest, "*")
+        entries = visible_list_entries(
+            list(listing.entries),
+            materials=context.material_paths,
+        )
+        body = format_ls_lines(entries) if entries else empty_list_message(dest)
+        if listing.truncated:
+            body += f"\n\n{LIST_TRUNCATED_NOTE}"
+        output = f"（已展开到 `{dest}`）\n{body}"
+        return ToolResult(
+            tool_call_id="",
+            success=True,
+            output=output,
+            duration_ms=int((time.monotonic() - start) * 1000),
+        )
+    except (PathNotFound, NotADirectory, WorkspaceError):
+        pass
+
+    try:
+        data = await context.backend.read_bytes(directory)
+        names = list_member_names(data, sniff=sniff, name=directory)
+    except UnpackPasswordError:
+        return ToolResult(
+            tool_call_id="",
+            success=True,
+            output="压缩包有密码，无法列出成员。ask_user 要密码或已解压的文件夹。",
+            duration_ms=int((time.monotonic() - start) * 1000),
+        )
+    except ZipExtractLimitError:
+        return ToolResult(
+            tool_call_id="",
+            success=True,
+            output="压缩包过大，无法列出成员。ask_user 要已解压的文件夹。",
+            duration_ms=int((time.monotonic() - start) * 1000),
+        )
+    except UnpackFailedError as exc:
+        if exc.detail == "need_7z":
+            text = "这台电脑还没有解压器，无法列出成员。ask_user 要 zip 或已解压的文件夹。"
+        else:
+            text = "无法列出这个压缩包的成员。ask_user 要已解压的文件夹。"
+        return ToolResult(
+            tool_call_id="",
+            success=True,
+            output=text,
+            duration_ms=int((time.monotonic() - start) * 1000),
+        )
+    except WorkspaceError:
+        return None
+
+    from agentcore.workspace.limits import ARCHIVE_PROMPT_MEMBER_CAP
+
+    listing_names, truncated = (
+        (names, False)
+        if len(names) <= ARCHIVE_PROMPT_MEMBER_CAP
+        else (names[:ARCHIVE_PROMPT_MEMBER_CAP], True)
+    )
+    header = (
+        f"压缩包 `{directory}` 未在区内展开（引用不改用户树）。"
+        "下列是包内成员名，不是工作区路径；read 这些名字会找不到文件。"
+        "要读正文：用 unzip / 7z 解到工作区相对路径，或请人给已解压的文件夹。"
+    )
+    body = "\n".join(listing_names) if listing_names else empty_list_message(directory)
+    output = f"{header}\n{body}"
+    if truncated:
+        output += f"\n\n{LIST_TRUNCATED_NOTE}"
+    return ToolResult(
+        tool_call_id="",
+        success=True,
+        output=output,
+        duration_ms=int((time.monotonic() - start) * 1000),
+    )

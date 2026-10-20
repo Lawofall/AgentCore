@@ -188,7 +188,7 @@ export const MarkdownSourceEditor = forwardRef<
     };
   }, []);
 
-  // editable 切换（如 GBK 只读）不重建视图，热重配置即可。
+  // editable 切换不重建视图，热重配置即可。
   useEffect(() => {
     viewRef.current?.dispatch({
       effects: editableComp.current.reconfigure(

@@ -1,6 +1,6 @@
 {
   "name": "agentcore-desktop",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "AgentCore Desktop - Multi-Agent AI Workspace",
   "author": "AgentCore",
   "main": "./out/main/index.js",
@@ -104,6 +104,7 @@
     "electron-builder": "^26.15.3",
     "electron-updater": "^6.8.9",
     "electron-vite": "^5.0.0",
+    "iconv-lite": "^0.7.3",
     "ignore": "^7.0.5",
     "jsdom": "^29.1.1",
     "jszip": "^3.10.1",

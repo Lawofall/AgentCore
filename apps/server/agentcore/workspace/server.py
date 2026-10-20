@@ -48,11 +48,13 @@ from agentcore.workspace.external_mounts import (
     parse_external_path,
     route_external,
 )
+from agentcore.workspace.file_kind import decode_stored_text, encode_stored_text
 from agentcore.workspace.limits import (
     FILE_TOO_LARGE_DETAIL,
     OFFICE_EXTRACT_DISK_MAX_BYTES,
     effective_read_bytes_cap,
     effective_read_head_cap,
+    replace_max_bytes,
 )
 from agentcore.workspace.local import LocalWorkspace
 from agentcore.workspace.locks import workspace_lock
@@ -585,9 +587,15 @@ class ServerWorkspace:
             raise NotAFile(path)
         self._reject_oversized_file(target)
         try:
-            return target.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError) as e:
+            raw = target.read_bytes()
+        except OSError as e:
             raise WorkspaceIOError(str(e)) from e
+        decoded = decode_stored_text(raw)
+        if decoded is None:
+            raise WorkspaceIOError("无法按文本解码")
+        # Match ``Path.read_text`` universal newlines so identical-write skip
+        # still sees LF on Windows CRLF disks.
+        return decoded[0].replace("\r\n", "\n").replace("\r", "\n")
 
     async def write(self, path: str, content: str) -> int:
         if self._external_needs_channel(path):
@@ -858,31 +866,16 @@ class ServerWorkspace:
             raise PathNotFound(path)
         if not target.is_file():
             raise NotAFile(path)
-        self._reject_oversized_file(target)
+        from agentcore.workspace.text_window import read_text_lines
+
         try:
-            content = target.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError) as e:
-            raise WorkspaceIOError(str(e)) from e
-
-        lines = content.splitlines()
-        total = len(lines)
-        start_idx = max(0, offset - 1)
-        if start_idx >= total:
-            return ReadLinesResult(
-                lines=[],
-                start_line=offset,
-                end_line=offset - 1,
-                total_lines=total,
+            return await asyncio.to_thread(
+                read_text_lines, target, offset=offset, limit=limit
             )
-
-        end_idx = total if limit is None else min(total, start_idx + limit)
-        selected = lines[start_idx:end_idx]
-        return ReadLinesResult(
-            lines=selected,
-            start_line=start_idx + 1,
-            end_line=end_idx,
-            total_lines=total,
-        )
+        except WorkspaceIOError:
+            raise
+        except OSError as e:
+            raise WorkspaceIOError(str(e)) from e
 
     async def list_tree(
         self,
@@ -967,8 +960,8 @@ class ServerWorkspace:
                         continue
                     raise WorkspaceIOError(str(e)) from e
 
-                # AI list_tree: system noise always; AI noise except attachments/
-                # materials; archives under external/ or reveal_archives.
+                # AI list_tree: system noise always; images/archives listed by
+                # name; other AI noise except attachments/ / materials.
                 if is_file and is_ai_list_hidden_file(
                     parent_rel=parent_rel,
                     name=child.name,
@@ -1223,16 +1216,19 @@ class ServerWorkspace:
                 raise PathNotFound(path)
             if not target.is_file():
                 raise NotAFile(path)
+            self._reject_oversized_file(target, ingest_cap=replace_max_bytes())
 
             try:
                 # Read bytes + decode (no newline translation). ``apply_text_replace``
                 # keeps exact hits byte-faithful; CRLF↔LF mismatch uses the LF-normalize
                 # fallback and restores the file's original eol on write-back.
-                content = (await asyncio.to_thread(target.read_bytes)).decode("utf-8")
-            except UnicodeDecodeError as e:
-                raise NotUTF8(path) from e
+                raw = await asyncio.to_thread(target.read_bytes)
             except OSError as e:
                 raise WorkspaceIOError(str(e)) from e
+            decoded = decode_stored_text(raw)
+            if decoded is None:
+                raise NotUTF8(path)
+            content, encoding = decoded
 
             result = apply_text_replace(content, old, new, all_=all_)
             if isinstance(result, TextReplaceNoMatch):
@@ -1241,9 +1237,10 @@ class ServerWorkspace:
                 raise AmbiguousMatch(result.count)
 
             try:
-                await asyncio.to_thread(
-                    _atomic_write_bytes, target, result.content.encode("utf-8")
-                )
+                payload = encode_stored_text(result.content, encoding)
+                await asyncio.to_thread(_atomic_write_bytes, target, payload)
+            except UnicodeEncodeError as e:
+                raise WorkspaceIOError(str(e)) from e
             except OSError as e:
                 raise WorkspaceIOError(str(e)) from e
 

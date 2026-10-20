@@ -61,6 +61,9 @@ jobs:
       - name: Install ripgrep (server)
         run: uv run python scripts/fetch_ripgrep.py --install-server
 
+      - name: Install 7-Zip (server)
+        run: uv run python scripts/fetch_7zip.py --install-server
+
       - name: Test
         env:
           DATABASE_URL: postgresql+asyncpg://agentcore:agentcore@localhost:5432/agentcore
@@ -147,6 +150,9 @@ jobs:
       # Desktop opGrep tests resolve rg from resources/rg.
       - name: Install ripgrep (desktop)
         run: python3 apps/server/scripts/fetch_ripgrep.py --install-desktop
+
+      - name: Install 7-Zip (desktop)
+        run: python3 apps/server/scripts/fetch_7zip.py --install-desktop
 
       - name: Lint
         # desktop `lint` already runs check-ui-tokens; do not add a second step.

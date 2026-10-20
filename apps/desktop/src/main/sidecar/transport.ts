@@ -48,15 +48,39 @@ export function resolveSidecarServerDir(): string {
   );
 }
 
+function extraBinDir(kind: "rg" | "7z"): string {
+  const folder = kind === "rg" ? "rg" : "7z";
+  if (app.isPackaged) {
+    return join(process.resourcesPath, folder);
+  }
+  return join(app.getAppPath(), "resources", folder);
+}
+
+function extraBinPath(kind: "rg" | "7z"): string {
+  const file =
+    kind === "rg"
+      ? process.platform === "win32"
+        ? "rg.exe"
+        : "rg"
+      : process.platform === "win32"
+        ? "7z.exe"
+        : "7zz";
+  return join(extraBinDir(kind), file);
+}
+
 export function resolveSpawnConfig(): SpawnConfig {
   const serverDir = resolveSidecarServerDir();
+  const extraEnv = {
+    AGENTCORE_RG_PATH: extraBinPath("rg"),
+    AGENTCORE_7Z_PATH: extraBinPath("7z"),
+  };
 
   const cmdOverride = process.env.AGENTCORE_SIDECAR_CMD;
   if (cmdOverride) {
     const args = (process.env.AGENTCORE_SIDECAR_ARGS ?? "-m agentcore.sidecar")
       .split(" ")
       .filter(Boolean);
-    return { cmd: cmdOverride, args, cwd: serverDir };
+    return { cmd: cmdOverride, args, cwd: serverDir, env: extraEnv };
   }
 
   // 打包态：内置 Python 运行时（方案 B）。
@@ -78,11 +102,7 @@ export function resolveSpawnConfig(): SpawnConfig {
       cwd: base,
       env: {
         PYTHONPATH: join(base, "site-packages"),
-        AGENTCORE_RG_PATH: join(
-          process.resourcesPath,
-          "rg",
-          process.platform === "win32" ? "rg.exe" : "rg",
-        ),
+        ...extraEnv,
       },
     };
   }
@@ -92,22 +112,14 @@ export function resolveSpawnConfig(): SpawnConfig {
     process.platform === "win32"
       ? join(serverDir, ".venv", "Scripts", "python.exe")
       : join(serverDir, ".venv", "bin", "python");
-  // 与打包态同一份 resources/rg。始终注入：文件不在就让 grep 显式失败，
-  // 不改落到 apps/server/bin（那只给 pytest / 本地 API）。
-  const rgEnv = {
-    AGENTCORE_RG_PATH: join(
-      app.getAppPath(),
-      "resources",
-      "rg",
-      process.platform === "win32" ? "rg.exe" : "rg",
-    ),
-  };
+  // 与打包态同一份 resources/rg · resources/7z。始终注入：文件不在就让
+  // grep / rar 入场显式失败，不改落到 apps/server/bin（那只给 pytest / 本地 API）。
   if (existsSync(venvPython)) {
     return {
       cmd: venvPython,
       args: ["-m", "agentcore.sidecar"],
       cwd: serverDir,
-      env: rgEnv,
+      env: extraEnv,
     };
   }
   // 回退：让 uv 解析环境（需 uv 在 PATH）。
@@ -115,7 +127,7 @@ export function resolveSpawnConfig(): SpawnConfig {
     cmd: "uv",
     args: ["run", "python", "-m", "agentcore.sidecar"],
     cwd: serverDir,
-    env: rgEnv,
+    env: extraEnv,
   };
 }
 

@@ -33,8 +33,9 @@ async def test_persist_writes_file_and_sets_workspace_path(tmp_path: Path):
     assert out[0]["workspace_path"] == "attachments/notes.md"
     assert (tmp_path / "attachments" / "notes.md").read_text(encoding="utf-8") == "# hi\n"
     assert ws.dirty is True
-    # The one-shot text is preserved on the enriched dict (for the context block).
-    assert out[0]["text"] == "# hi\n"
+    # Prompt inline comes from preparse (read_lines joins without a trailing newline).
+    assert out[0]["text"] == "# hi"
+    assert out[0].get("parse_status") == "ok"
 
 
 async def test_persist_keeps_client_pre_resident_path(tmp_path: Path):
@@ -410,6 +411,37 @@ async def test_persist_write_failure_is_skipped():
     )
     # The turn proceeds: the attachment is returned un-resident, not raised.
     assert out[0].get("workspace_path") is None
+
+
+def test_to_stored_metadata_keeps_archive_fields():
+    stored = to_stored_metadata(
+        [
+            {
+                "name": "pack.zip",
+                "path": "attachments/pack.zip",
+                "text": "never store",
+                "kind": "file",
+                "workspace_path": "attachments/pack.zip",
+                "binary": True,
+                "archive_status": "ok",
+                "archive_dir": "attachments/pack",
+                "archive_members": ["a.txt"],
+                "archive_member_count": 1,
+            }
+        ]
+    )
+    assert stored[0]["archive_status"] == "ok"
+    assert stored[0]["archive_dir"] == "attachments/pack"
+    assert stored[0]["archive_members"] == ["a.txt"]
+    assert stored[0]["archive_member_count"] == 1
+    assert "text" not in stored[0]
+
+
+def test_to_stored_metadata_omits_archive_when_absent():
+    stored = to_stored_metadata(
+        [{"name": "a.py", "path": "/a.py", "workspace_path": "attachments/a.py"}]
+    )
+    assert "archive_status" not in stored[0]
 
 
 def test_to_stored_metadata_drops_text_keeps_path():

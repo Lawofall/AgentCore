@@ -281,6 +281,26 @@ async def test_cd_dotdot_from_root_is_contract_failure():
     assert "工作区" in (result.error or "")
 
 
+async def test_cloud_apt_is_contract_failure():
+    ctx = ToolContext.create(
+        execution_id="e",
+        run_id="s",
+        agent_id="worker",
+        backend=_FakeShortBackend(),  # type: ignore[arg-type]
+        user_id="u",
+    )
+    result = await RunTool(location="server").execute(
+        {"command": "apt-get install p7zip-full"}, ctx
+    )
+    assert result.success is False
+    assert result.contract_failure is True
+    assert "固定菜单" in (result.error or "")
+    local = await RunTool(location="local").execute(
+        {"command": "apt-get install p7zip-full"}, ctx
+    )
+    assert local.success is True
+
+
 def test_foreground_run_engine_wall_ignores_command_shape():
     from agentcore.core.types import ToolFace
     from agentcore.runtime.engine.timeout import resolve_tool_timeout

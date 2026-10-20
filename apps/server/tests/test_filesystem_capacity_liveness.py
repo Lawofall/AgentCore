@@ -122,6 +122,7 @@ async def test_resolve_for_download_rejects_over_upload_ceiling(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_file_read_oversized_is_contract_failure(tmp_path: Path):
+    """A single line above the ingest cap is still pathology (not file size)."""
     big = tmp_path / "huge.txt"
     big.write_bytes(b"a" * (WORKSPACE_READ_MAX_BYTES + 1))
     result = await FileReadTool().execute({"file_path": "huge.txt"}, _ctx(_ws(tmp_path)))
@@ -131,6 +132,25 @@ async def test_file_read_oversized_is_contract_failure(tmp_path: Path):
     assert "MiB" in (result.error or "")
     assert "请用户" not in (result.error or "")
     assert result.metadata.get("capacity_contract") == "bytes"
+
+
+@pytest.mark.asyncio
+async def test_file_read_window_succeeds_when_file_exceeds_5mib(tmp_path: Path):
+    line = "row-%06d unique-token " + ("x" * 40) + "\n"
+    body = "".join(line % i for i in range(1, 120_000))
+    assert len(body.encode("utf-8")) > WORKSPACE_READ_MAX_BYTES
+    (tmp_path / "novel.txt").write_text(body, encoding="utf-8")
+    ws = _ws(tmp_path)
+    window = await ws.read_lines("novel.txt", offset=1, limit=40)
+    assert window.lines[0].startswith("row-000001")
+    assert len(window.lines) == 40
+    assert window.total_lines >= 89_000
+    result = await FileReadTool().execute(
+        {"file_path": "novel.txt", "offset": 1, "limit": 40}, _ctx(ws)
+    )
+    assert result.success is True
+    assert "unique-token" in (result.output or "")
+    assert "第 1–40 行" in (result.output or "")
 
 
 @pytest.mark.asyncio
@@ -254,9 +274,7 @@ async def test_file_read_misnamed_oversize_pdf_is_truncated_envelope(tmp_path: P
         async def read_lines(  # noqa: ARG002
             self, path: str, *, offset: int = 1, limit: int | None = None
         ):
-            raise WorkspaceIOError(
-                f"{FILE_TOO_LARGE_DETAIL}（{OFFICE_EXTRACT_DISK_MAX_BYTES + 1}字节）"
-            )
+            raise WorkspaceIOError("二进制文件，无法以文本读取")
 
         async def read_head(  # noqa: ARG002
             self, path: str, *, max_bytes: int | None = None

@@ -18,13 +18,15 @@ export const WORKSPACE_READ_MAX = 5 * 1024 * 1024; // 5 MiB
 export const WORKSPACE_READ_HEAD_MAX = 1024;
 /** Channel extract ingest — mirrors server ``OFFICE_EXTRACT_CHANNEL_MAX_BYTES``. */
 export const WORKSPACE_EXTRACT_SOURCE_MAX = 25 * 1024 * 1024; // 25 MiB
+/** ``edit`` unique-replace ingest — mirrors server ``WORKSPACE_REPLACE_MAX_BYTES`` (upload / grep). */
+export const WORKSPACE_REPLACE_MAX = 50 * 1024 * 1024;
 // AI 面单次列举默认上限，与 ServerWorkspace.list 的 _MAX_LIST_ENTRIES 对齐。
 // 命中即在 op 结果里回 `truncated: true`——上限可以有，静默不行。
 export const WORKSPACE_LIST_MAX = 100;
 export const GREP_MAX_LINE = 300; // 截断超长命中行（如压缩产物），与服务端对齐
 export const GREP_MAX_RESULTS_CAP = 200; // 结果硬上限
-/** grep 单文件大小帽（与服务端 rg_grep.GREP_MAX_FILE_BYTES 对齐，2 MiB） */
-export const GREP_MAX_FILE_BYTES = 2 * 1024 * 1024;
+/** grep 单文件大小帽（与服务端 ``GREP_MAX_FILE_BYTES`` 对齐：上传 / edit 顶） */
+export const GREP_MAX_FILE_BYTES = WORKSPACE_REPLACE_MAX;
 
 // 本地→云交接打包（双模式工作区 P2e / e1）上限：防超大仓把整树读入内存/撑爆通道回填。
 export const ARCHIVE_MAX_FILES = 20000; // 最多打包文件数

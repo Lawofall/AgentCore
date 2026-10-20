@@ -12476,6 +12476,10 @@ export interface components {
          *     conversation / document chips (nothing is written as a workspace file).
          */
         StoredAttachment: {
+            /** Archive Dir */
+            archive_dir?: string | null;
+            /** Archive Status */
+            archive_status?: string | null;
             /**
              * Binary
              * @default false

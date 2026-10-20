@@ -27,6 +27,7 @@ from agentcore.workspace._paths import (
     SYSTEM_IGNORED_FILE_SUFFIXES,
     normalize_glob,
 )
+from agentcore.workspace.limits import GREP_MAX_FILE_BYTES
 from agentcore.workspace.protocol import (
     GrepHit,
     GrepQuery,
@@ -40,7 +41,6 @@ from agentcore.workspace.stage_dirs import (
     VERSIONS_REL,
 )
 
-GREP_MAX_FILE_BYTES = 2 * 1024 * 1024
 GREP_MAX_RESULTS_CAP = 200
 GREP_MAX_LINE = 300
 
@@ -99,7 +99,9 @@ def _ignore_globs(
     if kind == "grep":
         suffixes |= AI_NOISE_FILE_SUFFIXES
     else:
-        suffixes |= AI_NOISE_FILE_SUFFIXES - AI_IMAGE_FILE_SUFFIXES
+        suffixes |= (
+            AI_NOISE_FILE_SUFFIXES - AI_IMAGE_FILE_SUFFIXES - AI_ARCHIVE_FILE_SUFFIXES
+        )
         if reveal_archives:
             suffixes -= AI_ARCHIVE_FILE_SUFFIXES
     for suf in sorted(suffixes):

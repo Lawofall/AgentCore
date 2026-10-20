@@ -1,4 +1,4 @@
-import { promises as fs } from "node:fs";
+import { createReadStream, promises as fs } from "node:fs";
 import { join, relative } from "node:path";
 import type { WorkspaceOpResult } from "@shared/ipc-contract";
 import {
@@ -9,6 +9,7 @@ import {
 } from "../constants";
 import { realInside, resolveLexical, toReason } from "../pathGuard";
 import type { StoredRoot } from "../roots";
+import { decodeStoredText } from "../textCodec";
 import { collectWorkspaceFiles, renameLegacyRulesLeaf } from "../tree";
 import {
   type AiListSkipOptions,
@@ -72,9 +73,10 @@ export async function opRead(
   }
   try {
     const buf = await fs.readFile(real.path);
-    if (buf.includes(0))
+    const decoded = decodeStoredText(buf);
+    if (!decoded)
       return opErr("WorkspaceIOError", "二进制文件，无法以文本读取");
-    return opOk(buf.toString("utf-8"));
+    return opOk(decoded.text);
   } catch (e) {
     return opErr("WorkspaceIOError", toReason(e));
   }
@@ -210,14 +212,82 @@ export async function opList(
   });
 }
 
-function splitLinesLikePython(text: string): string[] {
-  if (text === "") return [];
-  const normalized = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-  const lines = normalized.split("\n");
-  if (normalized.endsWith("\n") && lines.length > 0) {
-    lines.pop();
+function stripLineEnding(line: string): string {
+  if (line.endsWith("\n")) line = line.slice(0, -1);
+  if (line.endsWith("\r")) line = line.slice(0, -1);
+  return line;
+}
+
+async function streamTextLines(
+  abs: string,
+  encoding: string,
+  offset: number,
+  limit: number | null,
+): Promise<{
+  lines: string[];
+  start_line: number;
+  end_line: number;
+  total_lines: number;
+}> {
+  const start = Math.max(1, Math.floor(offset) || 1);
+  const cap = limit == null ? null : Math.max(0, Math.floor(limit));
+  const decoder = new TextDecoder(encoding, {
+    fatal: encoding === "utf-8",
+    stream: true,
+  });
+  const selected: string[] = [];
+  let total = 0;
+  let pending = "";
+  const stream = createReadStream(abs);
+  for await (const chunk of stream) {
+    pending += decoder.decode(chunk as Buffer, { stream: true });
+    for (;;) {
+      const nl = pending.indexOf("\n");
+      if (nl < 0) break;
+      const raw = stripLineEnding(pending.slice(0, nl + 1));
+      pending = pending.slice(nl + 1);
+      if (raw.includes("\0")) {
+        throw new Error("二进制文件，无法以文本读取");
+      }
+      const encoded = Buffer.byteLength(raw, "utf8");
+      if (encoded > WORKSPACE_READ_MAX) {
+        throw new Error(`文件过大，无法读取（${encoded}字节）`);
+      }
+      total += 1;
+      if (total < start) continue;
+      if (cap == null || selected.length < cap) selected.push(raw);
+    }
   }
-  return lines;
+  pending += decoder.decode();
+  if (pending.length > 0) {
+    const raw = stripLineEnding(pending);
+    if (raw.includes("\0")) {
+      throw new Error("二进制文件，无法以文本读取");
+    }
+    const encoded = Buffer.byteLength(raw, "utf8");
+    if (encoded > WORKSPACE_READ_MAX) {
+      throw new Error(`文件过大，无法读取（${encoded}字节）`);
+    }
+    total += 1;
+    if (total >= start && (cap == null || selected.length < cap)) {
+      selected.push(raw);
+    }
+  }
+  if (start > total) {
+    return {
+      lines: [],
+      start_line: start,
+      end_line: start - 1,
+      total_lines: total,
+    };
+  }
+  const end = selected.length ? start + selected.length - 1 : start - 1;
+  return {
+    lines: selected,
+    start_line: start,
+    end_line: end,
+    total_lines: total,
+  };
 }
 
 export async function opReadLines(
@@ -238,8 +308,6 @@ export async function opReadLines(
     return opErr("WorkspaceIOError", toReason(e));
   }
   if (!st.isFile()) return opErr("NotAFile", relPath);
-  if (st.size > WORKSPACE_READ_MAX)
-    return opErr("WorkspaceIOError", "文件过大，无法读取");
   const real = await realInside(root, abs);
   if (!real.ok) {
     return real.code === "out_of_root"
@@ -247,30 +315,22 @@ export async function opReadLines(
       : opErr("PathNotFound", relPath);
   }
   try {
-    const buf = await fs.readFile(real.path);
-    if (buf.includes(0))
-      return opErr("WorkspaceIOError", "二进制文件，无法以文本读取");
-    const lines = splitLinesLikePython(buf.toString("utf-8"));
-    const total = lines.length;
-    const startIdx = Math.max(0, offset - 1);
-    if (startIdx >= total) {
-      return opOk({
-        lines: [],
-        start_line: offset,
-        end_line: offset - 1,
-        total_lines: total,
-      });
+    try {
+      const window = await streamTextLines(real.path, "utf-8", offset, limit);
+      return opOk(window);
+    } catch (utfErr) {
+      const reason = String((utfErr as Error)?.message || utfErr);
+      if (reason.includes("二进制") || reason.includes("文件过大")) {
+        return opErr("WorkspaceIOError", reason);
+      }
+      const window = await streamTextLines(real.path, "gb18030", offset, limit);
+      return opOk(window);
     }
-    const endIdx =
-      limit == null ? total : Math.min(total, startIdx + Math.max(0, limit));
-    const selected = lines.slice(startIdx, endIdx);
-    return opOk({
-      lines: selected,
-      start_line: startIdx + 1,
-      end_line: endIdx,
-      total_lines: total,
-    });
   } catch (e) {
+    const reason = String((e as Error)?.message || e);
+    if (reason.includes("二进制") || reason.includes("文件过大")) {
+      return opErr("WorkspaceIOError", reason);
+    }
     return opErr("WorkspaceIOError", toReason(e));
   }
 }

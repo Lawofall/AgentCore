@@ -76,11 +76,17 @@ const config = {
   // （package.json 的 build:* 已前置）；原生 wheel/解释器不可交叉编译，故每平台各自 CI 构建。
   // 内嵌 ripgrep（产品 AI grep）：scripts/fetch_ripgrep.py --install-desktop → resources/rg/；
   // 主进程 opGrep 与 sidecar（AGENTCORE_RG_PATH）共用，不依赖 PATH。
+  // 内嵌 7-Zip（附件 rar/7z 入场 + 本机菜单）：fetch_7zip.py --install-desktop → resources/7z/。
   extraResources: [
     { from: "resources/sidecar", to: "sidecar" },
     {
       from: "resources/rg",
       to: "rg",
+      filter: ["**/*"],
+    },
+    {
+      from: "resources/7z",
+      to: "7z",
       filter: ["**/*"],
     },
   ],

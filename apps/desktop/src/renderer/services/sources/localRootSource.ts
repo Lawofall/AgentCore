@@ -184,14 +184,6 @@ export function createLocalRootSource(
       return { text: content, version: { mtimeMs }, encoding, eol };
     },
     async writeText(path, input): Promise<WriteTextResult> {
-      // GBK 只读：宿主已以只读打开，这里再兜一道，绝不静默改编码。
-      if (input.encoding === "gbk") {
-        return {
-          ok: false,
-          reason: "unsupported",
-          message: "GBK 文件回写暂未启用",
-        };
-      }
       const res = await window.fsApi.writeFile(rootId, inPath(path), {
         content: input.content,
         encoding: input.encoding,

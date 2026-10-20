@@ -107,6 +107,22 @@ describe("AttachmentChip", () => {
     expect(screen.queryByRole("button")).toBeNull();
   });
 
+  it("unpacked archive chip opens the sibling folder", () => {
+    renderChip(
+      {
+        ...fileAtt,
+        name: "pack.zip",
+        path: "attachments/pack.zip",
+        workspacePath: "attachments/pack.zip",
+        archiveDir: "attachments/pack",
+        archiveStatus: "ok",
+      },
+      true,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "打开 pack.zip" }));
+    expect(showFile).toHaveBeenCalledWith("attachments/pack", "pack");
+  });
+
   it("opens when kind is omitted (interjection attachments)", () => {
     renderChip({ ...fileAtt, kind: undefined }, true);
     fireEvent.click(screen.getByRole("button", { name: "打开 shot.png" }));

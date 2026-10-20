@@ -164,7 +164,7 @@ CEO 契约没有顶层 `force`，闸没有模型可填的跳过键，解析层�
 | `continue_from_run_id` | 带现场续派；权威 → [多轮编排与同人续派](/docs/03-AI核心/多轮编排与同人续派.md) |
 | worker 模型 ✅ | 每 worker **节点/run** 可选显式模型身份（与辩论辩手身份同族）；**省略** = Worker 槽（空则 follow 主）。CEO/`tasks[]` 节点显式仍有效；人不在确认面改模。定案全文 ↓ |
 
-嵌套委派：硬上限 `depth≤3`（合法链 CEO → depth1 → depth2 → depth3 叶子；depth&lt;3 默认获 `delegate`，`replan` 在已有子计划后挂上），无 `can_delegate` 字段。worker 工具集缺省全量（内部装配）；CEO **不必也不应**手填 `tasks[].tools` 收窄（填了也不生效）。depth=1 captain 与根 CEO **同一条信息判据**（窗跟这张任务卡走：卡还没收成一件可独自做完的活才再派；卡上已是一件则留下）。整里程碑 M0 / 空仓多模块骨架仍应拆。**禁止**「凡大活必嵌套」；失败只回退提示词，不升级闸。编制 HOW 写在根 / 嵌套 `delegate` description（共用 when-to-use 核与填参合同；嵌套另加拆层）。分叉只在机械：根侧协调立即返回 / 嵌套阻塞等到子队收工。
+嵌套委派：硬上限 `depth≤2`（合法链 CEO → depth1 → depth2 叶子；depth&lt;2 默认获 `delegate`，`replan` 在已有子计划后挂上），无 `can_delegate` 字段。worker 工具集缺省全量（内部装配）；CEO **不必也不应**手填 `tasks[].tools` 收窄（填了也不生效）。depth=1 captain 与根 CEO **同一条信息判据**（窗跟这张任务卡走：卡还没收成一件可独自做完的活才再派；卡上已是一件则留下）。整里程碑 M0 / 空仓多模块骨架仍应拆。**禁止**「凡大活必嵌套」；失败只回退提示词，不升级闸。编制 HOW 写在根 / 嵌套 `delegate` description（共用 when-to-use 核与填参合同；嵌套另加拆层）。分叉只在机械：根侧协调立即返回 / 嵌套阻塞等到子队收工。
 
 ### 交付验收：无 kind 枚举、无按 kind 硬挡 {#交付验收}
 

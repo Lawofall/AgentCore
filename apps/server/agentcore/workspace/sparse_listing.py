@@ -19,7 +19,12 @@ from agentcore.workspace._paths import (
 from agentcore.workspace.attachments import ATTACHMENTS_DIR
 from agentcore.workspace.external_mounts import EXTERNAL_PREFIX
 
-_MATERIAL_PATH_KEYS = ("workspace_path", "path", "parsed_workspace_path")
+_MATERIAL_PATH_KEYS = (
+    "workspace_path",
+    "path",
+    "parsed_workspace_path",
+    "archive_dir",
+)
 
 
 def is_attachment_path(path: str) -> bool:
@@ -77,24 +82,21 @@ def should_hide_ai_noise_from_list(
     """True when ``path`` is AI-noise and *not* under ``attachments/`` / materials.
 
     Used by ``file_list`` tool-layer filtering (``list`` is shared with UI and
-    only strips system noise). Images are listed by name. Attachment zips and
-    this-turn material paths stay visible; other archives remain hidden except
-    under ``external/<alias>/`` or ``reveal_archives``. Native objects stay hidden.
+    only strips system noise). Images and archives are listed by name (grep /
+    index still skip). Attachment paths and this-turn materials stay visible.
+    Native objects stay hidden.
     """
     p = path.replace("\\", "/").lstrip("./")
     name = p.rsplit("/", 1)[-1] if p else ""
     if not name or not is_ai_noise_file_name(name):
         return False
-    if is_ai_image_file_name(name):
+    if is_ai_image_file_name(name) or is_ai_archive_file_name(name):
         return False
     if is_attachment_path(p):
         return False
     if materials and p in materials:
         return False
-    return not (
-        is_ai_archive_file_name(name)
-        and (reveal_archives or is_external_ns_path(p))
-    )
+    return not reveal_archives
 
 
 def is_ai_list_hidden_file(
@@ -106,15 +108,15 @@ def is_ai_list_hidden_file(
 ) -> bool:
     """Whether a file child should be omitted from AI ``list_tree`` walks.
 
-    System suffixes always hidden. Images listed by name. Other AI-noise
-    hidden unless the child lives under ``attachments/``, is in ``materials``,
-    or (archives only) under ``external/`` / ``reveal_archives``.
+    System suffixes always hidden. Images and archives listed by name. Other
+    AI-noise hidden unless the child lives under ``attachments/``, is in
+    ``materials``, or ``reveal_archives``.
     """
     if is_system_ignored_file_name(name):
         return True
     if not is_ai_noise_file_name(name):
         return False
-    if is_ai_image_file_name(name):
+    if is_ai_image_file_name(name) or is_ai_archive_file_name(name):
         return False
     parent = parent_rel.replace("\\", "/").strip("/")
     child = name if parent in ("", ".") else f"{parent}/{name}"
@@ -122,10 +124,7 @@ def is_ai_list_hidden_file(
         return False
     if materials and child in materials:
         return False
-    return not (
-        is_ai_archive_file_name(name)
-        and (reveal_archives or is_external_ns_path(child))
-    )
+    return not reveal_archives
 
 
 def partition_sparse_paths(

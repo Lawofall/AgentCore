@@ -115,7 +115,7 @@ export type FsResult<T = void> =
 
 export type FsCreateKind = "file" | "dir";
 
-/** 文本文件编码（读侧嗅探）；`gbk` 仅可读不可回写（未引入编码器）。 */
+/** 文本文件编码（读侧嗅探）；`gbk` 表示 GB18030 写回。 */
 export type FsEncoding = "utf-8" | "utf-8-bom" | "gbk";
 /** 换行风格——回写时按原文还原，避免整文换行 diff。 */
 export type FsEol = "lf" | "crlf";
@@ -139,7 +139,7 @@ export interface FsTextFile {
 export interface FsWriteInput {
   /** 编辑器正文（`\n` 换行）；主进程按 `eol`/`encoding` 还原落盘。 */
   content: string;
-  /** 来自读取基线；`gbk` 会被拒写。 */
+  /** 来自读取基线；`gbk` 按 GB18030 写回。 */
   encoding: FsEncoding;
   eol: FsEol;
   /** 写前 CAS：与磁盘 mtime 不符即 `conflict`；`0` 视为新建。 */
@@ -148,7 +148,7 @@ export interface FsWriteInput {
 
 /**
  * 写盘结果（判别式）。`conflict` 带磁盘当前 `mtimeMs` 供「仍然覆盖」用其做基线再写；
- * 其余失败原因：`denied`（越权/未授权）/`locked`（被占用）/`unsupported`（GBK 回写未启用）/`error`。
+ * 其余失败原因：`denied`（越权/未授权）/`locked`（被占用）/`unsupported`/`error`。
  */
 export type FsWriteResult =
   | { ok: true; mtimeMs: number }

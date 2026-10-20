@@ -25,9 +25,24 @@ WorkspaceChannelFailureKind = Literal["presence", "liveness", "reconnect"]
 # Prepare-abort product copy (``LocalChannelDeadError``); tools import from here.
 CHANNEL_DEAD_PREPARE_ABORT = LOCAL_CHANNEL_DEAD
 
-# Whole-file read ceiling for **text** views (code / md). Office/PDF extract
-# uses the ingest caps below instead of this gate.
+# Whole-file ingest ceiling for ``read`` / ``read_bytes`` / panel edit.
+# Windowed ``read_lines`` does **not** use this as an admission ticket — only a
+# single returned line above this size is pathology.
 WORKSPACE_READ_MAX_BYTES = 5 * 1024 * 1024  # 5 MiB — mirrors desktop Local
+
+# Unique-replace ingest for ``edit`` (whole-file ``str``, not a read window).
+# Same pathology bound as upload / grep: on disk ⇒ editable. ``read()`` / panel
+# whole-file edit stay on ``WORKSPACE_READ_MAX_BYTES``.
+WORKSPACE_REPLACE_MAX_BYTES = 50 * 1024 * 1024  # 50 MiB — default workspace_upload_max_bytes
+
+# Grep scans user text. Skip only above the upload ceiling (pathology / bound-tree
+# dumps). Do not use a tighter cap — that hides novels / logs the user just attached.
+GREP_MAX_FILE_BYTES = WORKSPACE_REPLACE_MAX_BYTES
+
+
+def replace_max_bytes() -> int:
+    """``edit`` unique-replace ingest. Tests may patch ``WORKSPACE_REPLACE_MAX_BYTES``."""
+    return WORKSPACE_REPLACE_MAX_BYTES
 
 # Magic sniff / OLE size: first N bytes + total size. Not a whole-file gate.
 WORKSPACE_READ_HEAD_MAX_BYTES = 1024
@@ -49,6 +64,14 @@ OFFICE_EXTRACT_PDF_MAX_PAGES = 40
 # liveness_timeout. Tests may patch this down to sub-second.
 OFFICE_EXTRACT_TIMEOUT_SECONDS = 12.0
 
+# Attachment archive unpack (zip/tar/7z/rar). Same order as snapshot handoff:
+# uncompressed bytes + member count, not the 50 MiB upload ticket.
+ARCHIVE_UNPACK_MAX_BYTES = 100 * 1024 * 1024  # 100 MiB
+ARCHIVE_UNPACK_MAX_FILES = 20_000
+ARCHIVE_UNPACK_TIMEOUT_SECONDS = 30.0
+# Prompt listing only — disk still holds every extracted member under the cap.
+ARCHIVE_PROMPT_MEMBER_CAP = 40
+
 # Entry ceiling for the **file panel** listing (REST ``/files``), far above the
 # AI-facing ``_MAX_LIST_ENTRIES``: browsing is not a context budget, and a user
 # who imported a repo must be able to reach their files. The desktop lists one
@@ -62,16 +85,18 @@ FILE_TOO_LARGE_DETAIL = "文件过大，无法读取"
 
 
 def effective_read_bytes_cap(max_bytes: int | None) -> int:
-    """Clamp a ``read_bytes`` request: default text gate, never above channel ingest.
+    """Clamp a ``read_bytes`` request: default text gate, never above replace ingest.
 
-    ``read_bytes`` is the IPC/memory path. On-disk Office extract must pass
-    ``OFFICE_EXTRACT_DISK_MAX_BYTES`` into ``_reject_oversized_file(ingest_cap=…)``
-    instead of this helper, or a 40 MiB sidecar PDF would still be refused.
+    Default is ``WORKSPACE_READ_MAX_BYTES`` (AI whole-file read). Explicit
+    ``max_bytes`` may rise to ``WORKSPACE_REPLACE_MAX_BYTES`` (edit aux / grep
+    family). Local Office extract still asks for
+    ``OFFICE_EXTRACT_CHANNEL_MAX_BYTES`` itself. On-disk Office extract must pass
+    ``OFFICE_EXTRACT_DISK_MAX_BYTES`` into ``_reject_oversized_file(ingest_cap=…)``.
     """
     requested = WORKSPACE_READ_MAX_BYTES if max_bytes is None else int(max_bytes)
     if requested < 1:
         requested = WORKSPACE_READ_MAX_BYTES
-    return min(requested, OFFICE_EXTRACT_CHANNEL_MAX_BYTES)
+    return min(requested, replace_max_bytes())
 
 
 def effective_read_head_cap(max_bytes: int | None) -> int:

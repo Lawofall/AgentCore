@@ -20,6 +20,7 @@ from agentcore.workspace.limits import (
     channel_dead_retire_metadata,
     is_file_too_large_detail,
     op_liveness_timeout_metadata,
+    replace_max_bytes,
     workspace_channel_failure_kind,
 )
 from agentcore.workspace.protocol import WorkspaceError
@@ -112,20 +113,46 @@ def _url_not_workspace_path_error(path: str, start: float) -> ToolResult:
     )
 
 
-def _file_too_large_error(path: str, start: float, *, size: int | None = None) -> ToolResult:
-    """Capacity contract: oversized **text** whole-file read (not Office extract)."""
-    max_mib = WORKSPACE_READ_MAX_BYTES // (1024 * 1024)
+def _file_too_large_error(
+    path: str,
+    start: float,
+    *,
+    size: int | None = None,
+    max_bytes: int | None = None,
+    next_hint: str | None = None,
+) -> ToolResult:
+    """Capacity contract: oversized whole-file ingest (read or unique-replace)."""
+    ceiling = WORKSPACE_READ_MAX_BYTES if max_bytes is None else int(max_bytes)
+    max_mib = ceiling // (1024 * 1024)
     size_bit = f"（{size}字节）" if size is not None else ""
+    hint = next_hint or "不要原样重试整文件读取。"
     return _error(
         (
             f"`{path}` {FILE_TOO_LARGE_DETAIL}{size_bit}（上限 {max_mib} MiB）。"
-            "不要原样重试整文件读取。"
+            f"{hint}"
         ),
         start,
         contract_failure=True,
         failure_code="too_large",
         user_face=False,
         metadata={"capacity_contract": "bytes"},
+    )
+
+
+_REPLACE_TOO_LARGE_HINT = (
+    "此文件超过 edit 整份唯一替换顶；不要原样重试，不要用 offset/limit（edit 没有窗）。"
+)
+
+
+def _replace_too_large_error(
+    path: str, start: float, *, size: int | None = None
+) -> ToolResult:
+    return _file_too_large_error(
+        path,
+        start,
+        size=size,
+        max_bytes=replace_max_bytes(),
+        next_hint=_REPLACE_TOO_LARGE_HINT,
     )
 
 

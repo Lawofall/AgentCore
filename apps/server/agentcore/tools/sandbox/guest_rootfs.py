@@ -31,6 +31,8 @@ CLOUD_GUEST_SURFACE: tuple[str, ...] = (
     "curl",
     "gcc",
     "make",
+    "unzip",
+    "7z",
 )
 
 

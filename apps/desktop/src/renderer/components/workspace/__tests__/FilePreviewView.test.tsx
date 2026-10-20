@@ -159,7 +159,7 @@ describe("FilePreviewView — 无法预览的文件给可点出口", () => {
       }),
       "bundle.zip",
     );
-    await screen.findByText("无法预览此文件");
+    await screen.findByText("这是压缩包");
 
     const entries = screen.getAllByRole("button", { name: "用默认程序打开" });
     expect(entries).toHaveLength(2); // 头部图标 + 兜底主按钮
@@ -431,5 +431,23 @@ describe("FilePreviewView — Markdown 默认渲染预览（阅读优先）", ()
     await screen.findByText(/内容较大/);
     expect(container.querySelector("pre")).toBeTruthy();
     expect(screen.queryByTestId("md-render")).toBeNull();
+  });
+});
+
+describe("FilePreviewView — 目录 / 压缩包展开", () => {
+  it("read 失败则 listDir 当文件夹预览，不给出下载", async () => {
+    renderView(
+      makeSource({
+        read: async () => {
+          throw new Error("not a file");
+        },
+        listDir: async () => [
+          { path: "pack/notes.txt", name: "notes.txt", isDir: false },
+        ],
+      }),
+      "pack",
+    );
+    expect(await screen.findByText("notes.txt")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "下载文件" })).toBeNull();
   });
 });

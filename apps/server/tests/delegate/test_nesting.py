@@ -107,8 +107,8 @@ def test_absorb_children_keeps_lead_subteam_continuation_tally():
     assert parent.continuation_count == 1  # 折叠后仍在（不重复、也不丢）
 
 
-async def test_depth_three_subworker_cannot_delegate_further():
-    """MAX=3: depth-1 and depth-2 may nest; depth-3 leaf has no CAPTAIN_MARK."""
+async def test_depth_two_subworker_cannot_delegate_further():
+    """MAX=2: depth-1 may nest; depth-2 leaf has no CAPTAIN_MARK."""
 
     class DeepProvider(NestingProvider):
         async def stream(self, request):
@@ -142,8 +142,8 @@ async def test_depth_three_subworker_cannot_delegate_further():
         {"tasks": [{"role": "队长", "task": "主任务"}], "coordinate": False}, ctx()
     )
     assert result.success is True
-    # depth-1 nests once, depth-2 nests once; depth-3 leaf never adds a call.
-    assert provider.delegate_calls == 2
+    # depth-1 nests once; depth-2 leaf never adds a call.
+    assert provider.delegate_calls == 1
 
 
 def test_make_lead_subteam_wires_delegate_plus_replan_bound_to_child():
@@ -209,8 +209,8 @@ class _LeadScopeSteerProvider:
     async def stream(self, request):
         system = next((m.content or "" for m in request.messages if m.role == "system"), "")
         user = next((m.content or "" for m in request.messages if m.role == "user"), "")
-        # See _LeadBindReplanProvider: depth-1 only (MAX=3).
-        is_lead = "你的子成员仍可再向下委派一层" in user or "你的子成员仍可再向下委派一层" in system
+        # Depth-1 is the only worker-captain under MAX=2.
+        is_lead = "你的子成员" in user or "你的子成员" in system
         tool_msgs = [m for m in request.messages if m.role == "tool"]
         last_tool = (tool_msgs[-1].content or "") if tool_msgs else ""
         if is_lead and not tool_msgs:

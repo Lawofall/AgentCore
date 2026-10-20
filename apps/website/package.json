@@ -1,6 +1,6 @@
 {
   "name": "agentcore-website",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "packageManager": "pnpm@10.28.1",
   "description": "AgentCore 官网 — 协作智能平台",

@@ -155,4 +155,31 @@ describe("FilePreviewBody", () => {
     expect(screen.queryByText(/请下载或用系统默认/)).toBeNull();
     expect(screen.queryByRole("button")).toBeNull();
   });
+
+  it("压缩包二进制兜底标题是「这是压缩包」", () => {
+    render(
+      <FilePreviewBody
+        name="pack.zip"
+        result={{ kind: "binary", mime: "application/zip", size: 20 }}
+      />,
+    );
+    expect(screen.getByText("这是压缩包")).toBeTruthy();
+  });
+
+  it("目录预览列出成员", () => {
+    render(
+      <FilePreviewBody
+        name="pack"
+        result={{
+          kind: "dir",
+          entries: [
+            { path: "pack/a.txt", name: "a.txt", isDir: false },
+            { path: "pack/docs", name: "docs", isDir: true },
+          ],
+        }}
+      />,
+    );
+    expect(screen.getByText("a.txt")).toBeTruthy();
+    expect(screen.getByText("docs/")).toBeTruthy();
+  });
 });

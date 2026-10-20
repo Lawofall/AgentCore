@@ -11,10 +11,15 @@ Two shapes:
 Absolute paths never appear here. Traversal / empty / drive-letter claims are
 dropped before the exists check.
 
+Attached zip/tar/7z/rar copies under ``attachments/`` are **unpacked** beside
+the original (``archive_unpack``) before Office pre-parse. Citations outside
+that folder are not mutated.
+
 Text-like binaries (docx/pdf/pptx/txt …) are **pre-parsed** after residency
 (``attachment_parse``): a readable ``*.md`` copy is written beside the original
-when extraction succeeds. Spreadsheets (xlsx/csv/tsv) get **column names, types,
-and sample rows** only — the full table stays on disk
+when extraction succeeds. Small plain-text files inline; large ones are path
+pointers (size + line count, body on disk). Spreadsheets (xlsx/csv/tsv) get
+**column names, types, and sample rows** only — the full table stays on disk
 and is never inlined. Parse failures never break the turn — path-hint fallback
 remains.
 
@@ -28,6 +33,7 @@ This is intentionally a thin service over ``WorkspaceBackend`` (it never touches
 from __future__ import annotations
 
 import os
+from typing import TYPE_CHECKING
 
 from agentcore.core.logging import get_logger
 from agentcore.workspace.attachment_parse import (
@@ -42,6 +48,9 @@ from agentcore.workspace.attachment_parse import (
 )
 from agentcore.workspace.protocol import WorkspaceBackend, WorkspaceError
 
+if TYPE_CHECKING:
+    from agentcore.workspace.archive_unpack import UnpackResult
+
 logger = get_logger(__name__)
 
 # Subdirectory that holds resident user attachments inside every workspace.
@@ -51,7 +60,7 @@ ATTACHMENTS_DIR = "attachments"
 async def _workspace_file_present(backend: WorkspaceBackend, rel: str) -> bool:
     """True when ``rel`` names an existing file (stat/exists — no content load).
 
-    Must not use AI-noise-filtered ``list``: local ``opList`` hides ``.zip``/media,
+    Must not use AI-noise-filtered ``list``: grep/index still hide ``.zip``/media,
     which would false-negative residency. Large binaries must not go through
     ``read_bytes`` (capacity gate + memory). Outside / I/O → False.
     """
@@ -156,12 +165,33 @@ async def _enrich_with_preparse(
     item["parse_status"] = parsed.status.value
     if parsed.parsed_workspace_path:
         item["parsed_workspace_path"] = parsed.parsed_workspace_path
-    if parsed.status == ParseStatus.OK and parsed.text:
-        item["text"] = parsed.text
+    if parsed.status == ParseStatus.OK:
+        if parsed.truncated:
+            item["text"] = ""
+            item["truncated"] = True
+            if parsed.size_bytes is not None:
+                item["size_bytes"] = parsed.size_bytes
+            if parsed.total_lines is not None:
+                item["total_lines"] = parsed.total_lines
+        elif parsed.text:
+            item["text"] = parsed.text
     elif parsed.status == ParseStatus.SCANNED and parsed.text:
         # Surface the scan notice as the attachment body so prompt assembly sees it.
         item["text"] = parsed.text
     # FAILED / SKIPPED: leave text empty → prompt falls back to binary path hint.
+
+
+def _apply_archive_result(item: dict, result: UnpackResult) -> None:
+    """Copy unpack fields onto the attachment row (original archive stays)."""
+    item["archive_status"] = result.status.value
+    if result.detail:
+        item["archive_detail"] = result.detail
+    if result.dest_dir:
+        item["archive_dir"] = result.dest_dir
+        item["archive_members"] = list(result.members)
+        item["archive_member_count"] = result.member_count
+        if result.truncated_listing:
+            item["archive_listing_truncated"] = True
 
 
 async def persist_attachments(
@@ -245,10 +275,18 @@ async def persist_attachments(
                 item["binary"] = binary
                 item.pop("resident_missing", None)
                 item.pop("claimed_workspace_path", None)
-                if _is_copied_attachment_rel(pre) and (
-                    binary or should_preview_table(item.get("name"), pre)
-                ):
-                    await _enrich_with_preparse(backend, item, workspace_path=pre)
+                if _is_copied_attachment_rel(pre):
+                    from agentcore.workspace.archive_unpack import unpack_resident
+
+                    unpacked = await unpack_resident(
+                        backend, pre, name=item.get("name")
+                    )
+                    if unpacked is not None:
+                        _apply_archive_result(item, unpacked)
+                    elif should_preparse(item.get("name"), pre) or should_preview_table(
+                        item.get("name"), pre
+                    ):
+                        await _enrich_with_preparse(backend, item, workspace_path=pre)
         elif kind == "file" and text.strip() and not binary:
             item.pop("workspace_path", None)
             rel = f"{ATTACHMENTS_DIR}/{_dedup(_safe_attachment_name(att.get('name') or ''), used)}"
@@ -260,6 +298,8 @@ async def persist_attachments(
                     _apply_table_preview(
                         item, extract_table_preview(text.encode("utf-8"), ext)
                     )
+                elif should_preparse(item.get("name"), rel):
+                    await _enrich_with_preparse(backend, item, workspace_path=rel)
             except WorkspaceError as e:
                 logger.warning(
                     "attachment.persist_failed",
@@ -284,6 +324,7 @@ def to_stored_metadata(attachments: list[dict]) -> list[dict]:
 
     Drops the one-shot ``text`` (never stored) and keeps display metadata plus
     the durable ``workspace_path`` so the client can render and download it.
+    Archive unpack fields stay so a later turn still sees the folder, not a blob.
     Pre-parse copies live on disk under ``*.md``; they are not persisted as
     message columns (agents find them via workspace path / file tools).
     """
@@ -302,6 +343,18 @@ def to_stored_metadata(attachments: list[dict]) -> list[dict]:
         src = a.get("source_folder_id")
         if isinstance(src, str) and src.strip():
             row["source_folder_id"] = src.strip()
+        status = a.get("archive_status")
+        if isinstance(status, str) and status.strip():
+            row["archive_status"] = status.strip()
+            for key in (
+                "archive_detail",
+                "archive_dir",
+                "archive_members",
+                "archive_member_count",
+                "archive_listing_truncated",
+            ):
+                if key in a:
+                    row[key] = a[key]
         out.append(row)
     return out
 

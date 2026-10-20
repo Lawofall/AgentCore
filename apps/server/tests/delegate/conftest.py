@@ -86,8 +86,8 @@ class NestingProvider:
         user = next((m.content or "" for m in request.messages if m.role == "user"), "")
         is_captain = self.CAPTAIN_MARK in user or self.CAPTAIN_MARK in system
         has_result = any(m.role == "tool" for m in request.messages)
-        # One-level harness: only the first captain nests. Under MAX=3, depth-2 is
-        # also captain — do not auto-fan deeper or tree-shape asserts explode.
+        # One-level harness: only the first captain nests. Under MAX=2, depth-2 is
+        # a leaf — do not auto-fan deeper or tree-shape asserts explode.
         if is_captain and not has_result and self.delegate_calls == 0:
             self.delegate_calls += 1
             args = json.dumps(

@@ -163,6 +163,32 @@ async def test_truncated_note_and_directory_listing():
     assert "File paths (contents not included):" in out
 
 
+@pytest.mark.asyncio
+async def test_large_plain_text_is_path_pointer_not_inline_body():
+    out = await _build_attachment_context(
+        [
+            {
+                "name": "novel.txt",
+                "path": "attachments/novel.txt",
+                "workspace_path": "attachments/novel.txt",
+                "parse_status": "ok",
+                "text": "",
+                "truncated": True,
+                "size_bytes": 9_905_619,
+                "total_lines": 184_320,
+            }
+        ]
+    )
+    assert out is not None
+    assert "UNIQUE_TAIL" not in out
+    assert "[large text / path pointer]" in out
+    assert "9905619 bytes" in out
+    assert "184320 lines" in out
+    assert "not inlined" in out
+    assert "use read or grep" in out.lower() or "Use read" in out
+    assert "possibly truncated" not in out
+
+
 class _AsyncCm:
     async def __aenter__(self):
         return MagicMock()
@@ -898,3 +924,51 @@ async def test_document_pin_ignores_client_text_when_id_unloadable():
     assert out is not None
     assert "客户端伪造" not in out
     assert "未能加载" in out
+
+
+@pytest.mark.asyncio
+async def test_unpacked_archive_lists_folder_not_run_steer():
+    out = await _build_attachment_context(
+        [
+            {
+                "name": "病历.rar",
+                "path": "attachments/病历.rar",
+                "text": "",
+                "binary": True,
+                "workspace_path": "attachments/病历.rar",
+                "archive_status": "ok",
+                "archive_dir": "attachments/病历",
+                "archive_members": ["a.pdf", "notes.md"],
+                "archive_member_count": 2,
+            }
+        ],
+        available_tools=["run"],
+    )
+    assert out is not None
+    assert "[archive / unpacked → attachments/病历]" in out
+    assert "attachments/病历/a.pdf" in out
+    assert "already a folder" in out
+    assert "parse the workspace-relative path" not in out.lower()
+    assert "[binary]" not in out
+
+
+@pytest.mark.asyncio
+async def test_password_archive_asks_user_not_run():
+    out = await _build_attachment_context(
+        [
+            {
+                "name": "locked.zip",
+                "path": "attachments/locked.zip",
+                "text": "",
+                "binary": True,
+                "workspace_path": "attachments/locked.zip",
+                "archive_status": "password",
+            }
+        ],
+        available_tools=["run"],
+    )
+    assert out is not None
+    assert "[archive / password]" in out
+    assert "ask_user" in out
+    assert "[binary]" not in out
+    assert "parse the workspace-relative path" not in out.lower()

@@ -14341,6 +14341,28 @@
       "StoredAttachment": {
         "description": "Persisted attachment display metadata (no extracted text).\n\n``workspace_path`` is set when the attachment was written into the durable\nproject space (附件驻留 / 引用即驻留): a workspace-relative path under\n``attachments/`` that the file-download API can serve. ``None`` for directory /\nconversation / document chips (nothing is written as a workspace file).",
         "properties": {
+          "archive_dir": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archive Dir"
+          },
+          "archive_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archive Status"
+          },
           "binary": {
             "default": false,
             "title": "Binary",
@@ -17289,7 +17311,7 @@
   "info": {
     "description": "Multi-Agent AI Workspace API",
     "title": "AgentCore",
-    "version": "1.0.0"
+    "version": "1.0.1"
   },
   "openapi": "3.1.0",
   "paths": {

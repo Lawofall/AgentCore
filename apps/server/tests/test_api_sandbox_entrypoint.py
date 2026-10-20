@@ -23,6 +23,8 @@ def test_dockerfile_guest_menu_has_curl_and_gcc_not_on_runtime():
     )
     assert " curl" in guest_apt or guest_apt.rstrip(";").endswith("curl")
     assert "build-essential" in guest_apt
+    assert " unzip" in guest_apt or guest_apt.rstrip(";").endswith("unzip")
+    assert "p7zip-full" not in guest_apt
     assert "wget" not in guest_apt
     assert "cmake" not in guest_apt
     runtime_apt = next(
@@ -34,8 +36,13 @@ def test_dockerfile_guest_menu_has_curl_and_gcc_not_on_runtime():
     assert " curl" not in runtime_apt
     assert "gcc" not in runtime_apt
     assert "build-essential" not in runtime_apt
+    assert "p7zip-full" not in runtime_apt
+    assert "unzip" not in runtime_apt
     assert "COPY --from=guest /guest-root /opt/agentcore/guest-rootfs" in text
     assert "AS guest" in text
+    assert "AS sevenzip" in text
+    assert "COPY --from=sevenzip /out/ /usr/local/bin/" in text
+    assert "COPY --from=sevenzip /out/ /opt/agentcore/guest-rootfs/usr/bin/" in text
     # API 存活探针不改绑 curl。
     assert "urllib.request" in text
 

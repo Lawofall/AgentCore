@@ -113,7 +113,7 @@ describe("workspaceIgnore", () => {
     expect(shouldSkipSystemWorkspaceEntry("notes.md", false)).toBe(false);
   });
 
-  it("AI list exempts attachments/ zip but not elsewhere (index still hides)", () => {
+  it("AI list shows zip by name (index still hides)", () => {
     expect(isAttachmentPath("attachments/pack.zip")).toBe(true);
     expect(isAttachmentPath("attachments")).toBe(true);
     expect(isAttachmentPath("src/attachments/x.zip")).toBe(false);
@@ -123,8 +123,8 @@ describe("workspaceIgnore", () => {
       false,
     );
     expect(shouldSkipAiListEntry("photo.png", false, "src")).toBe(false);
-    expect(shouldSkipAiListEntry("out.zip", false, "")).toBe(true);
-    expect(shouldSkipAiListEntry("out.zip", false, "src")).toBe(true);
+    expect(shouldSkipAiListEntry("out.zip", false, "")).toBe(false);
+    expect(shouldSkipAiListEntry("out.zip", false, "src")).toBe(false);
     // System noise never exempt under attachments/
     expect(shouldSkipAiListEntry("x.db", false, "attachments")).toBe(true);
     // Index / grep path still hides attachment zip and images
@@ -137,8 +137,8 @@ describe("workspaceIgnore", () => {
   it("AI list exempts reveal_paths materials outside attachments/", () => {
     const reveal = new Set(["src/pack.zip"]);
     expect(shouldSkipAiListEntry("pack.zip", false, "src", reveal)).toBe(false);
-    expect(shouldSkipAiListEntry("other.zip", false, "src", reveal)).toBe(true);
-    expect(shouldSkipAiListEntry("pack.zip", false, "src")).toBe(true);
+    expect(shouldSkipAiListEntry("other.zip", false, "src", reveal)).toBe(false);
+    expect(shouldSkipAiListEntry("pack.zip", false, "src")).toBe(false);
     expect(shouldSkipAiListEntry("shot.png", false, "src")).toBe(false);
     // System noise never exempt via reveal
     expect(
@@ -157,7 +157,7 @@ describe("workspaceIgnore", () => {
     expect(shouldSkipAiListEntry("shot.png", false, "external/desk")).toBe(
       false,
     );
-    expect(shouldSkipAiListEntry("out.zip", false, "")).toBe(true);
+    expect(shouldSkipAiListEntry("out.zip", false, "")).toBe(false);
     expect(
       shouldSkipAiListEntry("out.zip", false, "", undefined, {
         revealArchives: true,

@@ -169,18 +169,18 @@ def test_is_attachment_path():
 
 
 def test_attachments_exempt_ai_noise_from_list_helpers():
-    """attachments/ zip stays listable; workspace-root zip stays hidden; images list."""
+    """attachments/ zip stays listable; workspace-root zip is listed like images."""
     assert should_hide_ai_noise_from_list("attachments/pack.zip") is False
     assert should_hide_ai_noise_from_list("attachments/photo.png") is False
-    assert should_hide_ai_noise_from_list("out.zip") is True
-    assert should_hide_ai_noise_from_list("src/out.zip") is True
+    assert should_hide_ai_noise_from_list("out.zip") is False
+    assert should_hide_ai_noise_from_list("src/out.zip") is False
     assert should_hide_ai_noise_from_list("src/photo.png") is False
     assert should_hide_ai_noise_from_list("notes.md") is False
-    assert should_hide_ai_noise_from_list("src/attachments/x.zip") is True  # not root attachments/
+    assert should_hide_ai_noise_from_list("src/attachments/x.zip") is False
 
     assert is_ai_list_hidden_file(parent_rel="attachments", name="pack.zip") is False
-    assert is_ai_list_hidden_file(parent_rel="", name="out.zip") is True
-    assert is_ai_list_hidden_file(parent_rel="src", name="out.zip") is True
+    assert is_ai_list_hidden_file(parent_rel="", name="out.zip") is False
+    assert is_ai_list_hidden_file(parent_rel="src", name="out.zip") is False
     assert is_ai_list_hidden_file(parent_rel="src", name="photo.png") is False
     assert is_ai_list_hidden_file(parent_rel="src", name="app.dll") is True
     # System noise never exempt
@@ -199,7 +199,7 @@ def test_external_ns_archives_visible_images_listed():
     assert should_hide_ai_noise_from_list("external/desk/note.rar") is False
     assert should_hide_ai_noise_from_list("external/desk/photo.png") is False
     assert should_hide_ai_noise_from_list("cover.webp") is False
-    assert should_hide_ai_noise_from_list("out.zip") is True  # workspace root noise
+    assert should_hide_ai_noise_from_list("out.zip") is False
 
     assert (
         is_ai_list_hidden_file(parent_rel="external/desk", name="咨询.sy.zip")
@@ -225,8 +225,8 @@ def test_materials_exempt_ai_noise_outside_attachments():
     """Turn material paths reveal non-image AI-noise even outside attachments/."""
     materials = frozenset({"src/pack.zip"})
     assert should_hide_ai_noise_from_list("src/pack.zip", materials=materials) is False
-    assert should_hide_ai_noise_from_list("src/other.zip", materials=materials) is True
-    assert should_hide_ai_noise_from_list("src/pack.zip") is True
+    assert should_hide_ai_noise_from_list("src/other.zip", materials=materials) is False
+    assert should_hide_ai_noise_from_list("src/pack.zip") is False
     assert should_hide_ai_noise_from_list("src/shot.png") is False
     assert (
         is_ai_list_hidden_file(
@@ -238,7 +238,7 @@ def test_materials_exempt_ai_noise_outside_attachments():
         is_ai_list_hidden_file(
             parent_rel="src", name="other.zip", materials=materials
         )
-        is True
+        is False
     )
     # attachments/ still exempt without being in materials
     assert should_hide_ai_noise_from_list("attachments/pack.zip", materials=materials) is False
@@ -265,6 +265,11 @@ def test_collect_turn_material_paths():
                 "parsed_workspace_path": "attachments/doc.docx.md",
             },
             {
+                "name": "pack.zip",
+                "workspace_path": "attachments/pack.zip",
+                "archive_dir": "attachments/pack",
+            },
+            {
                 "name": "gone.zip",
                 "resident_missing": True,
                 "claimed_workspace_path": "attachments/gone.zip",
@@ -277,13 +282,19 @@ def test_collect_turn_material_paths():
         ]
     )
     assert paths == frozenset(
-        {"src/shot.png", "attachments/doc.docx", "attachments/doc.docx.md"}
+        {
+            "src/shot.png",
+            "attachments/doc.docx",
+            "attachments/doc.docx.md",
+            "attachments/pack.zip",
+            "attachments/pack",
+        }
     )
     assert collect_turn_material_paths(None) == frozenset()
     assert collect_turn_material_paths([]) == frozenset()
 
 
-async def test_list_tree_shows_attachment_zip_hides_elsewhere(tmp_path: Path):
+async def test_list_tree_lists_attachment_and_workspace_zip(tmp_path: Path):
     (tmp_path / "attachments").mkdir()
     (tmp_path / "attachments" / "pack.zip").write_bytes(b"PK")
     (tmp_path / "noise.zip").write_bytes(b"PK")
@@ -293,7 +304,7 @@ async def test_list_tree_shows_attachment_zip_hides_elsewhere(tmp_path: Path):
     root_tree = await ws.list_tree(".", max_depth=2)
     root_paths = {e.path for e in root_tree.entries}
     assert "ok.txt" in root_paths
-    assert "noise.zip" not in root_paths
+    assert "noise.zip" in root_paths
     assert "attachments" in root_paths
     assert "attachments/pack.zip" in root_paths
 

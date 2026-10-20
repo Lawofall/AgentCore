@@ -140,6 +140,9 @@ describe("resolveSpawnConfig dev", () => {
     const cfg = resolveSpawnConfig();
     const rg = join(h.appPath, "resources", "rg", "rg.exe");
     expect(cfg.env?.AGENTCORE_RG_PATH).toBe(rg);
+    expect(cfg.env?.AGENTCORE_7Z_PATH).toBe(
+      join(h.appPath, "resources", "7z", "7z.exe"),
+    );
     expect(cfg.env?.AGENTCORE_RG_PATH ?? "").not.toContain(
       join("server", "bin"),
     );

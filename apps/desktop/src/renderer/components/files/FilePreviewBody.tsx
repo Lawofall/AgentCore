@@ -1,5 +1,9 @@
 import { Button, IconButton } from "@/components/ui";
-import type { FilePreviewResult } from "@/lib/fileSource";
+import {
+  type FileNode,
+  type FilePreviewResult,
+  isArchiveFileName,
+} from "@/lib/fileSource";
 import { formatBytes } from "@/lib/format";
 import { Download, ExternalLink, FileText, X } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -22,11 +26,13 @@ export function FilePreviewBody({
   name,
   onOpenWithOsDefaultApp,
   onDownload,
+  onOpenEntry,
 }: {
   result: FilePreviewResult;
   name: string;
   onOpenWithOsDefaultApp?: () => void;
   onDownload?: () => void;
+  onOpenEntry?: (entry: FileNode) => void;
 }) {
   if (result.kind === "text") {
     return (
@@ -47,6 +53,37 @@ export function FilePreviewBody({
     return <ImagePreviewBody dataUrl={result.dataUrl} name={name} />;
   }
 
+  if (result.kind === "dir") {
+    if (result.entries.length === 0) {
+      return (
+        <div className="flex h-full items-center justify-center px-4 text-sm text-muted-foreground">
+          空文件夹
+        </div>
+      );
+    }
+    return (
+      <ul className="h-full overflow-auto px-3 py-2 text-sm">
+        {result.entries.map((entry) => (
+          <li key={entry.path}>
+            {onOpenEntry ? (
+              <button
+                type="button"
+                onClick={() => onOpenEntry(entry)}
+                className="w-full truncate rounded-md px-2 py-1 text-left text-foreground hover:bg-accent"
+              >
+                {entry.isDir ? `${entry.name}/` : entry.name}
+              </button>
+            ) : (
+              <span className="block truncate px-2 py-1">
+                {entry.isDir ? `${entry.name}/` : entry.name}
+              </span>
+            )}
+          </li>
+        ))}
+      </ul>
+    );
+  }
+
   if (result.kind === "pdf") {
     return (
       <iframe
@@ -58,7 +95,7 @@ export function FilePreviewBody({
   }
 
   // binary | too-large — not previewable inline.
-  const title = fallbackTitle(result);
+  const title = fallbackTitle(result, name);
   const meta = fallbackMeta(result);
   return (
     <div className="flex h-full flex-col items-center justify-center gap-2 px-4 text-center">
@@ -92,12 +129,14 @@ export function FilePreviewBody({
 
 function fallbackTitle(
   result: Extract<FilePreviewResult, { kind: "binary" | "too-large" }>,
+  name: string,
 ): string {
   if (result.kind === "too-large") return "文件过大";
   const reason = result.reason;
   if (reason?.startsWith("图片过大") || reason?.startsWith("PDF 过大")) {
     return reason.replace(/，请下载或用系统默认程序打开。?$/, "");
   }
+  if (isArchiveFileName(name)) return "这是压缩包";
   return "无法预览此文件";
 }
 

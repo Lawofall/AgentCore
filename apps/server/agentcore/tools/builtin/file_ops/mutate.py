@@ -19,6 +19,8 @@ from agentcore.tools.registration import (
     ToolSurface,
 )
 from agentcore.workspace.desk_empty import EMPTY_DESK_FACT
+from agentcore.workspace.file_kind import decode_stored_text, parse_too_large_size
+from agentcore.workspace.limits import is_file_too_large_detail, replace_max_bytes
 from agentcore.workspace.protocol import (
     AmbiguousMatch,
     NoMatch,
@@ -26,6 +28,7 @@ from agentcore.workspace.protocol import (
     NotUTF8,
     OutsideWorkspace,
     PathNotFound,
+    WorkspaceBackend,
     WorkspaceError,
 )
 from agentcore.workspace.text_replace import (
@@ -41,6 +44,7 @@ from .errors import (
     _maybe_channel_dead_error,
     _outside_workspace_error,
     _path_missing_error,
+    _replace_too_large_error,
     _write_io_error,
 )
 from .integrity import (
@@ -76,6 +80,21 @@ async def _workspace_always_quota_error(
     return _error(message, start, contract_failure=True)
 
 
+async def _load_edit_text(backend: WorkspaceBackend, rel_path: str) -> str | None:
+    """Decode like ``replace`` (same cap). None if missing / binary / undecodable.
+
+    ``WorkspaceError`` (too_large, channel dead) propagates so callers can map it.
+    """
+    try:
+        raw = await backend.read_bytes(rel_path, max_bytes=replace_max_bytes())
+    except (PathNotFound, NotAFile, NotUTF8):
+        return None
+    decoded = decode_stored_text(raw)
+    if decoded is None:
+        return None
+    return decoded[0]
+
+
 async def _workspace_always_edit_quota_error(
     context: ToolContext,
     rel_path: str,
@@ -90,13 +109,19 @@ async def _workspace_always_edit_quota_error(
     if not is_workspace_rule_path(rel_path):
         return None
     try:
-        current = await context.backend.read(rel_path)
+        current = await _load_edit_text(context.backend, rel_path)
     except PathNotFound:
         return None
     except WorkspaceError as e:
         dead = _maybe_channel_dead_error(e, start)
         if dead is not None:
             return dead
+        if is_file_too_large_detail(str(e)):
+            return _replace_too_large_error(
+                rel_path, start, size=parse_too_large_size(str(e))
+            )
+        return None
+    if current is None:
         return None
     preview = apply_text_replace(current, old_string, new_string, all_=replace_all)
     if not isinstance(preview, TextReplaceOk):
@@ -332,13 +357,20 @@ async def _assemble_str_replace_fail_receipt(
         )
 
     try:
-        content = await context.backend.read(rel_path)
+        content = await _load_edit_text(context.backend, rel_path)
     except WorkspaceError as e:
         return (
             f"{head}\n（无法读取磁盘：{e}）\n"
             "请 escalate 或改用其它路径；优先对照盘文再 edit，"
             "确需整盖须写出完整正文（勿残缺骨架交差）。"
         )
+    if content is None:
+        return (
+            f"{head}\n（无法按文本解码磁盘内容）\n"
+            "请 escalate 或改用其它路径；优先对照盘文再 edit，"
+            "确需整盖须写出完整正文（勿残缺骨架交差）。"
+        )
+    content = content.replace("\r\n", "\n").replace("\r", "\n")
 
     blocks: list[str] = []
     if kind == "ambiguous" and old_string:
@@ -432,8 +464,10 @@ async def _already_applied_str_replace(
     NoMatch (old never matched and inverse cannot reconstruct) stays an error.
     """
     try:
-        current = await context.backend.read(rel_path)
+        current = await _load_edit_text(context.backend, rel_path)
     except (PathNotFound, NotAFile, NotUTF8, WorkspaceError, OSError):
+        return None
+    if current is None:
         return None
     if not _is_str_replace_post_state(
         current, old_string, new_string, all_=replace_all
@@ -801,7 +835,7 @@ class StrReplaceTool:
         except NotUTF8:
             if coordinator is not None and release_on_fail:
                 coordinator.release(rel_path, context.run_id)
-            return _error(f"无法编辑二进制 / 非 UTF-8 文件：{rel_path}", start)
+            return _error(f"无法编辑二进制 / 无法按文本解码的文件：{rel_path}", start)
         except NoMatch:
             if coordinator is not None and release_on_fail:
                 coordinator.release(rel_path, context.run_id)
@@ -846,6 +880,10 @@ class StrReplaceTool:
             dead = _maybe_channel_dead_error(e, start)
             if dead is not None:
                 return dead
+            if is_file_too_large_detail(str(e)):
+                return _replace_too_large_error(
+                    rel_path, start, size=parse_too_large_size(str(e))
+                )
             return _write_io_error(e, start)
 
         loc = "" if outcome.first_line is None else f"（约第 {outcome.first_line} 行）"
@@ -855,18 +893,22 @@ class StrReplaceTool:
         if outcome.first_line is not None:
             from agentcore.core.secrets import redact_secrets
 
-            region = await context.backend.read_lines(
-                rel_path,
-                offset=max(1, outcome.first_line - _EDIT_ECHO_CONTEXT),
-                limit=min(
-                    _EDIT_ECHO_CONTEXT * 2 + 1 + new_string.count("\n"),
-                    _EDIT_ECHO_MAX_LINES,
-                ),
-            )
-            # 案 B：落点回显不得带出完整 API Key。
-            echo = "。改动落点（已落盘，无需再读回确认）：\n" + redact_secrets(
-                _format_numbered_lines(region.lines, region.start_line)
-            )
+            try:
+                region = await context.backend.read_lines(
+                    rel_path,
+                    offset=max(1, outcome.first_line - _EDIT_ECHO_CONTEXT),
+                    limit=min(
+                        _EDIT_ECHO_CONTEXT * 2 + 1 + new_string.count("\n"),
+                        _EDIT_ECHO_MAX_LINES,
+                    ),
+                )
+                # 案 B：落点回显不得带出完整 API Key。
+                echo = "。改动落点（已落盘，无需再读回确认）：\n" + redact_secrets(
+                    _format_numbered_lines(region.lines, region.start_line)
+                )
+            except WorkspaceError:
+                # 替换已落盘；回显只是便利，失败不改写成功合同。
+                echo = ""
         _mark_landed_files(context, rel_path)
         rename_suffix = f"。{rename_note}" if rename_note else ""
         result = ToolResult(

@@ -324,7 +324,57 @@ def test_sniff_bytes_magic():
     assert sniff_bytes(b"\xd0\xcf\x11\xe0xxxx") == "ole"
     assert sniff_bytes(b"%PDF-1.4") == "pdf"
     assert sniff_bytes(b"PK\x03\x04") == "zip"
+    assert sniff_bytes(b"Rar!\x1a\x07\x00") == "rar"
+    assert sniff_bytes(b"7z\xbc\xaf\x27\x1c....") == "7z"
+    assert sniff_bytes(b"\x1f\x8b\x08....") == "gzip"
+    tar = bytearray(270)
+    tar[257:262] = b"ustar"
+    assert sniff_bytes(bytes(tar)) == "tar"
     assert sniff_bytes(b"hello\n") == "text"
+
+
+async def test_file_read_zip_archive_points_to_extracted_folder(tmp_path: Path):
+    import zipfile
+
+    pack = tmp_path / "pack.zip"
+    with zipfile.ZipFile(pack, "w") as zf:
+        zf.writestr("notes.txt", "hello")
+    result = await FileReadTool().execute({"file_path": "pack.zip"}, _ctx(tmp_path))
+    assert result.success is True
+    out = result.output or ""
+    assert "压缩包" in out
+    assert "pack/" in out or "pack" in out
+    assert "run" not in out.lower()
+    assert "python" not in out.lower()
+    assert "unrar" not in out.lower()
+    assert "本机菜单" in out or "unzip" in out.lower()
+
+
+def test_archive_next_follows_location():
+    from agentcore.tools.builtin.file_ops.observe import archive_next
+
+    cloud = archive_next(location="server")
+    assert "云桌菜单" in cloud
+    assert "file_list" in cloud
+    local = archive_next(location="local")
+    assert "本机菜单" in local
+    assert "本机菜单" in archive_next(location=None)
+
+
+async def test_file_list_zip_path_lists_members(tmp_path: Path):
+    import zipfile
+
+    pack = tmp_path / "pack.zip"
+    with zipfile.ZipFile(pack, "w") as zf:
+        zf.writestr("notes.txt", "hello")
+        zf.writestr("docs/a.md", "# a")
+    result = await FileListTool().execute({"directory": "pack.zip"}, _ctx(tmp_path))
+    assert result.success is True
+    out = result.output or ""
+    assert "notes.txt" in out
+    assert "docs/a.md" in out
+    assert "pack.zip/notes.txt" not in out
+    assert "不是工作区路径" in out
 
 
 def test_extract_failed_text_hides_library_tokens():
@@ -619,7 +669,8 @@ async def test_file_read_pagination_windows_return_requested_lines(tmp_path: Pat
     first = await tool.execute({"file_path": "page.md", "offset": 1, "limit": 5}, ctx)
     assert first.success is True
     assert "L1" in (first.output or "")
-    assert "未达安全顶，省略 limit 可整读" in (first.output or "")
+    assert "未达安全顶" in (first.output or "")
+    assert "可整读" not in (first.output or "")
     assert "已达行顶" not in (first.output or "")
     expand = await tool.execute({"file_path": "page.md", "offset": 3, "limit": 8}, ctx)
     assert expand.success is True
@@ -814,18 +865,22 @@ async def test_file_read_oversized_single_line_kept_whole(tmp_path: Path):
     assert result.output_limit >= len(out)
 
 
-async def test_file_read_oversized_message_does_not_teach_offset_limit(tmp_path: Path):
+async def test_file_read_over_5mib_txt_returns_first_window(tmp_path: Path):
+    """Disk size is not an admission ticket; default read returns the safety window."""
     from agentcore.workspace.limits import WORKSPACE_READ_MAX_BYTES
 
-    (tmp_path / "huge.txt").write_bytes(b"a" * (WORKSPACE_READ_MAX_BYTES + 1))
-    result = await FileReadTool().execute({"file_path": "huge.txt"}, _ctx(tmp_path))
-    assert result.success is False
-    err = (result.error or "").lower()
-    assert "offset" not in err
-    assert "limit" not in err
-    assert "mib" in err
-    assert "请用户" not in (result.error or "")
-    assert result.failure_code == "too_large"
+    line = "needle-line-%s\n" % ("x" * 80)
+    repeats = (WORKSPACE_READ_MAX_BYTES // len(line.encode("utf-8"))) + 20
+    (tmp_path / "huge.txt").write_text(line * repeats, encoding="utf-8")
+    result = await FileReadTool().execute(
+        {"file_path": "huge.txt", "offset": 1, "limit": 40}, _ctx(tmp_path)
+    )
+    assert result.success is True
+    out = result.output or ""
+    assert "needle-line-" in out
+    assert "第 1–40 行" in out
+    assert "too_large" not in (result.failure_code or "")
+    assert "请用户" not in out
 
 
 async def test_file_read_office_default_uses_same_full_window(tmp_path: Path):
@@ -2078,7 +2133,7 @@ async def test_file_read_missing_top_level_uses_root_landmark(tmp_path: Path):
 
 
 async def test_file_list_shows_attachment_zip_hides_elsewhere(tmp_path: Path):
-    """attachments/ only-zip must not render「（空目录）」; root zip stays hidden."""
+    """attachments/ only-zip must not render「（空目录）」; root zip is listed."""
     (tmp_path / "attachments").mkdir()
     (tmp_path / "attachments" / "pack.zip").write_bytes(b"PK\x03\x04")
     (tmp_path / "noise.zip").write_bytes(b"PK\x03\x04")
@@ -2092,7 +2147,7 @@ async def test_file_list_shows_attachment_zip_hides_elsewhere(tmp_path: Path):
 
     root = await FileListTool().execute({"directory": "."}, _ctx(tmp_path))
     assert root.success is True
-    assert "noise.zip" not in root.output
+    assert "noise.zip" in root.output
     assert "attachments" in root.output
 
     found = await GlobTool().execute({"pattern": "*.zip"}, _ctx(tmp_path))
@@ -2102,8 +2157,8 @@ async def test_file_list_shows_attachment_zip_hides_elsewhere(tmp_path: Path):
 
 
 
-async def test_file_list_shows_png_hides_workspace_zip(tmp_path: Path):
-    """Images list by name; sibling workspace zip stays hidden until glob *.zip."""
+async def test_file_list_shows_png_and_workspace_zip(tmp_path: Path):
+    """Images list by name; sibling workspace zip is listed too."""
     (tmp_path / "src").mkdir()
     (tmp_path / "src" / "shot.png").write_bytes(b"png")
     (tmp_path / "src" / "other.webp").write_bytes(b"webp")
@@ -2129,7 +2184,7 @@ async def test_file_list_shows_png_hides_workspace_zip(tmp_path: Path):
 
 
 async def test_file_list_external_mount_shows_archive_zip(tmp_path: Path):
-    """external/<alias>/ 下列出可见用户压缩包；工作区根 zip 仍隐藏。"""
+    """external/<alias>/ 下列出可见用户压缩包；工作区根 zip 同样列出。"""
     from agentcore.workspace.external_mounts import ExternalMount
 
     ext = tmp_path / "ext_root"
@@ -2162,17 +2217,17 @@ async def test_file_list_external_mount_shows_archive_zip(tmp_path: Path):
 
     root = await FileListTool().execute({"directory": "."}, ctx)
     assert root.success is True
-    assert "noise.zip" not in root.output
+    assert "noise.zip" in root.output
 
 
 async def test_file_list_pattern_zip_reveals_workspace_archive(tmp_path: Path):
-    """pattern 指向压缩包后缀时，工作区根 zip 也应列出。"""
+    """工作区根 zip 直接出现在 file_list；glob *.zip 仍能按后缀找。"""
     (tmp_path / "pack.zip").write_bytes(b"PK\x03\x04")
     (tmp_path / "readme.md").write_text("x", encoding="utf-8")
 
     hidden = await FileListTool().execute({"directory": "."}, _ctx(tmp_path))
     assert hidden.success is True
-    assert "pack.zip" not in hidden.output
+    assert "pack.zip" in hidden.output
 
     revealed = await GlobTool().execute({"pattern": "*.zip"}, _ctx(tmp_path))
     assert revealed.success is True

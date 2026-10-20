@@ -493,8 +493,56 @@ async def test_plain_txt_binary_resident_decodes(tmp_path: Path):
     assert result.status == ParseStatus.OK
     assert result.parsed_workspace_path == "attachments/notes.txt"
     assert "plain notes" in result.text
+    assert result.truncated is False
     # No redundant .md for already-text originals.
     assert not (tmp_path / "attachments" / "notes.txt.md").exists()
+
+
+async def test_plain_txt_preparse_pointer_when_truncated(tmp_path: Path):
+    ws = _ws(tmp_path)
+    (tmp_path / "attachments").mkdir()
+    line = ("word " * 40) + "\n"
+    body = line * 4000 + "UNIQUE_TAIL_ROW_SHOULD_NOT_ENTER_PROMPT\n"
+    (tmp_path / "attachments" / "novel.txt").write_text(body, encoding="utf-8")
+    result = await preparse_resident(
+        ws, workspace_path="attachments/novel.txt", name="novel.txt"
+    )
+    assert result.status == ParseStatus.OK
+    assert result.truncated is True
+    assert result.text == ""
+    assert result.detail == "plain_text_pointer"
+    assert result.total_lines == 4001
+    assert result.size_bytes == (tmp_path / "attachments" / "novel.txt").stat().st_size
+    assert "UNIQUE_TAIL_ROW_SHOULD_NOT_ENTER_PROMPT" not in result.text
+
+
+async def test_persist_large_plain_txt_is_path_pointer(tmp_path: Path):
+    ws = _ws(tmp_path)
+    (tmp_path / "attachments").mkdir()
+    line = ("word " * 40) + "\n"
+    body = line * 4000 + "UNIQUE_TAIL_ROW_SHOULD_NOT_ENTER_PROMPT\n"
+    (tmp_path / "attachments" / "novel.txt").write_text(body, encoding="utf-8")
+    out = await persist_attachments(
+        ws,
+        [
+            {
+                "name": "novel.txt",
+                "path": "attachments/novel.txt",
+                "text": "",
+                "workspace_path": "attachments/novel.txt",
+            }
+        ],
+    )
+    assert out[0]["parse_status"] == "ok"
+    assert out[0]["truncated"] is True
+    assert not (out[0].get("text") or "").strip()
+    assert out[0]["total_lines"] == 4001
+    assert out[0]["size_bytes"] == (tmp_path / "attachments" / "novel.txt").stat().st_size
+    ctx = await _build_attachment_context(out)
+    assert ctx is not None
+    assert "UNIQUE_TAIL_ROW_SHOULD_NOT_ENTER_PROMPT" not in ctx
+    assert "[large text / path pointer]" in ctx
+    assert "4001 lines" in ctx
 
 
 async def test_preparse_read_failure_is_failed_not_raise(tmp_path: Path):

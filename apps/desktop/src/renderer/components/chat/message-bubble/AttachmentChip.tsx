@@ -8,9 +8,15 @@ import { Bookmark, MessageSquare } from "lucide-react";
 const chipClass =
   "inline-flex max-w-[220px] items-center gap-1.5 rounded-lg bg-accent px-2 py-1 text-xs text-accent-foreground";
 
+function previewPath(att: MessageAttachmentMeta): string | undefined {
+  const folder = att.archiveDir?.trim();
+  if (folder) return folder;
+  return att.workspacePath;
+}
+
 function canOpenPreview(att: MessageAttachmentMeta): boolean {
   return (
-    Boolean(att.workspacePath) &&
+    Boolean(previewPath(att)) &&
     att.kind !== "dir" &&
     att.kind !== "conversation" &&
     att.kind !== "document"
@@ -27,9 +33,11 @@ export function AttachmentChip({
 }) {
   const showFile = useSidePanelStore((s) => s.showFile);
   const openable = interactive && canOpenPreview(att);
+  const openPath = previewPath(att);
+  const asFolder = Boolean(att.archiveDir) || att.kind === "dir";
   const icon =
-    att.kind === "dir" ? (
-      <DirTypeIcon name={att.name} path={att.path} size={12} />
+    asFolder ? (
+      <DirTypeIcon name={att.name} path={att.archiveDir || att.path} size={12} />
     ) : att.kind === "conversation" ? (
       <MessageSquare size={12} className="shrink-0" />
     ) : att.kind === "document" ? (
@@ -48,7 +56,7 @@ export function AttachmentChip({
       {icon}
       <span className="truncate">
         {att.name}
-        {att.kind === "dir" ? "/" : ""}
+        {asFolder ? "/" : ""}
       </span>
       {att.truncated && (
         <span className="shrink-0 text-muted-foreground">
@@ -75,7 +83,12 @@ export function AttachmentChip({
       <Button
         variant="ghost"
         aria-label={`打开 ${att.name}`}
-        onClick={() => showFile(att.workspacePath as string, att.name)}
+        onClick={() =>
+          showFile(
+            openPath as string,
+            asFolder ? att.name.replace(/\.[^.]+$/, "") || att.name : att.name,
+          )
+        }
         className={`${chipClass} h-auto font-normal transition-colors hover:bg-accent/70`}
       >
         {face}

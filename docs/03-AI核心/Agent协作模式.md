@@ -18,7 +18,7 @@ skip_if:
 
 ## 一、哲学
 
-Multi-Agent First：组合优于堆叠；单 Agent = 无成员的 Team（统一执行路径）；委派一等公民（depth&lt;3 默认 `delegate`，`replan` 在已有子计划后挂上；depth=3 叶子；单 lead ≤4 sub）；形状由 `depends_on` 数据决定，非独立模式枚举。
+Multi-Agent First：组合优于堆叠；单 Agent = 无成员的 Team（统一执行路径）；委派一等公民（depth&lt;2 默认 `delegate`，`replan` 在已有子计划后挂上；depth=2 叶子；单 lead ≤4 sub）；形状由 `depends_on` 数据决定，非独立模式枚举。
 
 | 范式 | 表示 |
 |---|---|

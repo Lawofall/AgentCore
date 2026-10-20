@@ -24,22 +24,20 @@ from agentcore.workspace.attachment_parse import (
 )
 from agentcore.workspace.file_kind import (
     OLE_WORD_EXTENSIONS,
-    decode_text_bytes,
+    is_container_archive,
     parse_too_large_size,
     sniff_bytes,
 )
 from agentcore.workspace.limits import (
-    FILE_TOO_LARGE_DETAIL,
-    WORKSPACE_READ_MAX_BYTES,
     is_file_too_large_detail,
 )
 from agentcore.workspace.protocol import (
+    NotADirectory,
     NotAFile,
     OutsideWorkspace,
     PathNotFound,
     ReadHeadResult,
     WorkspaceError,
-    WorkspaceIOError,
 )
 
 from .errors import (
@@ -58,11 +56,13 @@ from .listing import (
     format_ls_lines,
     is_bare_external_directory,
     leftover_fields,
+    list_archive_as_directory,
     ls_leftover_error,
     map_listing_failure,
     visible_list_entries,
 )
 from .observe import (
+    archive_next,
     binary_next,
     extract_failed_next,
     extract_failed_text,
@@ -101,8 +101,9 @@ def _format_line_window(
     """Numbered lines + honest footer. No transport elision in body text.
 
     Untruncated full file → ``（全文 N 行）``. Safety-cap stop → ``已达行顶`` /
-    ``已达字符顶``. Requested window that has not hit a cap → ``未达安全顶，省略
-    limit 可整读`` (not a disk truncation).
+    ``已达字符顶``. Requested window that has not hit a cap → ``未达安全顶``.
+    Never claim omitting limit will return the whole file: omit still stops at
+    the safety cap.
     """
     body = _format_numbered_lines(lines, start_line) if lines else ""
     full = cap_kind is None and start_line == 1 and end_line == total_lines
@@ -113,10 +114,7 @@ def _format_line_window(
     elif cap_kind == "char":
         footer = f"（第 {start_line}–{end_line} 行，共 {total_lines} 行；已达字符顶）"
     else:
-        footer = (
-            f"（第 {start_line}–{end_line} 行，共 {total_lines} 行；"
-            "未达安全顶，省略 limit 可整读）"
-        )
+        footer = f"（第 {start_line}–{end_line} 行，共 {total_lines} 行；未达安全顶）"
     return body + "\n\n" + footer if body else footer
 
 
@@ -290,21 +288,6 @@ def _file_read_ok(output: str, start: float) -> ToolResult:
         duration_ms=int((time.monotonic() - start) * 1000),
         output_limit=max(len(output), ToolResult._MAX_OUTPUT_LEN),
     )
-
-
-async def _backend_read_bytes(
-    backend: object, path: str, *, max_bytes: int | None = None
-) -> bytes:
-    """Call ``read_bytes``; tolerate fakes that omit the ``max_bytes`` keyword."""
-    read = getattr(backend, "read_bytes", None)
-    if not callable(read):
-        raise WorkspaceError("read_bytes unavailable")
-    try:
-        if max_bytes is None:
-            return await read(path)
-        return await read(path, max_bytes=max_bytes)
-    except TypeError:
-        return await read(path)
 
 
 async def _extract_office(
@@ -582,7 +565,7 @@ class FileReadTool:
             dead = _maybe_channel_dead_error(e, start)
             if dead is not None:
                 return dead
-            if _is_undecodable_read(e) or is_file_too_large_detail(str(e)):
+            if _is_undecodable_read(e):
                 return await self._observe_undecodable(
                     rel_path,
                     path_key=path_key,
@@ -819,6 +802,20 @@ class FileReadTool:
             return _map_workspace_read_error(e, path=display, start=start)
 
         kind = sniff_bytes(head.data)
+        if is_container_archive(kind, display):
+            return _observe_ok(
+                kind="archive",
+                path=display,
+                type_label=kind,
+                next_actions=archive_next(location=context.backend.location),
+                start=start,
+                size=head.size_bytes,
+                text=(
+                    "这是压缩包。附件会在驻留时展开到同名目录；"
+                    "未展开时 file_list 这个路径，或用已声明的 unzip / 7z "
+                    "解到工作区相对路径。"
+                ),
+            )
         if kind == "pdf":
             return await self._read_office_or_pdf(
                 rel_path,
@@ -839,48 +836,6 @@ class FileReadTool:
                 size=head.size_bytes,
                 text="OLE 复合文档，本工具不能抽正文。",
             )
-        if kind == "binary":
-            return _observe_ok(
-                kind="binary",
-                path=display,
-                type_label=kind,
-                next_actions=binary_next(),
-                start=start,
-                size=head.size_bytes,
-                text="无法按文本解码。",
-            )
-        if head.size_bytes > WORKSPACE_READ_MAX_BYTES:
-            return _map_workspace_read_error(
-                WorkspaceIOError(
-                    f"{FILE_TOO_LARGE_DETAIL}（{head.size_bytes}字节）"
-                ),
-                path=display,
-                start=start,
-            )
-
-        try:
-            data = await _backend_read_bytes(
-                context.backend,
-                rel_path,
-                max_bytes=WORKSPACE_READ_MAX_BYTES,
-            )
-        except OutsideWorkspace as e:
-            return _outside_workspace_error(
-                rel_path, start, location=context.backend.location, reason=str(e)
-            )
-        except PathNotFound:
-            return await _file_not_found_error(rel_path, start=start, context=context)
-        except NotAFile:
-            return _not_a_file_error(rel_path, start)
-        except WorkspaceError as e:
-            return _map_workspace_read_error(e, path=display, start=start)
-
-        decoded = decode_text_bytes(data)
-        if decoded is not None:
-            output, *_ = _format_extracted_read(
-                decoded, offset=offset, limit=limit
-            )
-            return _file_read_ok(output, start)
         return _observe_ok(
             kind="binary",
             path=display,
@@ -954,6 +909,15 @@ class FileListTool:
             )
             if listing.truncated:
                 output += f"\n\n{LIST_TRUNCATED_NOTE}"
+        except NotADirectory as e:
+            packed = await list_archive_as_directory(
+                directory, context=context, start=start
+            )
+            if packed is not None:
+                return packed
+            return await map_listing_failure(
+                e, directory=directory, context=context, start=start
+            )
         except WorkspaceError as e:
             return await map_listing_failure(
                 e, directory=directory, context=context, start=start

@@ -282,6 +282,47 @@ async def test_replace_binary_raises_not_utf8(tmp_path: Path):
         await _ws(tmp_path).replace("blob.bin", "x", "y", all_=False)
 
 
+async def test_replace_gb18030_round_trips_original_encoding(tmp_path: Path):
+    original = "你好世界\n旧词\n尾巴\n".encode("gb18030")
+    (tmp_path / "zh.txt").write_bytes(original)
+    outcome = await _ws(tmp_path).replace("zh.txt", "旧词", "新词", all_=False)
+    assert outcome.count == 1
+    written = (tmp_path / "zh.txt").read_bytes()
+    assert written.decode("gb18030") == "你好世界\n新词\n尾巴\n"
+    assert not written.startswith("你".encode())
+
+
+async def test_replace_utf8_bom_is_preserved(tmp_path: Path):
+    (tmp_path / "b.txt").write_bytes("keep FOO end".encode("utf-8-sig"))
+    await _ws(tmp_path).replace("b.txt", "FOO", "BAR", all_=False)
+    data = (tmp_path / "b.txt").read_bytes()
+    assert data.startswith(b"\xef\xbb\xbf")
+    assert data.decode("utf-8-sig") == "keep BAR end"
+
+
+async def test_replace_succeeds_when_file_exceeds_read_gate(tmp_path: Path):
+    from agentcore.workspace.limits import WORKSPACE_READ_MAX_BYTES
+
+    payload = b"UNIQUE_OLD_TOKEN\n" + b"z" * (WORKSPACE_READ_MAX_BYTES + 16)
+    (tmp_path / "big.txt").write_bytes(payload)
+    outcome = await _ws(tmp_path).replace(
+        "big.txt", "UNIQUE_OLD_TOKEN", "UNIQUE_NEW_TOKEN", all_=False
+    )
+    assert outcome.count == 1
+    assert b"UNIQUE_NEW_TOKEN" in (tmp_path / "big.txt").read_bytes()
+    assert b"UNIQUE_OLD_TOKEN" not in (tmp_path / "big.txt").read_bytes()
+
+
+async def test_replace_rejects_over_replace_cap(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    from agentcore.workspace.limits import is_file_too_large_detail
+
+    monkeypatch.setattr("agentcore.workspace.limits.WORKSPACE_REPLACE_MAX_BYTES", 64)
+    (tmp_path / "f.txt").write_bytes(b"aaaa" * 20)
+    with pytest.raises(WorkspaceIOError) as ei:
+        await _ws(tmp_path).replace("f.txt", "aa", "bb", all_=True)
+    assert is_file_too_large_detail(str(ei.value))
+
+
 async def test_replace_missing_raises_path_not_found(tmp_path: Path):
     with pytest.raises(PathNotFound):
         await _ws(tmp_path).replace("nope.txt", "x", "y", all_=False)

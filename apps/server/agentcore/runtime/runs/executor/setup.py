@@ -256,7 +256,7 @@ async def _prepare_agent_node(
     # 真纯丙：不再用 spec.tools 做 allow-list；默认全开相关工具面。
     allowed_tools = None
     # A worker may nest a sub-team purely by tree position: any depth below the
-    # cap is a captain (delegation is on by default); depth-3 sub-workers are
+    # cap is a captain (delegation is on by default); workers at the cap are
     # leaves because the executor withholds the delegate tools here.
     lead_subteam: LeadSubteam | None = None
     is_captain = (

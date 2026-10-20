@@ -4,7 +4,7 @@
  *
  * The CodeMirror inner editor is replaced with a controllable stub (it needs a real
  * EditorView / DOM layout we don't exercise here), so these tests drive the host's
- * orchestration directly: load via readForEdit, GBK read-only, debounced autosave +
+ * orchestration directly: load via readForEdit, GBK write-back, debounced autosave +
  * coalescing, CAS conflict + "仍然覆盖", and the AI-rewrite flow (capture selection →
  * call backend → enter merge review, with selection-drift rejection). FileSource and
  * the rewrite service are faked so nothing touches IPC / the network.
@@ -178,7 +178,7 @@ describe("MarkdownFileEditor host", () => {
     expect(screen.getByText("预览")).toBeTruthy();
   });
 
-  it("opens a GBK file read-only and never writes back", async () => {
+  it("opens a GBK file as editable and writes back with encoding gbk", async () => {
     const source = makeSource({
       readForEdit: vi.fn(async () => ({
         text: "中文",
@@ -189,13 +189,18 @@ describe("MarkdownFileEditor host", () => {
     });
     await renderEditing(source);
 
-    expect(screen.getByText(/GBK 编码/)).toBeTruthy();
-    expect(screen.queryByText("保存")).toBeNull(); // no save affordance when read-only
+    expect(screen.queryByText(/暂不支持回写/)).toBeNull();
+    expect(screen.getByText("保存")).toBeTruthy();
 
-    // An edit must not schedule/perform a write (read-only gate + GBK guard in doSave).
     editorValue = "改了";
     act(() => lastEditorProps.onChange?.("改了"));
-    expect(source.writeText).not.toHaveBeenCalled();
+    await act(async () => {
+      fireEvent.click(screen.getByText("保存"));
+    });
+    expect(source.writeText).toHaveBeenCalledWith(
+      "a.md",
+      expect.objectContaining({ encoding: "gbk", content: "改了" }),
+    );
   });
 
   it("manual Save writes the current text with the load baseline", async () => {

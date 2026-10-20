@@ -58,7 +58,7 @@ class AlreadyExists(WorkspaceError):
 
 
 class NotUTF8(WorkspaceError):
-    """The file is binary / not valid UTF-8 and cannot be edited as text."""
+    """The file is binary / not decodable as text (UTF-8 or GB18030)."""
 
 
 class NoMatch(WorkspaceError):
@@ -330,9 +330,10 @@ class WorkspaceBackend(Protocol):
     async def read_bytes(self, path: str, *, max_bytes: int | None = None) -> bytes:
         """Return the raw bytes of ``path`` (binary-safe; AI / tool whole-file read).
 
-        Default capacity is ``WORKSPACE_READ_MAX_BYTES`` (text). Channel-side
-        Office/PDF extract (``LocalWorkspace``) may pass a higher ``max_bytes``,
-        clamped to ``OFFICE_EXTRACT_CHANNEL_MAX_BYTES``. On-disk backends must use
+        Default capacity is ``WORKSPACE_READ_MAX_BYTES`` (text). Explicit
+        ``max_bytes`` may rise to ``WORKSPACE_REPLACE_MAX_BYTES`` (edit ingest).
+        Channel-side Office/PDF extract (``LocalWorkspace``) still passes
+        ``OFFICE_EXTRACT_CHANNEL_MAX_BYTES``. On-disk backends must use
         :meth:`extract_office` instead of this method for Office/PDF. HTTP panel
         download must not use this — it goes through the dedicated download path
         (upload-aligned ceiling + ``FileResponse``). Raises ``OutsideWorkspace`` /
@@ -345,7 +346,7 @@ class WorkspaceBackend(Protocol):
     ) -> ReadHeadResult:
         """Return the first ``max_bytes`` (default 1024) plus total file size.
 
-        Does **not** apply the whole-file ``read_bytes`` / ``read_lines`` gate:
+        Does **not** apply the whole-file ``read_bytes`` gate:
         a 20 MiB PDF can still yield its magic. Peek length is clamped to
         ``WORKSPACE_READ_HEAD_MAX_BYTES``. Raises ``OutsideWorkspace`` /
         ``PathNotFound`` / ``NotAFile`` / ``WorkspaceIOError``.
@@ -406,7 +407,9 @@ class WorkspaceBackend(Protocol):
     ) -> ReadLinesResult:
         """Return a 1-based line slice of ``path`` (``limit`` caps rows returned).
 
-        Raises ``OutsideWorkspace`` / ``PathNotFound`` / ``NotAFile`` /
+        Streams from disk. File size is not an admission ticket (unlike
+        :meth:`read` / :meth:`read_bytes`). ``total_lines`` is counted in the
+        same pass. Raises ``OutsideWorkspace`` / ``PathNotFound`` / ``NotAFile`` /
         ``WorkspaceIOError``. When ``offset`` is past EOF, returns empty ``lines``
         with the correct ``total_lines``.
         """
@@ -496,9 +499,12 @@ class WorkspaceBackend(Protocol):
     async def replace(self, path: str, old: str, new: str, *, all_: bool) -> ReplaceOutcome:
         """Replace exact span(s) ``old`` -> ``new`` in ``path`` atomically.
 
-        Raises ``OutsideWorkspace`` / ``PathNotFound`` / ``NotAFile`` /
-        ``NotUTF8`` / ``NoMatch`` / ``AmbiguousMatch`` / ``WorkspaceIOError``.
-        Argument validation (empty ``old``, ``old == new``) is the caller's job.
+        Decode matches ``read`` (UTF-8 then GB18030); write-back uses that
+        encoding. Unique-match ingest is ``WORKSPACE_REPLACE_MAX_BYTES`` (upload
+        / grep cap), not the 5 MiB ``read()`` gate. Raises ``OutsideWorkspace`` /
+        ``PathNotFound`` / ``NotAFile`` / ``NotUTF8`` / ``NoMatch`` /
+        ``AmbiguousMatch`` / ``WorkspaceIOError``. Argument validation (empty
+        ``old``, ``old == new``) is the caller's job.
         """
         ...
 
@@ -515,7 +521,7 @@ class WorkspaceBackend(Protocol):
     async def glob_files(self, query: GlobFilesQuery) -> GlobFilesResult:
         """List files under ``query.directory`` via ``rg --files`` (bounded).
 
-        Product list-ignore (images visible; archives follow ``reveal_archives``).
+        Product list-ignore (images and archives visible by name; grep still skips).
         ``query.globs`` are extra include globs (path-aware, not filename-only).
         ``max_depth`` is rg's ``--max-depth`` (1 = cwd files only; rg 0 is empty). Raises
         ``OutsideWorkspace`` / ``PathNotFound`` / ``NotADirectory``.

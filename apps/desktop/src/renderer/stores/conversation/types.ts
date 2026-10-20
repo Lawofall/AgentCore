@@ -109,6 +109,8 @@ export interface MessageAttachmentMeta {
   sourceFolderId?: string;
   conversationId?: string;
   documentId?: string;
+  archiveStatus?: string;
+  archiveDir?: string;
 }
 
 /** Conversation-page ``@`` role chip (soft mention; not an attachment kind). */

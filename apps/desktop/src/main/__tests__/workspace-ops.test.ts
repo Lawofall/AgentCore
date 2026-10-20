@@ -12,6 +12,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import iconv from "iconv-lite";
 import JSZip from "jszip";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -140,6 +141,30 @@ describe("executeWorkspaceOp (本地工作区写类 op，P2b)", () => {
     expect(Buffer.from(valOf(ok) as string, "base64").length).toBe(raw.length);
   });
 
+  it("read_lines windows a file larger than the 5 MiB whole-file gate", async () => {
+    const line = "row-token-line\n";
+    const repeats = Math.ceil((WORKSPACE_READ_MAX + 16) / Buffer.byteLength(line)) + 8;
+    await writeFile(join(dir, "novel.txt"), line.repeat(repeats), "utf-8");
+    const denied = errOf(await run("read_bytes", { path: "novel.txt" }));
+    expect(denied.kind).toBe("WorkspaceIOError");
+    const ok = await run("read_lines", {
+      path: "novel.txt",
+      offset: 1,
+      limit: 40,
+    });
+    const val = valOf(ok) as {
+      lines: string[];
+      start_line: number;
+      end_line: number;
+      total_lines: number;
+    };
+    expect(val.lines).toHaveLength(40);
+    expect(val.lines[0]).toBe("row-token-line");
+    expect(val.start_line).toBe(1);
+    expect(val.end_line).toBe(40);
+    expect(val.total_lines).toBeGreaterThan(40);
+  });
+
   it("read_head peeks past the 5 MiB whole-file gate", async () => {
     const raw = Buffer.alloc(WORKSPACE_READ_MAX + 16, 7);
     raw.write("%PDF-", 0);
@@ -228,6 +253,21 @@ describe("executeWorkspaceOp (本地工作区写类 op，P2b)", () => {
     );
   });
 
+  it("replace succeeds when the file exceeds the 5 MiB read gate", async () => {
+    const head = Buffer.from("UNIQUE_OLD_TOKEN\n");
+    const tail = Buffer.alloc(WORKSPACE_READ_MAX + 16, 0x7a);
+    await writeFile(join(dir, "big.txt"), Buffer.concat([head, tail]));
+    const r = await run("replace", {
+      path: "big.txt",
+      old: "UNIQUE_OLD_TOKEN",
+      new: "UNIQUE_NEW_TOKEN",
+      all: false,
+    });
+    expect(valOf(r)).toEqual({ count: 1, first_line: 1 });
+    const written = await readFile(join(dir, "big.txt"));
+    expect(written.subarray(0, 16).toString("utf-8")).toBe("UNIQUE_NEW_TOKEN");
+  });
+
   it("replace (single) returns count 1 and the 1-based first line", async () => {
     await run("write", { path: "r.txt", content: "a\nbXb\nc" });
     const r = await run("replace", {
@@ -279,6 +319,20 @@ describe("executeWorkspaceOp (本地工作区写类 op，P2b)", () => {
       detail: "2 matches",
       count: 2,
     });
+  });
+
+  it("replace round-trips a GBK file without converting to UTF-8", async () => {
+    const original = iconv.encode("你好旧词尾巴", "gb18030");
+    await writeFile(join(dir, "zh.txt"), original);
+    const r = await run("replace", {
+      path: "zh.txt",
+      old: "旧词",
+      new: "新词",
+      all: false,
+    });
+    expect(valOf(r)).toEqual({ count: 1, first_line: 1 });
+    const written = await readFile(join(dir, "zh.txt"));
+    expect(written.equals(iconv.encode("你好新词尾巴", "gb18030"))).toBe(true);
   });
 
   it("replace maps NoMatch / NotUTF8 / NotAFile", async () => {

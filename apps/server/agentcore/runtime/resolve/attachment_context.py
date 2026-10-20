@@ -118,6 +118,39 @@ def _office_lossy_steer(*, has_code_execute: bool | None) -> str:
     return f"{_OFFICE_TABLE_LOSSY}{extra}"
 
 
+def _archive_attachment_block(att: dict, *, name: str, path: str) -> str:
+    """Scene door: an attached archive is a folder, not a blob to decode with run."""
+    status = str(att.get("archive_status") or "")
+    dest = att.get("archive_dir")
+    if status == "ok" and isinstance(dest, str) and dest:
+        members = att.get("archive_members") or []
+        count = att.get("archive_member_count")
+        if not isinstance(count, int) or count < 0:
+            count = len(members) if isinstance(members, list) else 0
+        lines = [f"{dest}/{m}" for m in members if isinstance(m, str) and m]
+        listing = "\n".join(lines) if lines else "(empty archive)"
+        more = ""
+        if att.get("archive_listing_truncated"):
+            more = f"\n… {count} files total; listing truncated."
+        return (
+            f"--- File: {name} ({path}) [archive / unpacked → {dest}] ---\n"
+            f"{count} files in `{dest}`. Original kept at the path above.\n"
+            f"{listing}{more}\n"
+            "Use file tools on that directory. The archive is already a folder."
+        )
+    if status == "password":
+        return (
+            f"--- File: {name} ({path}) [archive / password] ---\n"
+            "This archive is password-protected. ask_user for the password "
+            "or an unpacked folder."
+        )
+    return (
+        f"--- File: {name} ({path}) [archive / unreadable] ---\n"
+        "Could not unpack this archive (too large, encrypted, or no decoder "
+        "in this process). ask_user for an unpacked folder or a zip."
+    )
+
+
 async def _resolve_table_preview(
     att: dict,
     *,
@@ -154,8 +187,10 @@ def _attached_files_envelope(
     binary_note: str,
     office_note: str,
     preparsed_note: str,
+    large_text_note: str,
     missing_note: str,
     image_note: str,
+    archive_note: str,
     inline_in_user_message: bool = False,
 ) -> str:
     inline_note = f" {_INLINE_ORDER_FACT}" if inline_in_user_message else ""
@@ -173,7 +208,7 @@ def _attached_files_envelope(
         f"{inline_note}"
         f"{conversation_note}"
         f"{resident_note}{table_note}{binary_note}{office_note}{preparsed_note}"
-        f"{missing_note}{image_note}\n\n"
+        f"{large_text_note}{missing_note}{image_note}{archive_note}\n\n"
         f"{inner}"
         "</附件>"
     )
@@ -288,9 +323,11 @@ async def _build_attachment_prompt(
     has_office_unparsed = False
     has_office_inline = False
     has_preparsed = False
+    has_large_text = False
     has_conversation = False
     has_resident_missing = False
     has_image_unconfigured = False
+    has_archive = False
     has_code_execute = _tool_table_has(available_tools, "run")
     for att in attachments:
         name = att.get("name") or "untitled"
@@ -380,6 +417,25 @@ async def _build_attachment_prompt(
                     "Could not read column names and sample rows. "
                     f"{steer} Do NOT treat file_list emptiness as missing."
                 )
+        elif parse_status == "ok" and att.get("truncated") and not text:
+            path = ws_path or att.get("path") or name
+            if ws_path:
+                resident = True
+            has_large_text = True
+            size = att.get("size_bytes")
+            lines = att.get("total_lines")
+            bits: list[str] = []
+            if isinstance(size, int) and size >= 0:
+                bits.append(f"{size} bytes")
+            if isinstance(lines, int) and lines >= 0:
+                bits.append(f"{lines} lines")
+            meta = ", ".join(bits) if bits else "size unknown"
+            add_block(
+                f"--- File: {name} ({path}) [large text / path pointer] ---\n"
+                f"{meta}. Body stays on disk at this workspace path and is not "
+                "inlined. Use read for the first window, or grep. Do not assume "
+                "the file is missing."
+            )
         elif parse_status == "ok" and text:
             path = ws_path or att.get("path") or name
             if ws_path:
@@ -404,6 +460,12 @@ async def _build_attachment_prompt(
                 has_office_inline = True
                 block += f"\n\n{_office_lossy_steer(has_code_execute=has_code_execute)}"
             add_block(block)
+        elif att.get("archive_status"):
+            path = ws_path or att.get("path") or name
+            if ws_path:
+                resident = True
+            has_archive = True
+            add_block(_archive_attachment_block(att, name=name, path=path))
         elif binary or (ws_path and not text):
             # Binary (or empty-body resident / preparse failed): path only —
             # except resident images → native multimodal or an honest note.
@@ -484,8 +546,7 @@ async def _build_attachment_prompt(
         resident_note=(
             " Files shown with an in-workspace path are in your workspace at that "
             "path (cited in place, or copied under attachments/) — read or edit "
-            "them with the file tools by that path rather than trusting only the "
-            "(possibly truncated) text below."
+            "them with the file tools by that path."
             if resident
             else ""
         ),
@@ -522,6 +583,12 @@ async def _build_attachment_prompt(
             if has_preparsed
             else ""
         ),
+        large_text_note=(
+            " Large plain-text attachments list path, size, and line count only; "
+            "the body stays on disk — use read or grep."
+            if has_large_text
+            else ""
+        ),
         missing_note=(
             " A [resident missing] block means chip/metadata claimed a workspace "
             "path but bytes are absent — ask_user to re-upload; never dispatch "
@@ -534,6 +601,13 @@ async def _build_attachment_prompt(
             "— do not treat a bare path as a reading, and do not default to "
             "run to open images."
             if has_image_unconfigured
+            else ""
+        ),
+        archive_note=(
+            " Archive attachments were unpacked at upload into a sibling folder "
+            "(original kept). Work from that folder with file tools; installing "
+            "extractors is not the job."
+            if has_archive
             else ""
         ),
     )

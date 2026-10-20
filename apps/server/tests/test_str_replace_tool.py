@@ -31,6 +31,16 @@ def _ctx(workspace: Path) -> ToolContext:
     )
 
 
+def _bytes_over_read_gate(prefix: bytes) -> bytes:
+    """Many short lines totaling just over the 5 MiB ``read()`` ingest gate."""
+    from agentcore.workspace.limits import WORKSPACE_READ_MAX_BYTES
+
+    line = b"z" * 79 + b"\n"
+    need = WORKSPACE_READ_MAX_BYTES + 16 - len(prefix)
+    n = max(1, (need + len(line) - 1) // len(line))
+    return prefix + line * n
+
+
 # --- validation / failure paths ---
 
 
@@ -184,7 +194,77 @@ async def test_rejects_binary_file(tmp_path: Path):
         {"file_path": "blob.bin", "old_string": "a", "new_string": "b"}, _ctx(tmp_path)
     )
     assert result.success is False
-    assert "非 UTF-8" in result.error
+    assert "无法按文本解码" in result.error
+
+
+async def test_str_replace_gb18030_round_trips(tmp_path: Path):
+    (tmp_path / "zh.txt").write_bytes("标题：旧词\n".encode("gb18030"))
+    result = await StrReplaceTool().execute(
+        {"file_path": "zh.txt", "old_string": "旧词", "new_string": "新词"},
+        _ctx(tmp_path),
+    )
+    assert result.success is True
+    written = (tmp_path / "zh.txt").read_bytes()
+    assert written.decode("gb18030") == "标题：新词\n"
+
+
+async def test_edit_succeeds_when_file_exceeds_read_gate(tmp_path: Path):
+    (tmp_path / "big.txt").write_bytes(_bytes_over_read_gate(b"UNIQUE_OLD_TOKEN\n"))
+    result = await StrReplaceTool().execute(
+        {
+            "file_path": "big.txt",
+            "old_string": "UNIQUE_OLD_TOKEN",
+            "new_string": "UNIQUE_NEW_TOKEN",
+        },
+        _ctx(tmp_path),
+    )
+    assert result.success is True
+    assert b"UNIQUE_NEW_TOKEN" in (tmp_path / "big.txt").read_bytes()
+
+
+async def test_edit_already_applied_when_file_exceeds_read_gate(tmp_path: Path):
+    (tmp_path / "big.txt").write_bytes(_bytes_over_read_gate(b"UNIQUE_NEW_TOKEN\n"))
+    result = await StrReplaceTool().execute(
+        {
+            "file_path": "big.txt",
+            "old_string": "UNIQUE_OLD_TOKEN",
+            "new_string": "UNIQUE_NEW_TOKEN",
+        },
+        _ctx(tmp_path),
+    )
+    assert result.success is True
+    assert (result.metadata or {}).get("already_applied") is True
+
+
+async def test_edit_no_match_receipt_when_file_exceeds_read_gate(tmp_path: Path):
+    (tmp_path / "big.txt").write_bytes(_bytes_over_read_gate(b"hello world\n"))
+    result = await StrReplaceTool().execute(
+        {"file_path": "big.txt", "old_string": "xyz_missing", "new_string": "b"},
+        _ctx(tmp_path),
+    )
+    assert result.success is False
+    err = result.error or ""
+    assert "找不到" in err
+    assert "无法读取磁盘" not in err
+    assert "请用 offset" not in err
+
+
+async def test_edit_too_large_is_contract_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    monkeypatch.setattr("agentcore.workspace.limits.WORKSPACE_REPLACE_MAX_BYTES", 64)
+    (tmp_path / "f.txt").write_bytes(b"hello world\n" + b"x" * 80)
+    result = await StrReplaceTool().execute(
+        {"file_path": "f.txt", "old_string": "hello", "new_string": "hi"},
+        _ctx(tmp_path),
+    )
+    assert result.success is False
+    assert result.contract_failure is True
+    assert result.failure_code == "too_large"
+    err = result.error or ""
+    assert "edit 没有窗" in err
+    assert "不要用 offset/limit" in err
+    assert "请用 offset" not in err
 
 
 async def test_old_string_not_found(tmp_path: Path):

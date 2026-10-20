@@ -7,9 +7,8 @@
  *
  * - **系统噪音**：对 AI 与用户文件 UI 都隐藏（目录 + `*.db` / `*.pyc` 等）。
  * - **AI 噪音**：媒体 / 压缩包 / 字体 / 二进制对象——`collectWorkspaceFiles` /
- *   `opIndexFiles` / grep 仍排除。`opList` / `opListTree` 按名列出图片；压缩包
- *   在 `attachments/`、区外 `external/`、`revealArchives` 或本回合 `reveal_paths`
- *   下豁免（与服务端 `file_list` / `list_tree` 对齐）。文件 UI（`listDir`）只藏系统噪音。
+ *   `opIndexFiles` / grep 仍排除。`opList` / `opListTree` 按名列出图片与压缩包
+ *   （与服务端 `file_list` / `list_tree` 对齐）。文件 UI（`listDir`）只藏系统噪音。
  *
  * 同树旁路 `AgentCore/{index,trash,baselines,versions}` 为路径感知系统噪音（禁止把裸名
  * `index`/`trash`/`baselines`/`versions` 放进全局跳过集，以免误伤用户项目）。
@@ -252,10 +251,9 @@ export function shouldSkipAiArchiveFileName(name: string): boolean {
 }
 
 /**
- * AI ``opList`` / ``opListTree``：系统噪音始终隐藏；图片按名列出；其它 AI 噪音
- * 在 ``attachments/`` 或 ``revealPaths`` 下豁免；压缩包在区外 ``external/`` /
- * session mount / ``revealArchives`` 时豁免（与服务端 ``is_ai_list_hidden_file``
- * 对齐）。索引 / grep 仍用 {@link shouldSkipWorkspaceEntry}。
+ * AI ``opList`` / ``opListTree``：系统噪音始终隐藏；图片与压缩包按名列出；其它
+ * AI 噪音在 ``attachments/`` 或 ``revealPaths`` 下豁免（与服务端
+ * ``is_ai_list_hidden_file`` 对齐）。索引 / grep 仍用 {@link shouldSkipWorkspaceEntry}。
  */
 export function shouldSkipAiListEntry(
   name: string,
@@ -267,15 +265,13 @@ export function shouldSkipAiListEntry(
   if (isDirectory) return shouldSkipDirName(name, parentRel);
   if (shouldSkipSystemFileName(name)) return true;
   if (!shouldSkipAiNoiseFileName(name)) return false;
-  if (isAiImageFileName(name)) return false;
+  if (isAiImageFileName(name) || shouldSkipAiArchiveFileName(name)) return false;
   const parent = parentRel.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
   const child = parent && parent !== "." ? `${parent}/${name}` : name;
   if (isAttachmentPath(child)) return false;
   if (revealPaths?.has(child)) return false;
-  if (shouldSkipAiArchiveFileName(name)) {
-    if (options?.revealArchives) return false;
-    if (options?.externalNs || isExternalNsPath(child)) return false;
-  }
+  if (options?.revealArchives) return false;
+  if (options?.externalNs || isExternalNsPath(child)) return false;
   return true;
 }
 

@@ -1,6 +1,6 @@
 /**
  * read result footers from the server (`_format_line_window`):
- * `（全文 N 行）` or `（第 a–b 行，共 N 行[；已达行顶|字符顶|未达安全顶，省略 limit 可整读]）`.
+ * `（全文 N 行）` or `（第 a–b 行，共 N 行[；已达行顶|字符顶|未达安全顶]）`.
  * Title chrome only wants the window range (`42–53 行`), not the file total;
  * the expanded body strips the footer so it isn't a second scroll-to-end label.
  */
@@ -13,7 +13,7 @@ export type FileReadLineWindow = {
 
 const FULL = /^（全文 (\d+) 行）$/;
 const WINDOW =
-  /^（第 (\d+)[–-](\d+) 行，共 (\d+) 行(?:；(?:已达(?:行顶|字符顶)|未达安全顶，省略 limit 可整读))?）$/;
+  /^（第 (\d+)[–-](\d+) 行，共 (\d+) 行(?:；(?:已达(?:行顶|字符顶)|未达安全顶(?:, 省略 limit 可整读)?))?）$/;
 
 function matchFooter(line: string): FileReadLineWindow | null {
   const full = line.match(FULL);

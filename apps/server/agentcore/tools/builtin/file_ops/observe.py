@@ -68,6 +68,18 @@ def binary_next() -> str:
     )
 
 
+def archive_next(*, location: str | None = None) -> str:
+    unpacker = (
+        "云桌菜单里的 unzip / 7z"
+        if location == "server"
+        else "本机菜单里的 unzip / 7z"
+    )
+    return (
+        "先 file_list 这个路径（压缩包当目录）或同名已展开目录。"
+        f"仍要落盘则用{unpacker}解到工作区相对路径。"
+    )
+
+
 def table_next(*, code_execute_assembled: bool) -> str:
     if code_execute_assembled:
         return (

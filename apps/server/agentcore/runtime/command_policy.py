@@ -47,6 +47,31 @@ def is_package_install_command(command: str) -> bool:
     return bool(command and _PACKAGE_INSTALL.search(command))
 
 
+_SYSTEM_PACKAGE_BINS = frozenset(
+    {"apt", "apt-get", "dpkg", "apk", "yum", "dnf", "pacman"}
+)
+_BOOTSTRAP_SHELLS = frozenset({"sh", "bash", "dash", "zsh"})
+_FETCH_BINS = frozenset({"curl", "wget"})
+_CLOUD_SYSTEM_INSTALL_REASON = (
+    "这台云桌的系统工具是固定菜单（只读根），不能 apt / dpkg / 用管道把下载装进系统。"
+    "项目依赖请用 pip 或 npm（官方源）。"
+    "（按参数判定；不展开 bash -c，并非完整拦截。）"
+)
+
+
+def reject_cloud_system_install(command: str) -> str | None:
+    """Cloud ``run``: guest root is immutable — no apt/dpkg/curl|sh."""
+    argvs = iter_command_argvs(command)
+    programs = [_program_name(argv[0]) for argv in argvs if argv]
+    if any(name in _SYSTEM_PACKAGE_BINS for name in programs):
+        return _CLOUD_SYSTEM_INSTALL_REASON
+    if any(name in _FETCH_BINS for name in programs) and any(
+        name in _BOOTSTRAP_SHELLS for name in programs
+    ):
+        return _CLOUD_SYSTEM_INSTALL_REASON
+    return None
+
+
 def command_receives_git_credentials(command: str) -> bool:
     """Account PAT only for one lone ``git`` / ``gh`` process.
 

@@ -64,6 +64,8 @@ apps/website/_*.png
 apps/desktop/resources/sidecar/
 # 内嵌 ripgrep（产品 AI grep；fetch_ripgrep.py / pnpm fetch:rg）
 apps/desktop/resources/rg/
+# 内嵌 7-Zip（rar/7z 入场；fetch_7zip.py）
+apps/desktop/resources/7z/
 apps/server/bin/
 # apps/desktop/build/ 是 electron-builder 的 buildResources（应用图标源），不是上面 Python
 # 通用 `build/` 产物——解除目录忽略、再忽略目录内容、只放行平台图标入仓（Mac cropped / Win rounded）。

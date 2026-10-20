@@ -15,8 +15,9 @@ import {
   isHtmlPath,
   isMarkdownPath,
 } from "@/lib/fileSource";
-import { notifyActionError, notifyError } from "@/lib/toast";
+import { notifyActionError } from "@/lib/toast";
 import { LocalFsError } from "@/services/sources/localRootSource";
+import { useSidePanelStore } from "@/stores/sidePanel";
 import {
   AlertTriangle,
   AppWindow,
@@ -77,6 +78,7 @@ export function FilePreviewView({
   const [missing, setMissing] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [openingInBrowser, setOpeningInBrowser] = useState(false);
+  const showFile = useSidePanelStore((s) => s.showFile);
   const [openingPreview, setOpeningPreview] = useState(false);
   const [edit, setEdit] = useState<EditSession | null>(null);
   const [opening, setOpening] = useState(false);
@@ -101,6 +103,13 @@ export function FilePreviewView({
     try {
       setResult(await source.read(path));
     } catch (err) {
+      try {
+        const entries = await source.listDir(path);
+        setResult({ kind: "dir", entries });
+        return;
+      } catch {
+        // not a listable directory — keep the original read error
+      }
       const notFound =
         (err instanceof LocalFsError && err.code === "not_found") ||
         (typeof err === "object" &&
@@ -208,11 +217,6 @@ export function FilePreviewView({
     setOpening(true);
     try {
       const doc = await readForEdit(path);
-      if (doc.encoding === "gbk") {
-        // GBK 回写未启用：不进编辑态，免得白编辑一场存不下（与 md 编辑器同一判定）。
-        notifyError("此文件为 GBK 编码，暂不支持回写，只能只读查看");
-        return;
-      }
       setDraft(doc.text);
       setEdit({
         baseText: doc.text,
@@ -304,7 +308,7 @@ export function FilePreviewView({
     (isHtml && !!source.openInBrowser) ||
     (!isHtml && canOpenExternal) ||
     !!source.revealInOsFileManager ||
-    !!source.download;
+    (!!source.download && result?.kind !== "dir");
 
   return (
     <div className="flex h-full flex-col">
@@ -400,7 +404,7 @@ export function FilePreviewView({
                   </IconButton>
                 </SimpleTooltip>
               )}
-              {source.download && (
+              {source.download && result?.kind !== "dir" && (
                 <SimpleTooltip label="下载文件">
                   <IconButton
                     disabled={downloading}
@@ -487,6 +491,7 @@ export function FilePreviewView({
               canOpenExternal ? () => void onOpenExternal() : undefined
             }
             onDownload={source.download ? () => void onDownload() : undefined}
+            onOpenEntry={(entry) => showFile(entry.path, entry.name)}
           />
         )}
       </div>

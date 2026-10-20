@@ -29,6 +29,8 @@ def test_cloud_guest_surface_is_declared_command_tokens():
         assert name.isascii()
         assert " " not in name
         assert name == name.lower()
+    assert "unzip" in CLOUD_GUEST_SURFACE
+    assert "7z" in CLOUD_GUEST_SURFACE
 
 
 def test_looks_like_guest_rootfs_needs_marker_or_true(tmp_path: Path):

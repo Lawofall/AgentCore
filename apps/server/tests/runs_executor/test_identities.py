@@ -127,16 +127,16 @@ async def test_nested_delegate_offered_only_within_depth_cap():
 
     plan = RunPlan()
     plan.add(_spec("d1", depth=1))
-    plan.add(_spec("d2", depth=2))  # within cap (MAX=3)
-    plan.add(_spec("d3", depth=3))  # at the cap → leaf
+    plan.add(_spec("d2", depth=2))  # at the cap → leaf
+    plan.add(_spec("d3", depth=3))  # beyond cap → still leaf
     executor = _nesting_executor(plan, _ContentProvider(["X", "Y", "Z"]), factory)
     await executor(plan.by_id("d1"), {})
     await executor(plan.by_id("d2"), {})
     await executor(plan.by_id("d3"), {})
-    # depth-1 and depth-2 workers (within the cap) get a delegate tool;
-    # depth-3 (at the cap) never does — delegation is on by default, the
-    # depth cap is the hard stop.
-    assert calls == [("d1", 1), ("d2", 2)]
+    # Only depth-1 (within the cap) gets a delegate tool; depth-2 (at the cap)
+    # and beyond never do — delegation is on by default, the depth cap is the
+    # hard stop.
+    assert calls == [("d1", 1)]
 
 
 async def test_nested_delegate_withheld_at_depth_cap():
@@ -147,10 +147,10 @@ async def test_nested_delegate_withheld_at_depth_cap():
         return _stub_subteam(depth=captain_depth)
 
     plan = RunPlan()
-    plan.add(_spec("d3", depth=3))  # at the cap
+    plan.add(_spec("d2", depth=2))  # at the cap
     executor = _nesting_executor(plan, _ContentProvider(["X"]), factory)
-    await executor(plan.by_id("d3"), {})
-    assert calls == []  # depth-3 sub-worker → leaf, no delegate tool
+    await executor(plan.by_id("d2"), {})
+    assert calls == []  # depth-2 sub-worker → leaf, no delegate tool
 
 
 async def test_captain_worker_gets_captain_identity_and_delegate_tool():
@@ -164,8 +164,8 @@ async def test_captain_worker_gets_captain_identity_and_delegate_tool():
     sys = provider.system_messages[0]
     assert sys == "SYS"
     assert "<身份>" not in sys
-    assert "你的子成员仍可再向下委派一层" in user
-    assert "你的子成员不能再向下委派" not in user
+    assert "你的子成员不能再向下委派" in user
+    assert "你的子成员仍可再向下委派一层" not in user
 
 
 async def test_captain_worker_opening_includes_replan():
@@ -188,20 +188,20 @@ async def test_default_worker_is_captain_within_depth_cap():
     executor = _nesting_executor(plan, provider, lambda rid, d: _stub_subteam(depth=d))
     await executor(plan.by_id("t_1"), {})
     user = provider.user_messages[0]
-    assert "你的子成员仍可再向下委派一层" in user
+    assert "你的子成员不能再向下委派" in user
+    assert "你的子成员仍可再向下委派一层" not in user
     assert "薄切片" not in user
 
 
-async def test_depth_two_captain_children_are_leaves():
-    """depth-2 is still captain (MAX=3); honesty says its children cannot nest."""
+async def test_depth_two_worker_is_leaf():
+    """depth-2 is at the cap (MAX=2); no captain identity."""
     provider = _ContentProvider(["X"])
     plan = RunPlan()
     plan.add(_spec("d2", depth=2))
     executor = _nesting_executor(plan, provider, lambda rid, d: _stub_subteam(depth=d))
     await executor(plan.by_id("d2"), {})
     user = provider.user_messages[0]
-    assert "你的子成员不能再向下委派" in user
-    assert "你的子成员仍可再向下委派一层" not in user
+    assert "你的子成员" not in user
 
 
 async def test_captain_identity_carries_when_to_split_guidance():
@@ -211,7 +211,7 @@ async def test_captain_identity_carries_when_to_split_guidance():
     await executor(plan.by_id("t_1"), {})
     user = provider.user_messages[0]
     sys = provider.system_messages[0]
-    assert "你的子成员仍可再向下委派一层" in user
+    assert "你的子成员不能再向下委派" in user
     assert "薄切片" not in user
     assert "先招人再整合" not in sys
     assert "写满步骤 ≠ 已切薄" not in sys
@@ -221,7 +221,7 @@ async def test_captain_identity_carries_when_to_split_guidance():
     assert "已经做了很久" not in sys
     assert "不要为委派而委派" not in sys
     assert "第一件事用 delegate" not in sys
-    assert "你的子成员仍可再向下委派一层" in user
+    assert "你的子成员仍可再向下委派一层" not in user
     assert "会改变还在跑的队友" not in sys
     assert "计划已让出" not in sys
     from agentcore.tools.builtin.replan import _REPLAN_DESCRIPTION
@@ -233,22 +233,22 @@ async def test_captain_identity_carries_when_to_split_guidance():
     from agentcore.runtime.runs.executor.identities import build_worker_identity
 
     identity = build_worker_identity(has_dependents=False, captain=True)
-    assert identity == "你的子成员仍可再向下委派一层。"
+    assert identity == "你的子成员不能再向下委派。"
     assert "<身份>" not in identity
     leaf = build_worker_identity(has_dependents=False, captain=False)
     assert leaf == ""
     assert "你的子成员" not in leaf
 
 
-async def test_depth_three_subworker_keeps_leaf_identity():
+async def test_depth_two_subworker_keeps_leaf_identity():
     provider = _ContentProvider(["X"])
     plan, _ = build_run_plan(
         [{"role": "A", "task": "做A"}],
         id_prefix="t",
         parent_run_id="cap",
-        depth=3,
+        depth=2,
     )
-    # At the depth cap: delegate tools withheld — depth-3 sub-workers are always leaves.
+    # At the depth cap: delegate tools withheld — depth-2 sub-workers are always leaves.
     executor = _nesting_executor(plan, provider, lambda rid, d: _stub_subteam(depth=d))
     await executor(plan.by_id("t_1"), {})
     user = provider.user_messages[0]
@@ -263,7 +263,7 @@ async def test_worker_identities_omit_tool_safety_caution():
         [{"role": "A", "task": "做A"}],
         id_prefix="t",
         parent_run_id="cap",
-        depth=3,  # depth cap → leaf identity
+        depth=2,  # depth cap → leaf identity
     )
     leaf_exec = _nesting_executor(leaf_plan, leaf_provider, lambda rid, d: _stub_subteam(depth=d))
     await leaf_exec(leaf_plan.by_id("t_1"), {})
@@ -278,7 +278,7 @@ async def test_worker_identities_omit_tool_safety_caution():
     await captain_exec(captain_plan.by_id("d1"), {})
     captain_user = captain_provider.user_messages[0]
     captain_sys = captain_provider.system_messages[0]
-    assert "你的子成员仍可再向下委派一层" in captain_user
+    assert "你的子成员不能再向下委派" in captain_user
     assert "<写工具谨慎>" not in captain_sys
 
 
@@ -394,13 +394,21 @@ def test_catalog_empty_live_captain_nest_fact():
     nested_catalog = build_worker_identity_catalog(captain=True)
     assert nested_catalog == ""
     nested_live = build_worker_identity(has_dependents=False, captain=True)
-    assert nested_live == "你的子成员仍可再向下委派一层。"
+    assert nested_live == "你的子成员不能再向下委派。"
     assert "<身份>" not in nested_live
     files = describe_deliverable(Deliverable(artifacts=["report.md"]))
     assert "form=files" not in files
     assert "form=prose" not in files
     assert "form=workspace" not in files
     assert "`report.md`" in files
+
+
+def test_worker_child_nest_fact_tracks_cap():
+    from agentcore.runtime.runs.constants import MAX_DELEGATION_DEPTH
+    from agentcore.runtime.runs.executor.identities import worker_child_nest_fact
+
+    assert worker_child_nest_fact(depth=MAX_DELEGATION_DEPTH - 1) == "你的子成员不能再向下委派。"
+    assert worker_child_nest_fact(depth=MAX_DELEGATION_DEPTH - 2) == "你的子成员仍可再向下委派一层。"
 
 
 def test_worker_identity_states_no_execution_capability():
@@ -467,7 +475,7 @@ def test_worker_identity_teaches_escalate_reason():
 
 
 async def test_executor_never_wires_direct_to_user_register():
-    """单人 / 多节点 / 嵌套 lead：身份提示词都不长直出段。"""
+    """单人 / 多节点 / 帽上叶子：身份提示词都不长直出段。"""
     solo, _ = build_run_plan([{"role": "工程师", "task": "改一行"}], id_prefix="s")
     solo_provider = _ContentProvider(["OUT"])
     await _nesting_executor(solo, solo_provider, lambda rid, d: _stub_subteam(depth=d))(

@@ -38,15 +38,23 @@ export type FilePreviewResult =
   | { kind: "text"; text: string; truncated: boolean }
   | { kind: "image"; dataUrl: string; mime: string; size: number }
   | { kind: "pdf"; dataUrl: string; mime: string; size: number }
+  | { kind: "dir"; entries: FileNode[] }
   | { kind: "binary"; mime?: string; size?: number; reason?: string }
   | { kind: "too-large" };
+
+const ARCHIVE_NAME_RE =
+  /\.(zip|rar|7z|tar|tgz|gz|bz2|tar\.gz|tar\.bz2|tar\.xz)$/i;
+
+export function isArchiveFileName(name: string): boolean {
+  return ARCHIVE_NAME_RE.test(name.trim());
+}
 
 /** 目录变更回调（仅当 `caps.watch` 为真时有意义）。 */
 export type FileChangeHandler = (dir: string) => void;
 
 /** 文件版本（写前 CAS 基线）：本地用 mtime，云端用 etag/updatedAt（P4）。 */
 export type FileVersion = { mtimeMs?: number; etag?: string };
-/** 编辑用编码；`gbk` 仅可读不可回写。 */
+/** 编辑用编码；`gbk` 按 GB18030 写回。 */
 export type EditEncoding = "utf-8" | "utf-8-bom" | "gbk";
 export type EditEol = "lf" | "crlf";
 
