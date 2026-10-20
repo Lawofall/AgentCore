@@ -20,7 +20,6 @@ from agentcore.workspace.attachment_parse import (
     SKIP_EXTENSIONS,
     ParseStatus,
     extension_of,
-    parsed_copy_path,
 )
 from agentcore.workspace.file_kind import (
     OLE_WORD_EXTENSIONS,
@@ -29,8 +28,10 @@ from agentcore.workspace.file_kind import (
     sniff_bytes,
 )
 from agentcore.workspace.limits import (
+    OFFICE_EXTRACT_PDF_MAX_PAGES,
     is_file_too_large_detail,
 )
+from agentcore.workspace.pdf_pages import PdfPagesError, format_pages_example, parse_pdf_pages
 from agentcore.workspace.protocol import (
     NotADirectory,
     NotAFile,
@@ -188,8 +189,16 @@ def _effective_line_limit(limit: object) -> int:
 
 READ_REMOVED_FIELDS: tuple[str, ...] = ("start_page",)
 _READ_START_PAGE_LEFTOVER_MSG = (
-    "read 只抽第一窗。不要传 start_page。"
-    "后面的页按文件名归类或先写已读部分。"
+    "不要传 start_page。PDF 翻页用 pages（如 \"41-80\"）。"
+    "offset/limit 仍是抽出文本的行号。"
+)
+_READ_PAGES_INVALID_MSG = (
+    "pages 须为页码或闭区间，如 \"1-40\" 或 \"12\"。"
+    f"一次最多 {OFFICE_EXTRACT_PDF_MAX_PAGES} 页。"
+)
+_READ_PAGES_SPAN_MSG = (
+    f"pages 一次最多 {OFFICE_EXTRACT_PDF_MAX_PAGES} 页。"
+    f'请缩小区间，如 "{format_pages_example()}"。'
 )
 
 
@@ -198,6 +207,21 @@ def read_leftover_error(arguments: dict[str, Any], start: float) -> ToolResult |
     if not fields:
         return None
     return _error(_READ_START_PAGE_LEFTOVER_MSG, start, contract_failure=True)
+
+
+def _pages_arg_error(exc: PdfPagesError, start: float) -> ToolResult:
+    msg = _READ_PAGES_SPAN_MSG if exc.code == "pages_span" else _READ_PAGES_INVALID_MSG
+    return _error(msg, start, contract_failure=True)
+
+
+def _pages_required_error(page_total: int, start: float) -> ToolResult:
+    example = format_pages_example()
+    return _error(
+        f"这份 PDF 共 {page_total} 页。read 一次最多 {OFFICE_EXTRACT_PDF_MAX_PAGES} 页，"
+        f'请带 pages（如 "{example}"）。offset/limit 仍是抽出文本的行号。',
+        start,
+        contract_failure=True,
+    )
 
 
 def _trim_to_char_cap(lines: list[str]) -> tuple[list[str], bool]:
@@ -279,7 +303,9 @@ def _select_line_window(
     return selected, start_line, end_line, total, cap_kind
 
 
-def _file_read_ok(output: str, start: float) -> ToolResult:
+def _file_read_ok(
+    output: str, start: float, *, metadata: dict[str, Any] | None = None
+) -> ToolResult:
     """Successful read result; ``output_limit`` covers full view (no 4k head+tail)."""
     return ToolResult(
         tool_call_id="",
@@ -287,17 +313,30 @@ def _file_read_ok(output: str, start: float) -> ToolResult:
         output=output,
         duration_ms=int((time.monotonic() - start) * 1000),
         output_limit=max(len(output), ToolResult._MAX_OUTPUT_LEN),
+        metadata=metadata or {},
     )
 
 
 async def _extract_office(
-    backend: object, rel_path: str, *, ext: str, start_page: int = 1
+    backend: object,
+    rel_path: str,
+    *,
+    ext: str,
+    start_page: int = 1,
+    page_end: int | None = None,
+    page_total: int | None = None,
 ):
     """Office/PDF extract: on-disk backends open the file in the child, not here."""
     extract = getattr(backend, "extract_office", None)
     if not callable(extract):
         raise WorkspaceError("extract_office unavailable")
-    return await extract(rel_path, ext=ext, start_page=start_page)
+    return await extract(
+        rel_path,
+        ext=ext,
+        start_page=start_page,
+        page_end=page_end,
+        page_total=page_total,
+    )
 
 
 async def _backend_read_head(
@@ -323,12 +362,6 @@ def _is_undecodable_read(exc: BaseException) -> bool:
     )
 
 
-def _sidecar_is_scan_notice(text: str) -> bool:
-    """True when the ``*.md`` sidecar is the scan-notice body, not extracted prose."""
-    body = (text or "").strip()
-    return bool(body) and body == SCAN_NOTICE.strip()
-
-
 def _observe_ok(
     *,
     kind: str,
@@ -338,6 +371,7 @@ def _observe_ok(
     start: float,
     size: int | None = None,
     text: str = "",
+    metadata: dict[str, Any] | None = None,
 ) -> ToolResult:
     return _file_read_ok(
         format_observe_envelope(
@@ -349,6 +383,7 @@ def _observe_ok(
             text=text,
         ),
         start,
+        metadata=metadata,
     )
 
 
@@ -375,29 +410,48 @@ def _not_a_file_error(rel_path: str, start: float) -> ToolResult:
     )
 
 
+def _next_pages_example(page_end: int, page_total: int | None) -> str:
+    start = page_end + 1
+    if page_total is not None:
+        end = min(page_total, start + OFFICE_EXTRACT_PDF_MAX_PAGES - 1)
+    else:
+        end = start + OFFICE_EXTRACT_PDF_MAX_PAGES - 1
+    return f"{start}-{end}"
+
+
 def _append_pdf_page_footer(
     output: str,
     *,
     page_start: int | None,
     page_end: int | None,
     page_total: int | None,
+    images_sent: int = 0,
+    accepts_images: bool = False,
 ) -> str:
-    """Tell the model this extract was the first page window, not the whole PDF."""
+    """Page-window HOW: teach ``pages``, never ``start_page``."""
     if page_start is None or page_end is None:
         return output
-    from agentcore.workspace.limits import OFFICE_EXTRACT_PDF_MAX_PAGES
-
+    extra: list[str] = []
     if page_total is not None:
         line = f"抽取第 {page_start}–{page_end} 页，共 {page_total} 页"
         if page_end < page_total:
-            line += "。本工具只交第一窗；后面的页按文件名归类或先写已读部分"
-        return f"{output.rstrip()}\n\n{line}。"
-    line = (
-        f"抽取第 {page_start}–{page_end} 页"
-        f"（每窗最多 {OFFICE_EXTRACT_PDF_MAX_PAGES} 页）。"
-        "本工具只交第一窗"
-    )
-    return f"{output.rstrip()}\n\n{line}。"
+            example = _next_pages_example(page_end, page_total)
+            line += f'。后面的页再 read 并带 pages（如 "{example}"）'
+        extra.append(line)
+    else:
+        example = _next_pages_example(page_end, None)
+        extra.append(
+            f"抽取第 {page_start}–{page_end} 页（总页未知，每窗最多 "
+            f"{OFFICE_EXTRACT_PDF_MAX_PAGES} 页）。"
+            f'后面的页再 read 并带 pages（如 "{example}"）'
+        )
+    if images_sent:
+        extra.append(f"本窗前 {images_sent} 页图像已发给当前模型")
+    elif accepts_images:
+        extra.append("当前主模型收图，但本窗页图像未能生成")
+    else:
+        extra.append("当前主模型不收图，本回合只有文本层")
+    return f"{output.rstrip()}\n\n{'。'.join(extra)}。"
 
 
 def _format_extracted_read(
@@ -423,6 +477,45 @@ def _format_extracted_read(
         total,
     )
 
+
+def _jpeg_native_parts(jpegs: list[bytes]) -> list[dict[str, Any]]:
+    import base64
+
+    parts: list[dict[str, Any]] = []
+    for jpeg in jpegs:
+        b64 = base64.b64encode(jpeg).decode("ascii")
+        parts.append(
+            {
+                "type": "image_url",
+                "image_url": {"url": f"data:image/jpeg;base64,{b64}"},
+            }
+        )
+    return parts
+
+
+async def _render_pdf_window_jpegs(
+    backend: object, rel_path: str, *, start: int, end: int
+) -> list[bytes]:
+    from agentcore.workspace.pdf_raster import render_pdf_page_jpegs
+
+    safe = getattr(backend, "_safe", None)
+    if callable(safe):
+        try:
+            target = safe(rel_path)
+            if getattr(target, "is_file", lambda: False)():
+                return render_pdf_page_jpegs(path=target, start=start, end=end)
+        except Exception:
+            pass
+    read_bytes = getattr(backend, "read_bytes", None)
+    if not callable(read_bytes):
+        return []
+    try:
+        data = await read_bytes(rel_path)
+    except Exception:
+        return []
+    return render_pdf_page_jpegs(data=data, start=start, end=end)
+
+
 class FileReadTool:
     """Read the contents of a file within the workspace."""
 
@@ -447,7 +540,7 @@ class FileReadTool:
                         "type": "string",
                         "description": (
                             f"{TOOL_PATH_DESCRIPTION}"
-                            "Office/PDF 抽文本；表格默认不抽。"
+                            "Office/PDF 抽文本；PDF 可带 pages；表格默认不抽。"
                         ),
                     },
                     "offset": {
@@ -466,6 +559,15 @@ class FileReadTool:
                         ),
                         "minimum": 1,
                         "maximum": FILE_READ_SAFETY_LINE_CAP,
+                    },
+                    "pages": {
+                        "type": "string",
+                        "description": (
+                            "PDF 页窗，与 offset/limit 行号独立。"
+                            f'如 "1-{OFFICE_EXTRACT_PDF_MAX_PAGES}" 或 "12"。'
+                            f"一次最多 {OFFICE_EXTRACT_PDF_MAX_PAGES} 页。"
+                            f"超过 {OFFICE_EXTRACT_PDF_MAX_PAGES} 页必须带 pages。"
+                        ),
                     },
                 },
                 "required": ["file_path"],
@@ -490,6 +592,7 @@ class FileReadTool:
         rel_path = arguments.get("file_path", "")
         offset = arguments.get("offset")
         limit = arguments.get("limit")
+        pages = arguments.get("pages")
 
         if looks_like_http_url(str(rel_path or "")):
             return _url_not_workspace_path_error(str(rel_path).strip(), start)
@@ -541,6 +644,7 @@ class FileReadTool:
                 path_key=path_key,
                 offset=offset,
                 limit=limit,
+                pages=pages,
                 start=start,
                 context=context,
             )
@@ -571,6 +675,7 @@ class FileReadTool:
                     path_key=path_key,
                     offset=offset,
                     limit=limit,
+                    pages=pages,
                     start=start,
                     context=context,
                 )
@@ -593,6 +698,7 @@ class FileReadTool:
                 path_key=path_key,
                 offset=offset,
                 limit=limit,
+                pages=pages,
                 start=start,
                 context=context,
             )
@@ -612,129 +718,219 @@ class FileReadTool:
         path_key: str,
         offset: object,
         limit: object,
+        pages: object = None,
         start: float,
         context: ToolContext,
         extract_ext: str | None = None,
     ) -> ToolResult:
-        """Transparent office/PDF extract (killable worker; no default ``*.md`` write)."""
-        sidecar = parsed_copy_path(rel_path.replace("\\", "/"))
-        text: str | None = None
-        page_start: int | None = None
-        page_end: int | None = None
-        page_total: int | None = None
+        """Transparent office/PDF extract (killable worker; no sibling extract file)."""
+        ext = extract_ext or extension_of(path_key or rel_path)
+        if ext == ".pdf":
+            return await self._read_pdf(
+                rel_path,
+                path_key=path_key,
+                offset=offset,
+                limit=limit,
+                pages=pages,
+                start=start,
+                context=context,
+            )
 
+        extracted = await self._extract_office_or_envelope(
+            rel_path,
+            path_key=path_key,
+            ext=ext,
+            start=start,
+            context=context,
+        )
+        if isinstance(extracted, ToolResult):
+            return extracted
+        display = path_key or rel_path
+        size = extracted.size_bytes
+        if extracted.status == ParseStatus.FAILED:
+            return _observe_ok(
+                kind="extract",
+                path=display,
+                type_label=extension_of(display).lstrip(".") or "office",
+                next_actions=extract_failed_next(),
+                start=start,
+                size=size,
+                text=extract_failed_text(extracted.detail or ""),
+            )
+        if extracted.status == ParseStatus.SKIPPED:
+            return _observe_ok(
+                kind="extract",
+                path=display,
+                type_label=extension_of(display).lstrip(".") or "office",
+                next_actions=extract_failed_next(),
+                start=start,
+                size=size,
+                text=extract_failed_text(extracted.detail or ""),
+            )
+        if extracted.status == ParseStatus.SCANNED:
+            return _observe_ok(
+                kind="scan",
+                path=display,
+                type_label="pdf-scan",
+                next_actions=scan_next(),
+                start=start,
+                size=size,
+                text=extracted.text or SCAN_NOTICE,
+            )
+        output, *_ = _format_extracted_read(extracted.text, offset=offset, limit=limit)
+        return _file_read_ok(output, start)
+
+    async def _extract_office_or_envelope(
+        self,
+        rel_path: str,
+        *,
+        path_key: str,
+        ext: str,
+        start: float,
+        context: ToolContext,
+        start_page: int = 1,
+        page_end: int | None = None,
+        page_total: int | None = None,
+    ):
         try:
-            sidecar_text = await context.backend.read(sidecar)
-            if (sidecar_text or "").strip():
-                if _sidecar_is_scan_notice(sidecar_text):
-                    return _observe_ok(
-                        kind="scan",
-                        path=path_key or rel_path,
-                        type_label="pdf-scan",
-                        next_actions=scan_next(),
-                        start=start,
-                        text=SCAN_NOTICE,
-                    )
-                text = sidecar_text
-        except PathNotFound:
-            pass
+            return await _extract_office(
+                context.backend,
+                rel_path,
+                ext=ext,
+                start_page=start_page,
+                page_end=page_end,
+                page_total=page_total,
+            )
         except OutsideWorkspace as e:
             return _outside_workspace_error(
                 rel_path, start, location=context.backend.location, reason=str(e)
             )
+        except PathNotFound:
+            return await _file_not_found_error(
+                rel_path, start=start, context=context
+            )
         except NotAFile:
-            pass
-        except WorkspaceError:
-            pass
-
-        if text is None:
-            try:
-                extracted = await _extract_office(
-                    context.backend,
-                    rel_path,
-                    ext=extract_ext or extension_of(path_key or rel_path),
-                )
-            except OutsideWorkspace as e:
-                return _outside_workspace_error(
-                    rel_path, start, location=context.backend.location, reason=str(e)
-                )
-            except PathNotFound:
-                return await _file_not_found_error(
-                    rel_path, start=start, context=context
-                )
-            except NotAFile:
-                return _not_a_file_error(rel_path, start)
-            except WorkspaceError as e:
-                if is_file_too_large_detail(str(e)):
-                    return _observe_ok(
-                        kind="truncated",
-                        path=path_key or rel_path,
-                        type_label="office-source",
-                        next_actions=source_too_large_next(),
-                        start=start,
-                        size=parse_too_large_size(str(e)),
-                        text="源文件超过抽取摄入顶。",
-                    )
-                return _map_workspace_read_error(
-                    e, path=path_key or rel_path, start=start
-                )
-
-            display = path_key or rel_path
-            size = extracted.size_bytes
-            if extracted.status == ParseStatus.FAILED:
+            return _not_a_file_error(rel_path, start)
+        except WorkspaceError as e:
+            if is_file_too_large_detail(str(e)):
                 return _observe_ok(
-                    kind="extract",
-                    path=display,
-                    type_label=extension_of(display).lstrip(".") or "office",
-                    next_actions=extract_failed_next(),
+                    kind="truncated",
+                    path=path_key or rel_path,
+                    type_label="office-source",
+                    next_actions=source_too_large_next(),
                     start=start,
-                    size=size,
-                    text=extract_failed_text(extracted.detail or ""),
+                    size=parse_too_large_size(str(e)),
+                    text="源文件超过抽取摄入顶。",
                 )
-            if extracted.status == ParseStatus.SKIPPED:
-                return _observe_ok(
-                    kind="extract",
-                    path=display,
-                    type_label=extension_of(display).lstrip(".") or "office",
-                    next_actions=extract_failed_next(),
-                    start=start,
-                    size=size,
-                    text=extract_failed_text(extracted.detail or ""),
-                )
-            if extracted.status == ParseStatus.SCANNED:
-                return _observe_ok(
-                    kind="scan",
-                    path=display,
-                    type_label="pdf-scan",
-                    next_actions=scan_next(),
-                    start=start,
-                    size=size,
-                    text=extracted.text or SCAN_NOTICE,
-                )
-            if extracted.detail == "pdf_page_window_empty":
-                extra = (
-                    f"文档共 {extracted.page_total} 页。"
-                    if extracted.page_total is not None
-                    else ""
-                )
-                output = f"第 {extracted.page_start} 页起没有更多文本。{extra}"
-                return _file_read_ok(output, start)
-            text = extracted.text
-            page_start = extracted.page_start
-            page_end = extracted.page_end
-            page_total = extracted.page_total
+            return _map_workspace_read_error(
+                e, path=path_key or rel_path, start=start
+            )
 
-        assert text is not None
+    async def _read_pdf(
+        self,
+        rel_path: str,
+        *,
+        path_key: str,
+        offset: object,
+        limit: object,
+        pages: object,
+        start: float,
+        context: ToolContext,
+    ) -> ToolResult:
+        try:
+            page_window = parse_pdf_pages(pages)
+        except PdfPagesError as exc:
+            return _pages_arg_error(exc, start)
+
+        start_page = 1 if page_window is None else page_window[0]
+        page_end = None if page_window is None else page_window[1]
+        extracted = await self._extract_office_or_envelope(
+            rel_path,
+            path_key=path_key,
+            ext=".pdf",
+            start=start,
+            context=context,
+            start_page=start_page,
+            page_end=page_end,
+        )
+        if isinstance(extracted, ToolResult):
+            return extracted
+
+        display = path_key or rel_path
+        size = extracted.size_bytes
+        if (
+            page_window is None
+            and extracted.page_total is not None
+            and extracted.page_total > OFFICE_EXTRACT_PDF_MAX_PAGES
+        ):
+            return _pages_required_error(extracted.page_total, start)
+
+        accepts_images = bool(getattr(context, "accepts_images", False))
+        image_start = extracted.page_start or start_page
+        image_end = extracted.page_end or image_start
+        jpegs: list[bytes] = []
+        if accepts_images:
+            jpegs = await _render_pdf_window_jpegs(
+                context.backend, rel_path, start=image_start, end=image_end
+            )
+        image_meta = (
+            {"native_image_parts": _jpeg_native_parts(jpegs)} if jpegs else None
+        )
+
+        if extracted.status == ParseStatus.FAILED:
+            return _observe_ok(
+                kind="extract",
+                path=display,
+                type_label="pdf",
+                next_actions=extract_failed_next(),
+                start=start,
+                size=size,
+                text=extract_failed_text(extracted.detail or ""),
+            )
+        if extracted.status == ParseStatus.SKIPPED:
+            return _observe_ok(
+                kind="extract",
+                path=display,
+                type_label="pdf",
+                next_actions=extract_failed_next(),
+                start=start,
+                size=size,
+                text=extract_failed_text(extracted.detail or ""),
+            )
+        if extracted.status == ParseStatus.SCANNED:
+            return _observe_ok(
+                kind="scan",
+                path=display,
+                type_label="pdf-scan",
+                next_actions=scan_next(
+                    accepts_images=accepts_images, images_sent=len(jpegs)
+                ),
+                start=start,
+                size=size,
+                text=extracted.text or SCAN_NOTICE,
+                metadata=image_meta,
+            )
+        if extracted.detail == "pdf_page_window_empty":
+            extra = (
+                f"文档共 {extracted.page_total} 页。"
+                if extracted.page_total is not None
+                else ""
+            )
+            output = f"第 {extracted.page_start} 页起没有更多文本。{extra}"
+            return _file_read_ok(output, start)
+
         output, *_ = _format_extracted_read(
-            text, offset=offset, limit=limit
+            extracted.text, offset=offset, limit=limit
         )
         output = _append_pdf_page_footer(
             output,
-            page_start=page_start,
-            page_end=page_end,
-            page_total=page_total,
+            page_start=extracted.page_start,
+            page_end=extracted.page_end,
+            page_total=extracted.page_total,
+            images_sent=len(jpegs),
+            accepts_images=accepts_images,
         )
-        return _file_read_ok(output, start)
+        return _file_read_ok(output, start, metadata=image_meta)
 
     async def _observe_ole(
         self,
@@ -783,6 +979,7 @@ class FileReadTool:
         path_key: str,
         offset: object,
         limit: object,
+        pages: object = None,
         start: float,
         context: ToolContext,
     ) -> ToolResult:
@@ -822,6 +1019,7 @@ class FileReadTool:
                 path_key=path_key,
                 offset=offset,
                 limit=limit,
+                pages=pages,
                 start=start,
                 context=context,
                 extract_ext=".pdf",

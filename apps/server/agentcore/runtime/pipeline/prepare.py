@@ -221,6 +221,10 @@ class PreparedTurn:
     execution_id_token: object
     mcp_discover: McpDiscoverResult
     member_turn: bool
+    request_text: str = ""
+    materials_body: str = ""
+    has_file_parts: bool = False
+    has_resident_missing: bool = False
 
 
 async def prepare_fresh_turn(
@@ -251,8 +255,8 @@ async def prepare_fresh_turn(
     # Member turns still inject the owner's folder-layer 规则; account-level stays private.
     # Clean shared base (constitution + always-on ``<设定>``): NO date, NO
     # workspace facts, NO attachments, NO CEO hints. Cacheable prefix shared by
-    # the CEO and workers. Date / workspace / attachments ride ``[系统提示]``
-    # envelopes (opening user), not ``role: system``.
+    # the CEO and workers. Date / workspace / pinned entries ride ``[系统提示]``
+    # envelopes (opening user), not ``role: system``. File parts are materials blocks.
     # Host / MCP backfill needs a desktop client — orthogonal to workspace location.
     # Member turns: same client header, but no desktop fulfill (协作桌 · 否决本地共享).
     channel = resolve_channel_profile(x_client_platform).for_turn(
@@ -424,20 +428,17 @@ async def prepare_fresh_turn(
         )
     )
     deep_research_auto, deep_research_auto_debate_count = deep_research_state
-    attachment_context = merge_attachment_and_mention_context(
-        attachment_prompt.envelope, agent_mentions
-    )
-    attachment_slim = merge_attachment_and_mention_context(
-        attachment_prompt.slim_envelope, agent_mentions
-    )
-    from agentcore.core.inline_body import apply_inline_body
+    from agentcore.core.inline_body import render_request_text
 
-    user_message, attachment_context = apply_inline_body(
+    materials_body = "\n\n".join(b for b in attachment_prompt.file_blocks if b)
+    request_text = render_request_text(
         user_message,
-        attachment_prompt.file_blocks,
         agent_mentions,
-        attachment_context,
-        attachment_slim,
+        len(attachment_prompt.file_blocks),
+    )
+    user_message = request_text
+    attachment_context = merge_attachment_and_mention_context(
+        attachment_prompt.pinned_xml, agent_mentions
     )
     attachment_context = attachment_context or ""
     from agentcore.documents.path_rules import (
@@ -453,7 +454,7 @@ async def prepare_fresh_turn(
             f"{attachment_context}\n{path_note}" if attachment_context else path_note
         )
     # Workers hold no CEO hints; frozen system is shared base + ``<按需目录>``.
-    # Date / workspace / attachments ride ``worker_envelope`` (opening user).
+    # Date / workspace / pinned entries ride ``worker_envelope`` (opening user).
     worker_base_prompt = compose_worker_base_prompt(
         system_prompt,
         on_demand_entries=on_demand_entries,
@@ -552,6 +553,10 @@ async def prepare_fresh_turn(
         base_tool_context=base_tool_context,
         attachment_context=attachment_context,
         user_message=user_message,
+        request_text=request_text,
+        materials_body=materials_body,
+        has_file_parts=attachment_prompt.has_file_parts,
+        has_resident_missing=attachment_prompt.has_resident_missing,
         native_image_parts=native_image_parts,
         bound_execution_id=bound_execution_id,
         execution_id_token=execution_id_token,

@@ -82,6 +82,7 @@ def build_drive_executor(
         local_root_claims=getattr(tool, "_local_root_claims", None),
         permission_axes_obj=getattr(tool, "_permission_axes", None),
         worker_envelope=getattr(tool, "_worker_envelope", "") or "",
+        materials_body=getattr(tool, "_materials_body", "") or "",
     )
 
     async def continuation_aware_executor(spec: RunSpec, completed: dict) -> RunState:

@@ -59,6 +59,8 @@ OFFICE_EXTRACT_CHANNEL_MAX_BYTES = 25 * 1024 * 1024  # 25 MiB
 OFFICE_EXTRACT_OUTPUT_CHARS = 80_000
 # PDF page window so a 200-page scan does not burn the full extract timeout.
 OFFICE_EXTRACT_PDF_MAX_PAGES = 40
+# Pixels per ``read`` window (text may cover the full page window).
+OFFICE_EXTRACT_PDF_MAX_IMAGES = 8
 
 # Killable extract-worker budget. Timeout → FAILED + extract_timeout, not
 # liveness_timeout. Tests may patch this down to sub-second.

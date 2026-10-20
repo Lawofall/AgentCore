@@ -14,9 +14,9 @@ def test_normalize_keeps_known_names_in_registry_order():
         "prompts",
         "page_ui",
     )
-    assert normalize_omitted_factory_skills(["product_help", "prompts", "data_file_landing"]) == (
+    assert normalize_omitted_factory_skills(["product_help", "prompts", "page_ui"]) == (
         "prompts",
-        "data_file_landing",
+        "page_ui",
         "product_help",
     )
 

@@ -311,7 +311,7 @@ export interface RunStartedPayload {
 }
 
 export interface ContextBlockWire {
-  channel: "system" | "tools" | "history" | "request" | "team_position" | "dependency" | "workspace" | "task" | "deliverable" | "team_brief" | "gate_notes" | "steer" | "team_result" | "round_focus" | "opponent" | "challenge" | "interjection" | "continuation" | "cross_exam" | "witness_exam" | "closing" | "attack" | "defense" | "rebuttal" | "thread" | "crux";
+  channel: "system" | "tools" | "history" | "request" | "materials" | "team_position" | "dependency" | "workspace" | "task" | "deliverable" | "team_brief" | "gate_notes" | "steer" | "team_result" | "round_focus" | "opponent" | "challenge" | "interjection" | "continuation" | "cross_exam" | "witness_exam" | "closing" | "attack" | "defense" | "rebuttal" | "thread" | "crux";
   heading: string;
   body: string;
   chars: number;

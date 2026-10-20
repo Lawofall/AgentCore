@@ -1,18 +1,18 @@
 """Pre-parse text-like binary attachments at residency time (附件分流预解析).
 
 分流：``.docx`` 用 python-docx（段落+表格）抽文本；pdf/pptx/odt/rtf 用 markitdown。
-写出与原件并存的 ``原名.ext.md``。``.txt`` / ``.md`` / HTML 等可直接读的
-格式：小文件内联；超窗（2000 行或 2.4 万字）只给路径指针（原件已是可读副本，
-禁止把正文塞进 prompt / 消息行）；
-xlsx/csv/tsv 不把全表抽进 prompt，只产
+抽出只进材料 part：小则内联，超窗只给原件路径指针。不写兄弟 ``*.md`` /
+``{原名}.pdf.txt``。``.txt`` / ``.md`` / HTML 等可直接读的格式同样：小文件内联；
+超窗（2000 行或 2.4 万字）只给路径指针。xlsx/csv/tsv 不把全表抽进 prompt，只产
 列名 / 行数 / 推断类型 / 样例行，原始数据留在工作区文件。扫描版
-PDF 首版不做 OCR，写入明确降级提示。解析失败不阻塞驻留，回落路径提示。
+PDF 首版不做 OCR；无文本层则不写假全文旁路。解析失败不阻塞驻留，回落路径提示。
 
 工作区 ``read`` 与附件预解析共用公开核 ``extract_office_file`` /
 ``extract_office_bytes``（可杀子进程；墙钟超时 = FAILED / extract_timeout，由
-``read`` 收成成功观察信封，不是通道活性挂起；读时默认不写 ``*.md``）。
+``read`` 收成成功观察信封，不是通道活性挂起；读时不写旁路文件）。
 磁盘后端父进程只 stat，子进程 ``--extract-path`` 打开文件（磁盘摄入 100 MiB）；过桥 Local 仍
-``read_bytes`` 再 ``extract_office_bytes``（IPC 摄入 25 MiB）。PDF 按首页窗开窗。
+``read_bytes`` 再 ``extract_office_bytes``（IPC 摄入 25 MiB）。PDF 按 ``pages``
+页窗开窗（内部 ``start_page`` / ``page_end``）。
 ``convert_with_markitdown`` 仅服务非 docx 桶；``preparse_resident`` 仍只服务附件驻留。
 
 → 见决策：docs/02-架构/工作区.md §七（Office 云=本地）与附件驻留实现。
@@ -39,7 +39,7 @@ from pathlib import Path
 from xml.etree import ElementTree as ET
 
 from agentcore.core.logging import get_logger
-from agentcore.workspace.protocol import WorkspaceBackend, WorkspaceError
+from agentcore.workspace.protocol import PathNotFound, WorkspaceBackend, WorkspaceError
 
 logger = get_logger(__name__)
 
@@ -61,7 +61,7 @@ _SCAN_LARGE_BYTES = 50_000
 _SCAN_LARGE_MIN_ALNUM = 200
 
 # 首轮 prompt 内联上限（字符）。约 6k tokens，给历史/工具/记忆留预算；
-# 全文落在 ``*.md`` 副本，Agent 可用 read 续读。多附件时各自独立截断。
+# 超窗只给原件路径，Agent 用 read 续读。多附件时各自独立截断。
 ATTACHMENT_INLINE_MAX_CHARS = 24_000
 
 # 表格预览：只读到此字节数；样例/列/单元格各自封顶。全量行不进 prompt。
@@ -74,8 +74,7 @@ TABLE_PREVIEW_MAX_PROMPT_CHARS = 4_000
 
 SCAN_NOTICE = (
     "这份文件几乎抽不到文本层（扫描件或纯图）。当前没有 OCR。"
-    "按文件名归类；"
-    "offset/limit 变不出文本层。"
+    "按文件名归类。"
 )
 
 
@@ -112,7 +111,7 @@ class PreparseResult:
     """Inline body (or scan/failure note). Empty when skipped, or when a large
     plain-text file is a path pointer (``truncated`` True; body stays on disk)."""
     parsed_workspace_path: str | None = None
-    """Workspace-relative readable copy (``*.md``) or the original when already text."""
+    """Original workspace path when this is a pointer; None when text is inlined."""
     detail: str = ""
     """Short machine-oriented reason for logs / tests."""
     truncated: bool = False
@@ -248,11 +247,6 @@ def looks_like_scanned(text: str, raw_size: int) -> bool:
     return raw_size >= _SCAN_LARGE_BYTES and alnum < _SCAN_LARGE_MIN_ALNUM
 
 
-def parsed_copy_path(workspace_path: str) -> str:
-    """``attachments/report.docx`` → ``attachments/report.docx.md``."""
-    return f"{workspace_path}.md"
-
-
 def truncate_for_prompt(text: str, limit: int = ATTACHMENT_INLINE_MAX_CHARS) -> tuple[str, bool]:
     """Return ``(maybe_truncated_text, was_truncated)`` for first-turn inline context."""
     if len(text) <= limit:
@@ -293,18 +287,41 @@ def _normalize_start_page(start_page: int | str | None) -> int:
     return max(1, n)
 
 
-def _pdf_page_numbers(start_page: int) -> list[int]:
-    from agentcore.workspace.limits import OFFICE_EXTRACT_PDF_MAX_PAGES
+def _optional_page_int(value: int | str | None) -> int | None:
+    if value is None or value == "":
+        return None
+    try:
+        n = int(value)
+    except (TypeError, ValueError):
+        return None
+    return n if n >= 1 else None
 
-    start0 = _normalize_start_page(start_page) - 1
-    return list(range(start0, start0 + OFFICE_EXTRACT_PDF_MAX_PAGES))
+
+def _pdf_page_numbers(
+    start_page: int, *, page_end: int | None = None
+) -> list[int]:
+    start = _normalize_start_page(start_page)
+    last = _pdf_window_end(start, None, page_end=page_end)
+    return list(range(start - 1, last))
 
 
-def _pdf_window_end(start_page: int, page_total: int | None) -> int:
+def _pdf_window_end(
+    start_page: int,
+    page_total: int | None,
+    *,
+    page_end: int | None = None,
+) -> int:
     from agentcore.workspace.limits import OFFICE_EXTRACT_PDF_MAX_PAGES
 
     start = _normalize_start_page(start_page)
-    nominal = start + OFFICE_EXTRACT_PDF_MAX_PAGES - 1
+    if page_end is not None:
+        try:
+            nominal = max(start, int(page_end))
+        except (TypeError, ValueError):
+            nominal = start + OFFICE_EXTRACT_PDF_MAX_PAGES - 1
+        nominal = min(nominal, start + OFFICE_EXTRACT_PDF_MAX_PAGES - 1)
+    else:
+        nominal = start + OFFICE_EXTRACT_PDF_MAX_PAGES - 1
     if page_total is not None and page_total > 0:
         return min(nominal, page_total)
     return nominal
@@ -332,6 +349,7 @@ def _extract_pdf_text(
     *,
     path: Path | None = None,
     start_page: int = 1,
+    page_end: int | None = None,
 ) -> tuple[str, str]:
     """Page-windowed pdfminer first, then markitdown on page 1 only.
 
@@ -339,7 +357,7 @@ def _extract_pdf_text(
     markitdown (it cannot honor the window).
     """
     start = _normalize_start_page(start_page)
-    page_numbers = _pdf_page_numbers(start)
+    page_numbers = _pdf_page_numbers(start, page_end=page_end)
     try:
         from pdfminer.high_level import extract_text
 
@@ -406,17 +424,41 @@ def _source_size(*, data: bytes | None, path: Path | None) -> int | None:
 
 
 def extract_office_payload(
-    data: bytes, ext: str, start_page: int = 1
+    data: bytes,
+    ext: str,
+    start_page: int = 1,
+    *,
+    page_end: int | None = None,
+    page_total: int | None = None,
 ) -> ExtractResult:
     """Sync extract used by the worker. Never spawns (avoids recursion)."""
-    return _extract_office_core(ext, data=data, path=None, start_page=start_page)
+    return _extract_office_core(
+        ext,
+        data=data,
+        path=None,
+        start_page=start_page,
+        page_end=page_end,
+        page_total=page_total,
+    )
 
 
 def extract_office_from_disk(
-    path: Path, ext: str, start_page: int = 1
+    path: Path,
+    ext: str,
+    start_page: int = 1,
+    *,
+    page_end: int | None = None,
+    page_total: int | None = None,
 ) -> ExtractResult:
     """Sync extract from a filesystem path. Worker opens the file; parent must not slurp."""
-    return _extract_office_core(ext, data=None, path=path, start_page=start_page)
+    return _extract_office_core(
+        ext,
+        data=None,
+        path=path,
+        start_page=start_page,
+        page_end=page_end,
+        page_total=page_total,
+    )
 
 
 def _extract_office_core(
@@ -425,6 +467,8 @@ def _extract_office_core(
     data: bytes | None,
     path: Path | None,
     start_page: int = 1,
+    page_end: int | None = None,
+    page_total: int | None = None,
 ) -> ExtractResult:
     """Shared worker body for stdin bytes or ``--extract-path``."""
     normalized = _normalize_extract_ext(ext)
@@ -444,9 +488,9 @@ def _extract_office_core(
 
     from agentcore.workspace.limits import OFFICE_EXTRACT_OUTPUT_CHARS
 
-    page_start: int | None = None
-    page_end: int | None = None
-    page_total: int | None = None
+    result_start: int | None = None
+    result_end: int | None = None
+    result_total: int | None = None
     try:
         if normalized in _PYTHON_DOCX_EXTENSIONS:
             text = _extract_docx_with_python_docx(
@@ -455,21 +499,24 @@ def _extract_office_core(
             engine = "python-docx"
         elif normalized == ".pdf":
             start = _normalize_start_page(start_page)
-            page_total = _pdf_page_total(data, path=path)
-            page_start = start
-            page_end = _pdf_window_end(start, page_total)
-            if page_total is not None and start > page_total:
+            known_total = _optional_page_int(page_total)
+            result_total = (
+                known_total if known_total is not None else _pdf_page_total(data, path=path)
+            )
+            result_start = start
+            result_end = _pdf_window_end(start, result_total, page_end=page_end)
+            if result_total is not None and start > result_total:
                 return ExtractResult(
                     status=ParseStatus.OK,
                     text="",
                     detail="pdf_page_window_empty",
                     size_bytes=raw_size,
-                    page_start=page_start,
-                    page_end=page_end,
-                    page_total=page_total,
+                    page_start=result_start,
+                    page_end=result_end,
+                    page_total=result_total,
                 )
             text, engine = _extract_pdf_text(
-                data, path=path, start_page=start
+                data, path=path, start_page=start, page_end=result_end
             )
         else:
             text = _convert_with_markitdown(data, normalized, path=path)
@@ -485,9 +532,9 @@ def _extract_office_core(
             status=ParseStatus.FAILED,
             detail=f"convert:{type(e).__name__}",
             size_bytes=raw_size,
-            page_start=page_start,
-            page_end=page_end,
-            page_total=page_total,
+            page_start=result_start,
+            page_end=result_end,
+            page_total=result_total,
         )
 
     if normalized == ".pdf" and _normalize_start_page(start_page) > 1 and not (
@@ -498,9 +545,9 @@ def _extract_office_core(
             text="",
             detail="pdf_page_window_empty",
             size_bytes=raw_size,
-            page_start=page_start,
-            page_end=page_end,
-            page_total=page_total,
+            page_start=result_start,
+            page_end=result_end,
+            page_total=result_total,
         )
 
     if looks_like_scanned(text, raw_size or 0):
@@ -509,9 +556,9 @@ def _extract_office_core(
             text=SCAN_NOTICE,
             detail="scanned_or_empty_text_layer",
             size_bytes=raw_size,
-            page_start=page_start,
-            page_end=page_end,
-            page_total=page_total,
+            page_start=result_start,
+            page_end=result_end,
+            page_total=result_total,
         )
 
     if len(text) > OFFICE_EXTRACT_OUTPUT_CHARS:
@@ -521,9 +568,9 @@ def _extract_office_core(
         text=text,
         detail=f"ok:{engine}",
         size_bytes=raw_size,
-        page_start=page_start,
-        page_end=page_end,
-        page_total=page_total,
+        page_start=result_start,
+        page_end=result_end,
+        page_total=result_total,
     )
 
 
@@ -552,7 +599,12 @@ def _reap_tree_sync(process: subprocess.Popen[bytes], pid: int) -> None:
 
 
 def _extract_worker_argv(
-    ext: str, *, source_path: Path | None = None, start_page: int = 1
+    ext: str,
+    *,
+    source_path: Path | None = None,
+    start_page: int = 1,
+    page_end: int | None = None,
+    page_total: int | None = None,
 ) -> list[str]:
     """``sys.executable`` so the sidecar bundled interpreter is used."""
     argv = [
@@ -564,6 +616,12 @@ def _extract_worker_argv(
         "--start-page",
         str(_normalize_start_page(start_page)),
     ]
+    end = _optional_page_int(page_end)
+    if end is not None:
+        argv.extend(["--page-end", str(end)])
+    total = _optional_page_int(page_total)
+    if total is not None:
+        argv.extend(["--page-total", str(total)])
     if source_path is not None:
         argv.extend(["--extract-path", str(source_path)])
     return argv
@@ -577,6 +635,8 @@ def _run_extract_subprocess(
     holder: dict | None = None,
     source_path: Path | None = None,
     start_page: int = 1,
+    page_end: int | None = None,
+    page_total: int | None = None,
 ) -> ExtractResult:
     """Blocking Popen + communicate timeout. Safe on Windows SelectorEventLoop."""
     fd, out_path = tempfile.mkstemp(suffix=".extract.json")
@@ -588,7 +648,11 @@ def _run_extract_subprocess(
         env[_EXTRACT_OUTPUT_ENV] = out_path
         proc = subprocess.Popen(
             _extract_worker_argv(
-                ext, source_path=source_path, start_page=start_page
+                ext,
+                source_path=source_path,
+                start_page=start_page,
+                page_end=page_end,
+                page_total=page_total,
             ),
             stdin=subprocess.DEVNULL if path_mode else subprocess.PIPE,
             stdout=subprocess.DEVNULL,
@@ -670,6 +734,8 @@ def _extract_worker_main(argv: list[str]) -> int:
     ext = ".pdf"
     source_path: Path | None = None
     start_page = 1
+    page_end: int | None = None
+    page_total: int | None = None
     args = list(argv)
     while args:
         token = args.pop(0)
@@ -679,16 +745,30 @@ def _extract_worker_main(argv: list[str]) -> int:
             source_path = Path(args.pop(0))
         elif token == "--start-page" and args:
             start_page = _normalize_start_page(args.pop(0))
+        elif token == "--page-end" and args:
+            page_end = _optional_page_int(args.pop(0))
+        elif token == "--page-total" and args:
+            page_total = _optional_page_int(args.pop(0))
     out_path = os.environ.get(_EXTRACT_OUTPUT_ENV, "")
     if not out_path:
         return 2
     # Keep JSON file the only stdout protocol; libraries may print.
     sys.stdout = sys.stderr
     if source_path is not None:
-        result = extract_office_from_disk(source_path, ext, start_page=start_page)
+        result = extract_office_from_disk(
+            source_path,
+            ext,
+            start_page=start_page,
+            page_end=page_end,
+            page_total=page_total,
+        )
     else:
         result = extract_office_payload(
-            sys.stdin.buffer.read(), ext, start_page=start_page
+            sys.stdin.buffer.read(),
+            ext,
+            start_page=start_page,
+            page_end=page_end,
+            page_total=page_total,
         )
     Path(out_path).write_text(
         json.dumps(_result_to_worker_payload(result), ensure_ascii=False),
@@ -703,6 +783,8 @@ async def extract_office_bytes(
     ext: str,
     timeout: float | None = None,
     start_page: int = 1,
+    page_end: int | None = None,
+    page_total: int | None = None,
 ) -> ExtractResult:
     """Extract text from office/PDF bytes without writing a workspace ``*.md`` copy.
 
@@ -734,7 +816,13 @@ async def extract_office_bytes(
 
     def blocking() -> ExtractResult:
         return _run_extract_subprocess(
-            data, normalized, budget, holder=holder, start_page=start_page
+            data,
+            normalized,
+            budget,
+            holder=holder,
+            start_page=start_page,
+            page_end=page_end,
+            page_total=page_total,
         )
 
     fut = loop.run_in_executor(None, blocking)
@@ -758,6 +846,8 @@ async def extract_office_file(
     ext: str,
     timeout: float | None = None,
     start_page: int = 1,
+    page_end: int | None = None,
+    page_total: int | None = None,
 ) -> ExtractResult:
     """Extract from a resolved on-disk path. Parent must not ``read_bytes`` first."""
     from agentcore.workspace.limits import OFFICE_EXTRACT_TIMEOUT_SECONDS
@@ -789,6 +879,8 @@ async def extract_office_file(
             holder=holder,
             source_path=path,
             start_page=start_page,
+            page_end=page_end,
+            page_total=page_total,
         )
 
     fut = loop.run_in_executor(None, blocking)
@@ -812,6 +904,84 @@ def _cli_main(argv: list[str] | None = None) -> int:
         return _extract_worker_main(args)
     sys.stderr.write("internal office extract worker\n")
     return 2
+
+
+def _line_count(text: str) -> int:
+    if not text:
+        return 0
+    return text.count("\n") + (0 if text.endswith("\n") else 1)
+
+
+def _inline_or_pointer(
+    *,
+    workspace_path: str,
+    name: str | None,
+    text: str,
+    size_bytes: int | None = None,
+) -> PreparseResult:
+    """Inline extract when it fits; otherwise a pointer at the original file."""
+    body = text or ""
+    _, clipped = truncate_for_prompt(body)
+    if clipped:
+        logger.info(
+            "attachment.preparse_ok",
+            path=workspace_path,
+            parsed_path=workspace_path,
+            name=name,
+            chars=len(body),
+        )
+        return PreparseResult(
+            status=ParseStatus.OK,
+            text="",
+            parsed_workspace_path=workspace_path,
+            detail="extract_pointer",
+            truncated=True,
+            size_bytes=size_bytes,
+            total_lines=_line_count(body),
+        )
+    logger.info(
+        "attachment.preparse_ok",
+        path=workspace_path,
+        parsed_path=None,
+        name=name,
+        chars=len(body),
+    )
+    return PreparseResult(
+        status=ParseStatus.OK,
+        text=body,
+        parsed_workspace_path=None,
+        detail="ok",
+    )
+
+
+def _preparse_pdf(
+    *,
+    workspace_path: str,
+    name: str | None,
+    extracted: ExtractResult,
+) -> PreparseResult:
+    """PDF ingress: inline extract or path pointer. No sibling ``.txt``."""
+    if extracted.status == ParseStatus.SCANNED:
+        notice = extracted.text or SCAN_NOTICE
+        logger.info(
+            "attachment.preparse_scanned",
+            path=workspace_path,
+            name=name,
+            raw_bytes=extracted.size_bytes,
+            extracted_chars=len(extracted.text),
+        )
+        return PreparseResult(
+            status=ParseStatus.SCANNED,
+            text=notice,
+            parsed_workspace_path=None,
+            detail=extracted.detail or "scanned_or_empty_text_layer",
+        )
+    return _inline_or_pointer(
+        workspace_path=workspace_path,
+        name=name,
+        text=extracted.text,
+        size_bytes=extracted.size_bytes,
+    )
 
 
 async def preparse_resident(
@@ -884,20 +1054,15 @@ async def preparse_resident(
     if extracted.status == ParseStatus.FAILED:
         return PreparseResult(status=ParseStatus.FAILED, detail=extracted.detail)
 
+    if ext == ".pdf":
+        return _preparse_pdf(
+            workspace_path=workspace_path,
+            name=name,
+            extracted=extracted,
+        )
+
     if extracted.status == ParseStatus.SCANNED:
         notice = extracted.text or SCAN_NOTICE
-        copy_path = parsed_copy_path(workspace_path)
-        try:
-            await backend.write(copy_path, notice + "\n")
-        except WorkspaceError as e:
-            logger.warning(
-                "attachment.preparse_scan_note_write_failed",
-                path=copy_path,
-                error=str(e),
-            )
-            copy_path_out: str | None = None
-        else:
-            copy_path_out = copy_path
         logger.info(
             "attachment.preparse_scanned",
             path=workspace_path,
@@ -908,40 +1073,15 @@ async def preparse_resident(
         return PreparseResult(
             status=ParseStatus.SCANNED,
             text=notice,
-            parsed_workspace_path=copy_path_out,
+            parsed_workspace_path=None,
             detail=extracted.detail or "scanned_or_empty_text_layer",
         )
 
-    text = extracted.text
-    copy_path = parsed_copy_path(workspace_path)
-    try:
-        await backend.write(copy_path, text if text.endswith("\n") else text + "\n")
-    except WorkspaceError as e:
-        logger.warning(
-            "attachment.preparse_copy_write_failed",
-            path=copy_path,
-            error=str(e),
-        )
-        # Still expose text inline even if the durable copy failed.
-        return PreparseResult(
-            status=ParseStatus.OK,
-            text=text,
-            parsed_workspace_path=None,
-            detail="ok_inline_only",
-        )
-
-    logger.info(
-        "attachment.preparse_ok",
-        path=workspace_path,
-        parsed_path=copy_path,
+    return _inline_or_pointer(
+        workspace_path=workspace_path,
         name=name,
-        chars=len(text),
-    )
-    return PreparseResult(
-        status=ParseStatus.OK,
-        text=text,
-        parsed_workspace_path=copy_path,
-        detail="ok",
+        text=extracted.text,
+        size_bytes=extracted.size_bytes,
     )
 
 

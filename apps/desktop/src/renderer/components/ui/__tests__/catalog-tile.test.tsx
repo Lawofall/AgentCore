@@ -155,17 +155,17 @@ describe("CatalogTile", () => {
       <CatalogTile
         density="compact"
         accessoryPlacement="description"
-        title="把数据文件整理成打开扫得懂的表"
-        description="用户要把数据文件交成可打开的表时才查阅。"
+        title="页面长什么样、交互怎么铺"
+        description="用户要打开的展示页、落地页、工具壳、仪表盘或原型才查阅。"
         accessory={<span>官方</span>}
         onClick={() => {}}
       />,
     );
     const title = screen.getByRole("heading", {
-      name: "把数据文件整理成打开扫得懂的表",
+      name: "页面长什么样、交互怎么铺",
     });
     const description = screen.getByText(
-      "用户要把数据文件交成可打开的表时才查阅。",
+      "用户要打开的展示页、落地页、工具壳、仪表盘或原型才查阅。",
     );
     expect(description.className).toContain("line-clamp-2");
     expect(description.className).not.toContain("truncate");

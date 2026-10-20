@@ -406,6 +406,7 @@ async def _prepare_agent_node(
                 context_inject=context_inject or None,
                 tool_defs=resolve_openai_tool_defs(worker_tools, allowed_tools, set()),
                 turn_envelope=turn_envelope,
+                materials_body=env.materials_body,
             )
         # Worker window head (§8.3): journal the opening task-prompt so
         # ``window_from_journal(run_id=…)`` anchors on THIS run's system+user, not the

@@ -352,6 +352,7 @@ async def run_chat_pipeline(
             chat_envelope=chat_envelope,
             chat_system_in_history=chat_system_in_history,
             opening_tool_defs=assembled.chat_tool_defs,
+            materials_body=prepared.materials_body,
         )
         captain_state = await run_captain(captain_spec)
 

@@ -1,7 +1,7 @@
 """System Skills: code-defined capability docs the CEO pulls on demand (渐进披露).
 
 提示词瘦身 P2 的落地。CEO 的常驻系统提示词只保留「决定干什么」的路由核心（见
-``prompt._CEO_CORE_HINT``）；「怎么干」的进阶机制（整理表、页面观感…）
+``prompt._CEO_CORE_HINT``）；「怎么干」的进阶机制（本桌规矩、页面观感…）
 下沉为 **系统 Skill**：代码定义、随 CEO 常备、以一张「按需目录」常驻（仅一行触发
 描述），模型决定要用某能力后才用 ``consult(name)`` 把完整指引拉回自己的 ReAct 循环。
 

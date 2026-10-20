@@ -356,20 +356,20 @@ describe("PromptOverview", () => {
       rail: emptyRail({
         official: [
           {
-            id: skillCatalogId("data_file_landing"),
+            id: skillCatalogId("page_ui"),
             kind: "skill",
             group: "factory",
-            label: "data_file_landing",
+            label: "page_ui",
             depth: 0,
             tocGroup: "交付",
             parentId: null,
             skill: {
-              name: "data_file_landing",
+              name: "page_ui",
               summary:
-                "用户要把数据文件交成可打开的表时才查阅。成篇、做页面、问产品不查阅。",
+                "用户要打开的展示页、落地页、工具壳、仪表盘或原型才查阅。脚本、文档、接口、只改逻辑不查阅。",
               body: "how",
               group: "交付",
-              blurb: "把数据文件整理成打开扫得懂的表",
+              blurb: "页面长什么样、交互怎么铺",
             },
           },
         ],
@@ -377,12 +377,12 @@ describe("PromptOverview", () => {
     });
     const factory = screen.getByTestId("prompt-rail-factory");
     const title = within(factory).getByRole("heading", {
-      name: "把数据文件整理成打开扫得懂的表",
+      name: "页面长什么样、交互怎么铺",
     });
     expect(
-      within(factory).getByText("用户要把数据文件交成可打开的表时才查阅。"),
+      within(factory).getByText("用户要打开的展示页、落地页、工具壳、仪表盘或原型才查阅。"),
     ).toBeTruthy();
-    expect(factory.textContent).not.toContain("成篇");
+    expect(factory.textContent).not.toContain("脚本");
     expect(title.nextElementSibling?.textContent).toContain("官方");
     expect(screen.queryByText("0 条")).toBeNull();
   });

@@ -316,7 +316,7 @@ def test_worker_opening_drops_ceo_orchestration_context():
     reg = build_system_skill_registry()
     leaf_names = {s.name for s in reg.available(set(), audience=AUDIENCE_WORKER)}
     lead_names = {s.name for s in reg.available({"delegate"}, audience=AUDIENCE_WORKER)}
-    assert leaf_names == {"prompts", "data_file_landing", "page_ui"}
+    assert leaf_names == {"prompts", "page_ui"}
     assert lead_names == leaf_names
     worker_dir = compose_worker_base_prompt(
         base,
@@ -326,7 +326,6 @@ def test_worker_opening_drops_ceo_orchestration_context():
         ],
     )
     assert "page_ui" in worker_dir
-    assert "data_file_landing" in worker_dir
     lead_dir = compose_worker_base_prompt(
         base,
         on_demand_entries=[
@@ -366,9 +365,7 @@ def test_core_teaches_narrowed_attachment_scope_must_start():
     assert "<本轮材料>" in with_flag
     assert "【本轮材料收窄】" in with_flag
     assert "[resident missing]" in with_flag
-    assert attachment_material_scene("<附件>\nfoo\n</附件>") is True
-    assert attachment_material_scene("--- File: a.zip [resident missing] ---") is True
-    assert attachment_material_scene(None) is False
-    assert attachment_material_scene("") is False
-    assert attachment_material_scene("<队员点名/>") is False
-    assert attachment_material_scene("<钉住条目>\n设定\n</钉住条目>") is False
+    assert attachment_material_scene(has_file_parts=True) is True
+    assert attachment_material_scene(has_resident_missing=True) is True
+    assert attachment_material_scene() is False
+    assert attachment_material_scene(has_file_parts=False, has_resident_missing=False) is False

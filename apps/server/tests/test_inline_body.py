@@ -8,6 +8,7 @@ from agentcore.core.inline_body import (
     parse_inline_body,
     plain_text,
     render_inline_labels,
+    render_request_text,
     serialize_inline_body,
     token,
     weave_inline_body,
@@ -66,18 +67,28 @@ def test_weave_puts_file_bodies_at_pills():
 
 
 def test_apply_inline_body_noop_without_markers():
-    msg, ctx = apply_inline_body("hello", ["block"], [], "FULL", "SLIM")
+    msg = apply_inline_body("hello", [], [])
     assert msg == "hello"
-    assert ctx == "FULL"
 
 
-def test_apply_inline_body_switches_to_slim():
-    msg, ctx = apply_inline_body(
-        f"x{token('A', 0)}",
+def test_apply_inline_body_weaves_file_at_pill():
+    msg = apply_inline_body(
+        f"x{token('A', 0)}{token('M', 0)}",
         ["BLOCK"],
         [{"role": "法务", "agent_id": "a"}],
-        "FULL",
-        "SLIM",
     )
     assert "BLOCK" in msg
-    assert ctx == "SLIM"
+    assert "（点名 法务）" in msg
+
+
+def test_render_request_text_drops_attachment_pills():
+    raw = f"整理下{token('A', 0)}这个"
+    out = render_request_text(raw, None, 1)
+    assert out == "整理下这个"
+    assert "---" not in out
+
+
+def test_render_request_text_keeps_mention_stubs():
+    raw = f"请{token('M', 0)}看"
+    out = render_request_text(raw, [{"role": "研究员", "agent_id": "w"}], 0)
+    assert out == "请（点名 研究员）看"

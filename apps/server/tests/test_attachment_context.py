@@ -30,16 +30,15 @@ async def test_none_and_empty_return_none():
 
 
 @pytest.mark.asyncio
-async def test_attachment_block_frames_this_message_vs_workspace_history():
-    """附件段须框定本条消息附件，并说明 attachments/ 同名跨轮覆盖、索引其余属历史轮。"""
+async def test_attachment_block_is_file_facts_only():
     out = await _build_attachment_context(
         [{"name": "shot.png", "path": "/local/shot.png", "text": "pixels"}]
     )
     assert out is not None
-    assert "以下是本条消息的附件" in out
-    assert "同名" in out and "覆盖" in out
-    assert "历史轮" in out
-    assert "attachments/" in out
+    assert "--- File: shot.png (/local/shot.png) ---" in out
+    assert "pixels" in out
+    assert "以下是本条消息的附件" not in out
+    assert "<附件>" not in out
 
 
 @pytest.mark.asyncio
@@ -51,10 +50,7 @@ async def test_unresident_file_uses_local_path_no_hint():
     assert "--- File: a.py (/local/a.py) ---" in out
     assert "print(1)" in out
     assert "are in your workspace" not in out
-    # 定案 A：附件是本轮可开工输入，勿写成「仅参考」。
-    assert "actionable inputs" in out
-    assert "reference material" not in out
-    assert "do not idle" in out or "full repo is missing" in out
+    assert "actionable inputs" not in out
 
 
 @pytest.mark.asyncio
@@ -72,8 +68,8 @@ async def test_resident_file_uses_workspace_path_and_hint():
     assert out is not None
     # The header points at the durable path, not the local one.
     assert "--- File: a.py (attachments/a.py) ---" in out
-    assert "are in your workspace" in out
-    assert "edit them with the file tools" in out
+    assert "print(1)" in out
+    assert "are in your workspace" not in out
 
 
 @pytest.mark.asyncio
@@ -92,11 +88,8 @@ async def test_spreadsheet_without_preview_omits_run_when_unassembled():
     )
     assert out is not None
     assert "[表格 / 仅路径]" in out
+    assert "Could not read column names and sample rows." in out
     assert "includes run" not in out
-    assert "with run" not in out
-    assert "Do NOT use an OS absolute path" in out
-    assert "Do NOT treat file_list emptiness as missing" in out
-    assert "are in your workspace" in out
     assert "C:\\" not in out
     assert "/Users/" not in out
 
@@ -113,16 +106,12 @@ async def test_spreadsheet_mentions_run_only_when_in_tool_table():
     with_exec = await _build_attachment_context(
         [att], available_tools=frozenset({"read", "run"})
     )
-    assert with_exec is not None
-    assert "includes run" in with_exec
-    assert "CEO has no run" not in with_exec
-
     without_exec = await _build_attachment_context([att], available_tools=frozenset())
-    assert without_exec is not None
-    assert "includes run" not in without_exec
-    assert "does not include run" in without_exec
-    assert "structure report" in without_exec
-    assert "transform script" in without_exec
+    assert with_exec is not None and without_exec is not None
+    assert with_exec == without_exec
+    assert "[表格 / 仅路径]" in with_exec
+    assert "includes run" not in with_exec
+    assert "does not include run" not in without_exec
 
 
 @pytest.mark.asyncio
@@ -143,11 +132,9 @@ async def test_resident_missing_honest_block_no_saved_claim():
     assert out is not None
     assert "[resident missing]" in out
     assert "attachments/独立站源码（新）.zip" in out
-    assert "NOT in the workspace" in out or "bytes are NOT" in out
-    assert "ask_user" in out and "re-upload" in out
-    assert "Do NOT delegate unzip" in out or "Do NOT treat this as delivered" in out
+    assert "bytes are not in the workspace" in out
     assert "are in your workspace" not in out
-    assert "ask_user to re-upload" in out or "never dispatch unzip" in out
+    assert "ask_user" not in out
 
 
 @pytest.mark.asyncio
@@ -160,7 +147,7 @@ async def test_truncated_note_and_directory_listing():
     )
     assert "--- File: big.txt (/big.txt) (truncated) ---" in out
     assert "--- Directory: src (/src) ---" in out
-    assert "File paths (contents not included):" in out
+    assert "a.py" in out and "b.py" in out
 
 
 @pytest.mark.asyncio
@@ -184,9 +171,7 @@ async def test_large_plain_text_is_path_pointer_not_inline_body():
     assert "[large text / path pointer]" in out
     assert "9905619 bytes" in out
     assert "184320 lines" in out
-    assert "not inlined" in out
-    assert "use read or grep" in out.lower() or "Use read" in out
-    assert "possibly truncated" not in out
+    assert "Body stays on disk at this path." in out
 
 
 class _AsyncCm:
@@ -304,7 +289,6 @@ async def test_conversation_deep_read_success(monkeypatch):
     assert "### Assistant" in out
     assert "在的" in out
     assert "CLIENT_SHALLOW_SHOULD_NOT_APPEAR" not in out
-    assert "read_conversation" in out  # guidance mentions continuation path
     assert "are in your workspace" not in out
 
 
@@ -667,8 +651,8 @@ async def test_table_structure_preview_hides_full_body():
     assert secret not in out
     assert "includes run" not in out
     assert "with run" not in out
-    assert "column names, types, and sample rows only" in out
-    assert "structure preview only" not in out
+    assert "columns" in out
+    assert "sample rows" in out
 
 
 @pytest.mark.asyncio
@@ -688,14 +672,9 @@ async def test_office_extract_declares_lossy_tables_without_run():
         available_tools=frozenset({"read"}),
     )
     assert out is not None
-    assert "lossy for tabular content" in out
-    assert "Do not use this extract as the data source" in out
+    assert "转账时间 收款方 金额" in out
+    assert "lossy for tabular content" not in out
     assert "includes run" not in out
-    assert "with run" not in out
-    assert "Parse the original workspace file with run" not in out
-    assert "structure report" in out
-    assert "transform script" in out
-    assert "hand-copied" in out
 
 
 @pytest.mark.asyncio
@@ -854,7 +833,7 @@ async def test_document_pin_is_not_uploaded_material():
     assert "<钉住条目>" in out
     assert "回复保持短句。" in out
     assert "<附件>" not in out
-    assert attachment_material_scene(out) is False
+    assert attachment_material_scene() is False
 
 
 @pytest.mark.asyncio
@@ -872,12 +851,13 @@ async def test_document_pin_keeps_inline_slot_without_file_body():
             },
         ]
     )
-    assert prompt.envelope is not None
-    assert "<钉住条目>" in prompt.envelope
-    assert "<附件>" in prompt.envelope
-    assert "短句" in prompt.envelope
+    assert prompt.pinned_xml is not None
+    assert "<钉住条目>" in prompt.pinned_xml
+    assert "<附件>" not in prompt.pinned_xml
+    assert "短句" in prompt.pinned_xml
     assert prompt.file_blocks[0].startswith("--- File: a.txt")
     assert prompt.file_blocks[1] == ""
+    assert prompt.has_file_parts is True
 
 
 @pytest.mark.asyncio
@@ -947,13 +927,12 @@ async def test_unpacked_archive_lists_folder_not_run_steer():
     assert out is not None
     assert "[archive / unpacked → attachments/病历]" in out
     assert "attachments/病历/a.pdf" in out
-    assert "already a folder" in out
-    assert "parse the workspace-relative path" not in out.lower()
+    assert "2 files in `attachments/病历`." in out
     assert "[binary]" not in out
 
 
 @pytest.mark.asyncio
-async def test_password_archive_asks_user_not_run():
+async def test_password_archive_is_not_binary():
     out = await _build_attachment_context(
         [
             {
@@ -969,6 +948,24 @@ async def test_password_archive_asks_user_not_run():
     )
     assert out is not None
     assert "[archive / password]" in out
-    assert "ask_user" in out
+    assert "Password-protected" in out
     assert "[binary]" not in out
-    assert "parse the workspace-relative path" not in out.lower()
+
+
+@pytest.mark.asyncio
+async def test_failed_archive_stays_archive_not_binary():
+    out = await _build_attachment_context(
+        [
+            {
+                "name": "1.病历资料(1).rar",
+                "path": "attachments/1.病历资料(1).rar",
+                "text": "",
+                "binary": True,
+                "workspace_path": "attachments/1.病历资料(1).rar",
+                "archive_status": "failed",
+            }
+        ]
+    )
+    assert out is not None
+    assert "[archive / unreadable]" in out
+    assert "[binary]" not in out

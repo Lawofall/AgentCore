@@ -117,11 +117,13 @@ class DebateTool:
         registry: ClientRequestBridge | None = None,
         session_store: Any = None,
         session_loader: Any = None,
+        materials_body: str = "",
     ) -> None:
         self._llm = llm
         self._sink = sink
         self._system_prompt = system_prompt
         self._user_message = user_message
+        self._materials_body = materials_body
         self._tools = tools
         self._base_tool_context = base_tool_context
         self._profile_set = profile_set or default_profile_set()

@@ -91,9 +91,6 @@ REASON_UNVERIFIED_NOTE = "unverified_note"
 REASON_PATH_HINT = "path_hint"
 REASON_PATH_MISMATCH = "path_mismatch"
 REASON_FILES_NOT_LANDED = "files_not_landed"
-# No-exec worker shipped a table file while this turn had an opaque source
-# data file (attachment / workspace type signal — not body scan).
-REASON_NO_EXEC_TABLE = "no_exec_table"
 # Verify-shaped tool failure (browser navigate / test_run / verify 形 code_execute·terminal).
 REASON_VERIFY_FAILED = "verify_failed"
 # test_run verify-budget incomplete（进程已中止，非仍在跑）.

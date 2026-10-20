@@ -148,9 +148,9 @@ def weave_inline_body(
     file_blocks: Sequence[str],
     mention_stubs: Sequence[str],
 ) -> str | None:
-    """This-turn user message: file bodies sit where the user placed the pills.
+    """Render this-turn user message: file parts sit where the user placed the pills.
 
-    Returns None when there are no markers so callers keep the old envelope path.
+    Returns None when there are no markers.
     """
     if not has_inline_markers(content):
         return None
@@ -172,16 +172,35 @@ def weave_inline_body(
     return "".join(parts)
 
 
+def render_request_text(
+    content: str,
+    mentions: Sequence[Mapping[str, object]] | None,
+    attachment_count: int,
+) -> str:
+    """User-visible words plus mention stubs. Attachment pills are sibling materials."""
+    stubs = [mention_inline_stub(m) for m in (mentions or [])]
+    migrated = migrate_legacy_draft(content, attachment_count, len(stubs))
+    if not has_inline_markers(migrated):
+        return migrated
+    parts: list[str] = []
+    for kind, payload in parse_inline_body(migrated):
+        if kind == "text":
+            parts.append(str(payload))
+            continue
+        if kind == "mention":
+            idx = int(payload)
+            if 0 <= idx < len(stubs):
+                parts.append(stubs[idx])
+    return "".join(parts)
+
+
 def apply_inline_body(
     user_message: str,
     file_blocks: Sequence[str],
     mentions: Sequence[Mapping[str, object]] | None,
-    full_context: str | None,
-    slim_context: str | None,
-) -> tuple[str, str | None]:
-    """If the body has pills, weave materials into it and use the slim envelope."""
+) -> str:
+    """Migrate legacy chips, then weave file facts into pill order (tests / history)."""
     stubs = [mention_inline_stub(m) for m in (mentions or [])]
-    woven = weave_inline_body(user_message, file_blocks, stubs)
-    if woven is None:
-        return user_message, full_context
-    return woven, slim_context
+    migrated = migrate_legacy_draft(user_message, len(file_blocks), len(stubs))
+    woven = weave_inline_body(migrated, file_blocks, stubs)
+    return woven if woven is not None else migrated

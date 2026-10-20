@@ -705,14 +705,24 @@ class ServerWorkspace:
         return ReadHeadResult(data=data, size_bytes=size)
 
     async def extract_office(
-        self, path: str, *, ext: str, start_page: int = 1
+        self,
+        path: str,
+        *,
+        ext: str,
+        start_page: int = 1,
+        page_end: int | None = None,
+        page_total: int | None = None,
     ):
         """Stat then extract in a child that opens ``path``; do not slurp here."""
         from agentcore.workspace.attachment_parse import extract_office_file
 
         if self._external_needs_channel(path):
             return await self._require_external_bridge().extract_office(
-                path, ext=ext, start_page=start_page
+                path,
+                ext=ext,
+                start_page=start_page,
+                page_end=page_end,
+                page_total=page_total,
             )
         target = self._safe(path)
         if not target.exists():
@@ -721,7 +731,11 @@ class ServerWorkspace:
             raise NotAFile(path)
         self._reject_oversized_file(target, ingest_cap=OFFICE_EXTRACT_DISK_MAX_BYTES)
         return await extract_office_file(
-            target, ext=ext, start_page=start_page
+            target,
+            ext=ext,
+            start_page=start_page,
+            page_end=page_end,
+            page_total=page_total,
         )
 
     async def write_bytes(self, path: str, data: bytes) -> int:

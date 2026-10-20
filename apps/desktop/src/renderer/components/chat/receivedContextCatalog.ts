@@ -10,7 +10,8 @@ export const CONTEXT_CHANNEL_META: Record<
   system: { label: "系统提示", hint: "本回合实际遵循的系统指令" },
   tools: { label: "本回合工具", hint: "开场实际发给模型的工具表" },
   history: { label: "对话历史", hint: "本回合之前的往来" },
-  request: { label: "原始请求", hint: "老板交给整个团队的目标" },
+  request: { label: "原始请求", hint: "用户写下的原话" },
+  materials: { label: "材料", hint: "本条上传的附件事实" },
   team_position: { label: "团队位置", hint: "队友与产出去向" },
   dependency: { label: "前置", hint: "上游队友交付的产物" },
   workspace: { label: "工作区", hint: "共享工作区可读文件" },
@@ -93,6 +94,7 @@ const PINNED_SYSTEM_TAGS = [
   "按需目录",
   "工作区",
   "运行时",
+  "本轮材料",
 ] as const;
 
 const CONSULT_TOOLS = new Set([
@@ -121,7 +123,12 @@ const TURN_CHANNELS = new Set([
   "crux",
 ]);
 
-const MATERIAL_CHANNELS = new Set(["dependency", "opponent", "team_result"]);
+const MATERIAL_CHANNELS = new Set([
+  "materials",
+  "dependency",
+  "opponent",
+  "team_result",
+]);
 
 const ENVIRONMENT_CHANNELS = new Set([
   "workspace",
@@ -271,6 +278,7 @@ function splitSystemBlock(
     按需目录: [],
     工作区: [],
     运行时: [],
+    本轮材料: [],
   };
   const rest: PromptSection[] = [];
   for (const section of sections) {
@@ -285,7 +293,9 @@ function splitSystemBlock(
       );
     });
   });
-  if (rest.length > 0) items.push(factoryItem(block, blockIndex, rest));
+  if (joinSections(rest).trim().length > 0) {
+    items.push(factoryItem(block, blockIndex, rest));
+  }
   return items;
 }
 
@@ -399,17 +409,21 @@ export interface OpeningSection {
 }
 
 /**
- * Opening projection in wire order: the blocks the model was fed at the start
- * of the turn. System stays one body (catalog slices are an index). Consult
- * receipts are not blocks and stay out. Narrow layouts drop `channel=system`.
+ * Opening projection in wire order: the prompt bodies the model was fed.
+ * System stays one body (catalog slices are an index). The tools table is a
+ * sibling contract, not this essay — it stays a TOC row and is omitted here.
+ * Consult receipts are not blocks and stay out. Narrow layouts drop
+ * `channel=system`.
  */
 export function openingContextView(
   blocks: readonly ContextBlockWire[],
   opts: { includeSystem: boolean },
 ): { sections: OpeningSection[]; chars: number } {
-  const included = opts.includeSystem
-    ? blocks
-    : blocks.filter((block) => block.channel !== "system");
+  const included = blocks.filter((block) => {
+    if (block.channel === "tools") return false;
+    if (!opts.includeSystem && block.channel === "system") return false;
+    return true;
+  });
   let chars = 0;
   const sections = included.map((block) => {
     chars += block.chars;

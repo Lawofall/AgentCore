@@ -99,6 +99,7 @@ def _assemble_ceo_toolset(
     desktop_online: bool = False,
     worker_envelope: str = "",
     prefer_delegate: bool = False,
+    materials_body: str = "",
 ) -> tuple[DelegateTool, Any, ToolRegistry]:
     """Wire the CEO coordinator's toolset (delegate + read/retrieval + consult + …).
 
@@ -131,6 +132,7 @@ def _assemble_ceo_toolset(
         permission_axes=permission_axes,
         worker_envelope=worker_envelope,
         prefer_delegate=prefer_delegate,
+        materials_body=materials_body,
     )
     chat_tools = build_ceo_tool_registry(
         desktop_online=desktop_online,
@@ -166,6 +168,7 @@ def _assemble_ceo_toolset(
         registry=default_interaction_registry(),
         session_store=session_store,
         session_loader=session_loader,
+        materials_body=materials_body,
     )
     if not switch_blocks("debate"):
         chat_tools.register(debate_tool)

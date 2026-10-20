@@ -18,14 +18,9 @@ FAILED for ``strict``) lives in the executor. This module is a pure function.
 from __future__ import annotations
 
 import fnmatch
-from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Any
 
-from agentcore.runtime.runs.artifact_paths import (
-    is_opaque_source_data_path,
-    is_table_deliverable_path,
-)
 from agentcore.runtime.runs.types import Deliverable, deliverable_expects_landing
 from agentcore.workspace._paths import strip_root_label_prefix
 
@@ -83,99 +78,6 @@ def _stamp_warning_rows(
     return rows
 
 
-def _normalize_source_relpath(path: str) -> str:
-    """Workspace-relative POSIX form for source-path comparison."""
-    return path.replace("\\", "/").strip().lstrip("./")
-
-
-def collect_opaque_source_data_paths(
-    *,
-    material_paths: Iterable[str] | None = None,
-    workspace_paths: Iterable[str] | None = None,
-    landed_paths: Iterable[str] | None = None,
-) -> list[str]:
-    """This-turn source files workers cannot reliably parse without execution.
-
-    Provenance, not names: this-turn attachments (``material_paths``) plus
-    pre-existing workspace files of opaque types. Historical ``attachments/``
-    entries that are not this-turn materials are skipped. This-run writes
-    (``landed_paths``) are not sources. ``AgentCore/`` draft tree leftovers
-    are not user source files.
-    """
-    from agentcore.workspace.sparse_listing import is_attachment_path
-
-    def _norm(raw: str) -> str:
-        return _normalize_source_relpath(raw)
-
-    landed = {_norm(p) for p in (landed_paths or ()) if p}
-    material_set = {_norm(p) for p in (material_paths or ()) if p}
-    out: list[str] = []
-    seen: set[str] = set()
-
-    def _add(path: str) -> None:
-        if not path or path in seen or not is_opaque_source_data_path(path):
-            return
-        seen.add(path)
-        out.append(path)
-
-    for raw in material_paths or ():
-        _add(_norm(raw))
-    for raw in workspace_paths or ():
-        path = _norm(raw)
-        if not path or path in landed:
-            continue
-        if is_attachment_path(path) and path not in material_set:
-            continue
-        if path == "AgentCore" or path.startswith("AgentCore/"):
-            continue
-        _add(path)
-    return out
-
-
-def _no_exec_table_gap(
-    *,
-    can_execute: bool,
-    workspace_paths: list[str] | None,
-    source_data_paths: list[str] | None,
-) -> tuple[str, dict[str, str]] | None:
-    """Hard gap: no-exec + opaque source data file + landed table file.
-
-    Premise is structural (this-turn attachments / workspace source type).
-    Inline data with no source file is not a gap — landing csv/xlsx is fine.
-    """
-    if can_execute:
-        return None
-    has_opaque_source = any(
-        p and is_opaque_source_data_path(p) for p in (source_data_paths or ())
-    )
-    if not has_opaque_source:
-        return None
-    from agentcore.runtime.delegate.delivery_status import REASON_NO_EXEC_TABLE
-
-    source_set = {
-        _normalize_source_relpath(p) for p in (source_data_paths or ()) if p
-    }
-    seen: set[str] = set()
-    paths: list[str] = []
-    for raw in workspace_paths or []:
-        if not raw or not is_table_deliverable_path(raw):
-            continue
-        rel = _normalize_source_relpath(raw)
-        if not rel or rel in seen or rel in source_set:
-            continue
-        seen.add(rel)
-        paths.append(raw)
-    if not paths:
-        return None
-    listed = "、".join(f"`{p}`" for p in paths[:6])
-    more = f" 等 {len(paths)} 个" if len(paths) > 6 else ""
-    text = (
-        f"无执行环境却落了表文件：{listed}{more}。"
-        "本回合完整交付应是结构报告 + 待跑脚本，禁止用手抄表交差。"
-    )
-    return text, {"description": text, "reason": REASON_NO_EXEC_TABLE}
-
-
 # 定案 B · 终态可见性：per-worker soft tip 前缀，CEO / delivery_status 按角色辨认。
 _MEMBER_WAVE_UNDELIVERED = "本队员本波未交卷"
 
@@ -221,8 +123,6 @@ def check_contract(
     debrief: dict[str, Any] | None = None,
     workspace_paths: list[str] | None = None,
     landing_failure_kind: str | None = None,
-    can_execute: bool = True,
-    source_data_paths: list[str] | None = None,
 ) -> ContractVerdict:
     """Check ``content`` against ``deliverable``; return a verdict + human reasons.
 
@@ -238,10 +138,6 @@ def check_contract(
     ``workspace_paths`` is the flat path index used to reconcile ``artifacts``
     patterns. Callers pass the live workspace listing unioned with this run's
     ``files_touched``; ``None`` / empty means the workspace looks empty.
-
-    ``can_execute`` is the turn's execution-class fact. False + a this-turn opaque
-    source data file + a landed spreadsheet/table file is a gap — hand-copied
-    result sheets are not no-exec complete delivery.
 
     Workers often finish with ``write`` + ``handoff`` and no streamed prose.
     The baseline also accepts workspace writes (``files_written > 0``) or a usable
@@ -281,14 +177,6 @@ def check_contract(
             path_mismatch_warnings, reason=REASON_PATH_HINT, severity="warning"
         ),
     ]
-    table_gap = _no_exec_table_gap(
-        can_execute=can_execute,
-        workspace_paths=workspace_paths,
-        source_data_paths=source_data_paths,
-    )
-    if table_gap:
-        warnings.append(table_gap[0])
-        warning_rows.append(table_gap[1])
     return ContractVerdict(
         ok=True,
         warnings=warnings,

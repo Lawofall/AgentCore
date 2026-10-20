@@ -10,6 +10,7 @@ from agentcore.tools.builtin.file_ops.read import (
     _effective_offset,
 )
 from agentcore.tools.protocol import ToolResult
+from agentcore.workspace.pdf_pages import PdfPagesError, parse_pdf_pages
 
 
 def _file_read_effective_window(args: dict[str, Any]) -> tuple[int, int] | None:
@@ -30,7 +31,8 @@ def _file_read_round_coalesce_key(args: dict[str, Any]) -> str | None:
     """Same-round parallel ``read`` coalesce key: normalized path + effective window.
 
     Same path and same window share one underlying read (fan-out). Different
-    offset/limit windows do not. Empty path or unparseable window → no coalesce.
+    offset/limit or ``pages`` windows do not. Empty path or unparseable
+    window → no coalesce.
     """
     if not isinstance(args, dict):
         return None
@@ -40,8 +42,13 @@ def _file_read_round_coalesce_key(args: dict[str, Any]) -> str | None:
     window = _file_read_effective_window(args)
     if window is None:
         return None
+    try:
+        pages = parse_pdf_pages(args.get("pages"))
+    except PdfPagesError:
+        return None
     offset, limit = window
-    return f"{path}\0{offset}:{limit}"
+    pages_token = "" if pages is None else f"{pages[0]}-{pages[1]}"
+    return f"{path}\0{offset}:{limit}\0{pages_token}"
 
 
 def _clone_tool_result(result: ToolResult, tool_call_id: str) -> ToolResult:

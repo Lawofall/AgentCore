@@ -127,11 +127,13 @@ class DelegateTool:
         depth: int = 0,
         worker_envelope: str = "",
         prefer_delegate: bool = False,
+        materials_body: str = "",
     ) -> None:
         self._llm = llm
         self._sink = sink
         self._system_prompt = system_prompt
         self._worker_envelope = worker_envelope
+        self._materials_body = materials_body
         self._user_message = user_message
         self._history = history
         self._tools = tools

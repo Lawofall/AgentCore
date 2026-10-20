@@ -354,7 +354,13 @@ class WorkspaceBackend(Protocol):
         ...
 
     async def extract_office(
-        self, path: str, *, ext: str, start_page: int = 1
+        self,
+        path: str,
+        *,
+        ext: str,
+        start_page: int = 1,
+        page_end: int | None = None,
+        page_total: int | None = None,
     ) -> ExtractResult:
         """Extract Office/PDF text without the tool layer slurping the file.
 
@@ -362,9 +368,11 @@ class WorkspaceBackend(Protocol):
         open the file in the extract child (disk ingest cap). Channel
         ``LocalWorkspace`` still ingests via ``read_bytes`` (JSON/base64 IPC;
         desktop has no Python extract stack; channel ingest cap). ``start_page``
-        is extract-internal (1-based PDF window); model-facing ``read`` always
-        extracts the first window. Path errors raise like ``read_bytes``;
-        conversion failures return an ``ExtractResult``, they are not raised.
+        / ``page_end`` are extract-internal (1-based PDF window). Model-facing
+        ``read`` takes ``pages`` and maps it here. ``page_total`` skips a
+        recount when the caller already knows the document length. Path errors
+        raise like ``read_bytes``; conversion failures return an
+        ``ExtractResult``, they are not raised.
         """
         ...
 

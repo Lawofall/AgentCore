@@ -30,6 +30,14 @@ logger = get_logger(__name__)
 # Wire heading for the worker ``channel=system`` block (mirrors the LLM system
 # message). Keep in lockstep with CEO's "CEO 系统提示（本回合实际遵循的系统指令）".
 _WORKER_SYSTEM_HEADING = "队员系统提示（本回合实际遵循的系统指令）"
+_MATERIALS_HEADING = "本轮材料"
+
+
+def _materials_block(body: str) -> ContextBlock | None:
+    text = (body or "").strip()
+    if not text:
+        return None
+    return ContextBlock(channel="materials", heading=_MATERIALS_HEADING, body=text)
 
 
 def _observe_worker_opening(
@@ -131,6 +139,7 @@ def _build_messages(
     context_inject: Mapping[str, str] | None = None,
     tool_defs: list[dict] | None = None,
     turn_envelope: str | None = None,
+    materials_body: str = "",
 ) -> list[LLMMessage]:
     """Assemble the worker's opening messages from its inline role,
     the original request, its upstream dependency products, and its task.
@@ -169,6 +178,7 @@ def _build_messages(
         team_brief,
         context_inject=context_inject,
         identity=identity,
+        materials_body=materials_body,
     )
     if blocks_sink is not None:
         blocks_sink.append(
@@ -215,6 +225,7 @@ def _build_context_blocks(
     *,
     context_inject: Mapping[str, str] | None = None,
     identity: str = "",
+    materials_body: str = "",
 ) -> list[ContextBlock]:
     """The ordered material :class:`ContextBlock` list a worker's opening **user**
     message is rendered FROM (上下文传递可视化, worker 侧). Each block becomes a
@@ -242,11 +253,15 @@ def _build_context_blocks(
                 body=user_message,
             )
         )
-        blocks.append(
-            ContextBlock(channel="team_position", heading="你在团队中的位置", body=position)
-            )
     else:
         blocks.append(ContextBlock(channel="request", heading="原始用户请求", body=user_message))
+    materials = _materials_block(materials_body)
+    if materials is not None:
+        blocks.append(materials)
+    if position:
+        blocks.append(
+            ContextBlock(channel="team_position", heading="你在团队中的位置", body=position)
+        )
     if spec.role:
         blocks.append(
             ContextBlock(
@@ -456,6 +471,7 @@ def _build_captain_context_blocks(
     user_message: str,
     tool_defs: list[dict] | None = None,
     turn_envelope: str = "",
+    materials_body: str = "",
 ) -> list[ContextBlock]:
     """The ordered :class:`ContextBlock` list describing the CEO captain's OPENING context
     (上下文传递可视化, CEO 侧 通道①): its ``system`` prompt (决策②: 桌面按需弹窗对所有人可见 /
@@ -495,6 +511,9 @@ def _build_captain_context_blocks(
             )
         )
     blocks.append(ContextBlock(channel="request", heading="原始用户请求", body=user_message))
+    materials = _materials_block(materials_body)
+    if materials is not None:
+        blocks.append(materials)
     return blocks
 
 

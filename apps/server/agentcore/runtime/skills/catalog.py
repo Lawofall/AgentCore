@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from agentcore.runtime.skills.data_file_landing import _DATA_FILE_LANDING
 from agentcore.runtime.skills.page_ui import _PAGE_UI
 from agentcore.runtime.skills.product_help import build_product_help_body
 from agentcore.runtime.skills.prompts import _PROMPTS
@@ -18,7 +17,7 @@ from agentcore.runtime.skills.registry import (
 # --- The system skills (single source of truth) -----------------------------
 # Catalog summary is the only trigger before consult: when to open, plus the
 # usual false friend. Python len ≤80. HOW stays in the body. ``blurb`` is
-# toolbox-card only. A bare noun ("整理表") is opened on unrelated turns.
+# toolbox-card only. A bare noun ("页面观感") is opened on unrelated turns.
 _SYSTEM_SKILLS: tuple[SystemSkill, ...] = (
     SystemSkill(
         name="prompts",
@@ -26,16 +25,6 @@ _SYSTEM_SKILLS: tuple[SystemSkill, ...] = (
         blurb="本桌规矩怎么写成常驻、按需、碰到文件",
         body=_PROMPTS,
         group=GROUP_WORKSPACE,
-    ),
-    SystemSkill(
-        name="data_file_landing",
-        summary="用户要把数据文件交成可打开的表时才查阅。成篇、做页面、问产品不查阅。",
-        blurb="把数据文件整理成打开扫得懂的表",
-        body=_DATA_FILE_LANDING,
-        # Consult is CEO+worker. Body is the worker loop; CEO still consults to brief.
-        # Do not gate on ``run``: this turn may have no execution assembled; the
-        # brief still belongs in the supervisor catalog.
-        group=GROUP_DELIVERY,
     ),
     SystemSkill(
         name="page_ui",

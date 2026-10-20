@@ -17,7 +17,6 @@ from agentcore.runtime.runs.constants import HANDOFF_TOOL_NAME
 from agentcore.runtime.runs.contract import (
     ContractVerdict,
     check_contract,
-    collect_opaque_source_data_paths,
     format_feedback,
     format_handoff_feedback,
     format_interrupted_pass_note,
@@ -102,9 +101,6 @@ async def run_contract_loop(
     request_model = prepared.request_model
     tool_ctx = prepared.tool_ctx
     worker_tools = prepared.worker_tools
-    from agentcore.runtime.engine.governance import registry_can_execute
-
-    can_execute = registry_can_execute(worker_tools, tool_ctx)
     allowed_tools = prepared.allowed_tools
     files_expected = prepared.files_expected
     report_delivery = prepared.report_delivery
@@ -174,7 +170,6 @@ async def run_contract_loop(
     light_mode = False
     runtime_file_products: list[Any] = []
     workspace_paths: list[str] | None = None
-    source_data_paths: list[str] | None = None
     attempt = 0
     while attempt < attempts:
         streamed_content.clear()
@@ -345,11 +340,6 @@ async def run_contract_loop(
             workspace_paths = list(dict.fromkeys([*live_index, *touched_now]))
         else:
             workspace_paths = list(touched_now)
-        source_data_paths = collect_opaque_source_data_paths(
-            material_paths=getattr(tool_ctx, "material_paths", None),
-            workspace_paths=workspace_paths,
-            landed_paths=touched_now,
-        )
         verdict = check_contract(
             content,
             deliverable,
@@ -357,8 +347,6 @@ async def run_contract_loop(
             debrief=debrief_now,
             workspace_paths=workspace_paths,
             landing_failure_kind=landing_fail_kind,
-            can_execute=can_execute,
-            source_data_paths=source_data_paths,
         )
         needs_handoff = worker_expects_handoff(env.plan, spec.run_id)
         handoff_offered = worker_tools.get_optional(HANDOFF_TOOL_NAME) is not None

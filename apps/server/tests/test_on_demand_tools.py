@@ -153,15 +153,15 @@ def test_directory_groups_sections_and_compacts_tool_families():
     """两栏才打栏名；技能决策时刻组只排序，不印子标题。"""
     browser = ConsultDirectoryEntry(name="browser", summary="真实浏览器", section="tool")
     skill = ConsultDirectoryEntry(
-        name="data_file_landing", summary="整理表", section="skill", group="交付"
+        name="page_ui", summary="页面观感", section="skill", group="交付"
     )
     out = render_on_demand_directory([browser, skill])
     assert "能力指引：" in out
     assert "交付：" not in out
     assert "低频工具：" in out
     assert '- 真实浏览器 consult("browser")' in out
-    assert '- 整理表 consult("data_file_landing")' in out
-    assert "- data_file_landing：" not in out
+    assert '- 页面观感 consult("page_ui")' in out
+    assert "- page_ui：" not in out
 
 
 def test_directory_row_does_not_add_a_second_full_stop():
@@ -169,13 +169,13 @@ def test_directory_row_does_not_add_a_second_full_stop():
     out = render_on_demand_directory(
         [
             ConsultDirectoryEntry(
-                name="data_file_landing",
-                summary="要交表时才查阅。成篇不查阅。",
+                name="page_ui",
+                summary="要做页面时才查阅。脚本不查阅。",
             )
         ]
     )
     assert "。。" not in out
-    assert '成篇不查阅。 consult("data_file_landing")' in out
+    assert '脚本不查阅。 consult("page_ui")' in out
 
 
 async def test_merged_consult_copies_group_and_face():
@@ -195,9 +195,9 @@ async def test_merged_consult_copies_group_and_face():
     )
     entries = await merged.list_directory("u")
     by_name = {e.name: e for e in entries}
-    landing = by_name["data_file_landing"]
-    assert landing.group == "交付"
-    assert landing.section == "skill"
+    page_ui = by_name["page_ui"]
+    assert page_ui.group == "交付"
+    assert page_ui.section == "skill"
     assert "browser" not in by_name
 
 

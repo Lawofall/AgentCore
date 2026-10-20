@@ -36,9 +36,20 @@ def ole_next() -> str:
     )
 
 
-def scan_next() -> str:
+def scan_next(*, accepts_images: bool = False, images_sent: int = 0) -> str:
+    if images_sent:
+        return (
+            f"文本层几乎没有。已把本窗 {images_sent} 页图像发给当前模型。"
+            "后面的页再 read 并带 pages。"
+        )
+    if accepts_images:
+        return (
+            "文本层几乎没有。当前主模型收图，但本窗页图像未能生成。"
+            "后面的页再 read 并带 pages。"
+        )
     return (
         "按文件名归类。offset/limit 变不出文本层。"
+        "当前主模型不收图。后面的页再 read 并带 pages（仍无文本层）。"
     )
 
 

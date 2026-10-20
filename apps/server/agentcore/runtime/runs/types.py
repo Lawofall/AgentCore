@@ -299,7 +299,8 @@ class ContextBlock:
     frontend shows exactly what fed the run — one assembly, two projections, no drift
     (避开补丁绊线: no second「拼给 LLM」vs「展示给用户」path to reconcile).
 
-    ``channel`` buckets the block for the UI: ``request`` (团队级原始请求) / ``tools``
+    ``channel`` buckets the block for the UI: ``request`` (用户可见原话) / ``materials``
+    (本轮附件事实 part) / ``tools``
     (开场实际发给模型的 function-calling 表，镜像当时 ``tool_defs``) / ``team_position``
     (DAG 拓扑：并行队友 + 产出去向) / ``dependency`` (上游产物注入) / ``workspace`` (工作区文件
     清单) / ``task`` / ``deliverable`` / ``gate_notes`` (旧计划复核写入；新卡不再写) /

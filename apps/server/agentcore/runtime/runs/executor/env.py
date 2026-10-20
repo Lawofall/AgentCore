@@ -56,5 +56,7 @@ class AgentExecutorEnv:
     local_root_claims: Any | None = None
     # Optional axes object for rebuild_worker_prompt_for_target (PermissionAxes | None).
     permission_axes_obj: Any | None = None
-    # Opening ``[系统提示]`` for workers (date / workspace / attachments).
+    # Opening ``[系统提示]`` for workers (date / workspace / pinned entries).
     worker_envelope: str = ""
+    # This-turn file parts (sibling of ``user_message``, not woven into it).
+    materials_body: str = ""

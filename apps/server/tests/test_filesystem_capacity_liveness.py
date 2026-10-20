@@ -285,7 +285,7 @@ async def test_file_read_misnamed_oversize_pdf_is_truncated_envelope(tmp_path: P
             )
 
         async def extract_office(
-            self, path: str, *, ext: str, start_page: int = 1
+            self, path: str, *, ext: str, start_page: int = 1, **_kw
         ):  # noqa: ARG002
             raise WorkspaceIOError(
                 f"{FILE_TOO_LARGE_DETAIL}（{OFFICE_EXTRACT_DISK_MAX_BYTES + 1}字节）"
@@ -318,7 +318,7 @@ async def test_file_read_office_source_over_extract_cap_is_truncated_envelope(
             raise PathNotFound(path)
 
         async def extract_office(
-            self, path: str, *, ext: str, start_page: int = 1
+            self, path: str, *, ext: str, start_page: int = 1, **_kw
         ):  # noqa: ARG002
             raise WorkspaceIOError(
                 f"{FILE_TOO_LARGE_DETAIL}（{OFFICE_EXTRACT_DISK_MAX_BYTES + 1}字节）"

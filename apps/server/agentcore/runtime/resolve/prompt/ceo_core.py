@@ -48,13 +48,13 @@ _ATTACHMENT_MATERIAL_HINT = """
 """
 
 
-def attachment_material_scene(attachment_context: str | None) -> bool:
-    """True when this turn has an attachment block or structured resident-missing."""
-    if not attachment_context:
-        return False
-    return (
-        "<附件>" in attachment_context or "[resident missing]" in attachment_context
-    )
+def attachment_material_scene(
+    *,
+    has_file_parts: bool = False,
+    has_resident_missing: bool = False,
+) -> bool:
+    """True when this turn has material parts or structured resident-missing."""
+    return has_file_parts or has_resident_missing
 
 
 def _attachment_material_block(enabled: bool) -> str:

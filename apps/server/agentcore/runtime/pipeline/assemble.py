@@ -216,7 +216,7 @@ async def _assemble_ceo_wired(
         llm=prepared.llm,
         sink=sink,
         base_system_prompt=prepared.worker_base_prompt,
-        user_message=user_message,
+        user_message=prepared.request_text,
         history=history,
         worker_tools=prepared.worker_tools,
         base_tool_context=prepared.base_tool_context,
@@ -240,6 +240,7 @@ async def _assemble_ceo_wired(
         desktop_online=channel.desktop_online,
         worker_envelope=prepared.worker_envelope,
         prefer_delegate=prefer_delegate,
+        materials_body=prepared.materials_body,
     )
     from agentcore.runtime.resolve.prepare import _wire_conversation_log_tools
     from agentcore.tools.ceo_toolset import wire_ceo_consult
@@ -301,7 +302,10 @@ async def _assemble_ceo_wired(
         render_ceo_turn_envelope(
             workspace_context=prepared.workspace_facts,
             conversation_edits=conversation_edits,
-            attachment_material=attachment_material_scene(prepared.attachment_context),
+            attachment_material=attachment_material_scene(
+                has_file_parts=prepared.has_file_parts,
+                has_resident_missing=prepared.has_resident_missing,
+            ),
             attachment_context=prepared.attachment_context,
         ),
         history,

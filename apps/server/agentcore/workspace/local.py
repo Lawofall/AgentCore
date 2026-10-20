@@ -274,7 +274,13 @@ class LocalWorkspace:
         )
 
     async def extract_office(
-        self, path: str, *, ext: str, start_page: int = 1
+        self,
+        path: str,
+        *,
+        ext: str,
+        start_page: int = 1,
+        page_end: int | None = None,
+        page_total: int | None = None,
     ):
         """IPC ingest: desktop has no Python extract stack, so still ``read_bytes``."""
         from agentcore.workspace.attachment_parse import extract_office_bytes
@@ -284,7 +290,11 @@ class LocalWorkspace:
             path, max_bytes=OFFICE_EXTRACT_CHANNEL_MAX_BYTES
         )
         return await extract_office_bytes(
-            data, ext=ext, start_page=start_page
+            data,
+            ext=ext,
+            start_page=start_page,
+            page_end=page_end,
+            page_total=page_total,
         )
 
     async def write_bytes(self, path: str, data: bytes) -> int:

@@ -63,6 +63,7 @@ def build_captain_executor(
     chat_envelope: str = "",
     chat_system_in_history: str = "",
     opening_tool_defs: list[dict] | None = None,
+    materials_body: str = "",
 ) -> Callable[[RunSpec], Awaitable[RunState]]:
     """Build the executor for the turn's CAPTAIN root run — the CEO chat loop.
 
@@ -89,7 +90,15 @@ def build_captain_executor(
     from agentcore.llm.provider.protocol import build_multimodal_user_content
     from agentcore.runtime.resolve.prompt.envelope import opening_ceo_messages
 
-    user_content = build_multimodal_user_content(user_message, native_image_parts or [])
+    utterance = (user_message or "").strip()
+    materials = (materials_body or "").strip()
+    if utterance and materials:
+        captain_user_text = f"{utterance}\n\n{materials}"
+    else:
+        captain_user_text = utterance or materials
+    user_content = build_multimodal_user_content(
+        captain_user_text, native_image_parts or []
+    )
 
     async def execute(spec: RunSpec) -> RunState:
         tool_ctx = replace(
@@ -119,6 +128,7 @@ def build_captain_executor(
                 user_message,
                 tool_defs=opening_tools,
                 turn_envelope=chat_envelope,
+                materials_body=materials_body,
             ),
             llm=llm,
             tools=tools,

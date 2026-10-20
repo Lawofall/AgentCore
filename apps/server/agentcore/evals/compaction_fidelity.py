@@ -511,6 +511,8 @@ def check_prompt_contract() -> list[str]:
         gaps.append("worker_missing_failure_rule")
     if "路径与工具标识不是过程" not in worker:
         gaps.append("worker_missing_path_rule")
+    if "#rN" not in chat or "#rN" not in worker:
+        gaps.append("missing_ledger_id_verbatim")
     blob = chat + "\n" + worker
     for token in PROBE_MARKERS:
         if token in blob:

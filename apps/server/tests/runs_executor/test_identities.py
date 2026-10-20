@@ -429,7 +429,6 @@ def test_worker_identity_states_no_execution_capability():
     assert "未运行" in no_exec
     assert "手抄" not in no_exec
     assert "结构报告" not in no_exec
-    assert "consult(data_file_landing)" not in no_exec
     assert "无法可靠完成" not in no_exec
 
     with_exec = build_worker_identity(has_dependents=False, can_execute=True)
@@ -437,7 +436,6 @@ def test_worker_identity_states_no_execution_capability():
     assert "手抄" not in with_exec
     assert "刚落盘的表格" not in with_exec
     assert "consult(long_form_landing)" not in with_exec
-    assert "consult(data_file_landing)" not in with_exec
     assert "成品写入工作区" not in with_exec
     # 默认参数与显式 True 字节一致（不惊扰既有路径）。
     assert with_exec == build_worker_identity(has_dependents=False)

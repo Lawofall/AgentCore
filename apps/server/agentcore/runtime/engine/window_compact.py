@@ -396,12 +396,18 @@ async def maybe_compact_worker_window(
     user_id: str,
     model_id: str | None,
     tools: list[dict] | None = None,
+    search_policy: str = "",
 ) -> bool:
     """If due, fold older worker rounds and record a ``window_compact`` fact.
 
     Never raises. Never mutates ``messages``. Returns whether a new summary was stored.
+    ``search_policy=debate_evidence`` (辩手检索阶段) skips: draft is a clean
+    window and ``#rN`` lives on the ledger core. A turn evidence ledger on
+    captain / ordinary workers is not a skip — that object is always present.
     """
     if role not in ("worker", "captain") or not settings.engine_window_compact_enabled:
+        return False
+    if (search_policy or "").strip() == "debate_evidence":
         return False
     if not run_id or not conversation_id or not user_id:
         return False

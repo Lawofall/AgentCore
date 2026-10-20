@@ -189,6 +189,22 @@ async def test_context_blocks_omit_deliverable_without_instance_facts():
     assert all(b.channel != "deliverable" for b in blocks)
 
 
+def test_worker_context_blocks_materials_follow_request():
+    plan, _ = build_run_plan([{"role": "A", "task": "做A"}], id_prefix="m")
+    spec = plan.by_id("m_1")
+    blocks = _build_context_blocks(
+        plan,
+        spec,
+        {},
+        "整理下这个资料",
+        None,
+        materials_body="--- File: a.pdf (attachments/a.pdf) ---\nhello",
+    )
+    assert [b.channel for b in blocks] == ["request", "materials", "role", "task"]
+    assert blocks[0].body == "整理下这个资料"
+    assert "hello" in blocks[1].body
+
+
 async def test_context_blocks_dependency_carries_provenance():
     # 通道③: each upstream dep becomes a `dependency` block carrying its provenance.
     # Prose without a brief is an absence; a file-writing dep is a pointer.
@@ -472,6 +488,19 @@ def test_captain_context_blocks_inserts_opening_tools():
     assert [b.channel for b in blocks] == ["system", "tools", "history", "request"]
     assert "**web_search**" in blocks[1].body
     assert blocks[-1].body == "发下参数"
+
+
+def test_captain_context_blocks_split_request_and_materials():
+    blocks = _build_captain_context_blocks(
+        "你是 CEO。",
+        [],
+        "整理下这个资料",
+        materials_body="--- File: pack.rar (attachments/pack.rar) [archive / unpacked → attachments/pack] ---\n1 files in `attachments/pack`.",
+    )
+    assert [b.channel for b in blocks] == ["system", "request", "materials"]
+    assert blocks[1].body == "整理下这个资料"
+    assert "pack.rar" in blocks[2].body
+    assert "整理下这个资料" not in blocks[2].body
 
 
 def test_captain_system_block_concatenates_envelope_xml():

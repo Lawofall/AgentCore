@@ -67,12 +67,33 @@ def _inprocess_extract():
         extract_office_payload,
     )
 
-    def _run(data, ext, timeout, *, holder=None, source_path=None, start_page=1):
+    def _run(
+        data,
+        ext,
+        timeout,
+        *,
+        holder=None,
+        source_path=None,
+        start_page=1,
+        page_end=None,
+        page_total=None,
+        **_kw,
+    ):
         if source_path is not None:
             return extract_office_from_disk(
-                Path(source_path), ext, start_page=start_page
+                Path(source_path),
+                ext,
+                start_page=start_page,
+                page_end=page_end,
+                page_total=page_total,
             )
-        return extract_office_payload(data or b"", ext, start_page=start_page)
+        return extract_office_payload(
+            data or b"",
+            ext,
+            start_page=start_page,
+            page_end=page_end,
+            page_total=page_total,
+        )
 
     return patch(
         "agentcore.workspace.attachment_parse._run_extract_subprocess",
@@ -415,10 +436,11 @@ async def test_file_read_pdf_leftover_start_page_rejected(tmp_path: Path):
     assert result.contract_failure is True
     err = result.error or ""
     assert "start_page" in err
-    assert "第一窗" in err
+    assert "pages" in err
+    assert "第一窗" not in err
 
 
-async def test_file_read_pdf_first_window_does_not_teach_page_seek(tmp_path: Path):
+async def test_file_read_pdf_omitted_pages_over_cap_is_contract_failure(tmp_path: Path):
     from agentcore.workspace.attachment_parse import ExtractResult, ParseStatus
 
     (tmp_path / "paper.pdf").write_bytes(b"%PDF-x")
@@ -436,12 +458,59 @@ async def test_file_read_pdf_first_window_does_not_teach_page_seek(tmp_path: Pat
         ),
     ):
         result = await FileReadTool().execute({"file_path": "paper.pdf"}, _ctx(tmp_path))
+    assert result.success is False
+    assert result.contract_failure is True
+    err = result.error or ""
+    assert "200" in err
+    assert "pages" in err
+    assert "只交第一窗" not in err
+    assert "start_page" not in err
+
+
+async def test_file_read_pdf_pages_window(tmp_path: Path):
+    from agentcore.workspace.attachment_parse import ExtractResult, ParseStatus
+
+    (tmp_path / "paper.pdf").write_bytes(b"%PDF-x")
+    mocked = AsyncMock(
+        return_value=ExtractResult(
+            status=ParseStatus.OK,
+            text="Later window body with enough alphanumeric content here.",
+            detail="ok:pdfminer",
+            page_start=41,
+            page_end=80,
+            page_total=200,
+        )
+    )
+    with patch(
+        "agentcore.tools.builtin.file_ops.read._extract_office",
+        new=mocked,
+    ):
+        result = await FileReadTool().execute(
+            {"file_path": "paper.pdf", "pages": "41-80"}, _ctx(tmp_path)
+        )
     assert result.success is True
     out = result.output or ""
-    assert "Abstract from the first window" in out
-    assert "抽取第 1–40 页，共 200 页" in out
-    assert "只交第一窗" in out
+    assert "Later window body" in out
+    assert "抽取第 41–80 页，共 200 页" in out
+    assert "pages" in out
+    assert "只交第一窗" not in out
     assert "start_page" not in out
+    assert mocked.await_args.kwargs["start_page"] == 41
+    assert mocked.await_args.kwargs["page_end"] == 80
+
+
+async def test_file_read_pdf_pages_span_rejected(tmp_path: Path):
+    (tmp_path / "paper.pdf").write_bytes(b"%PDF-x")
+    with patch(
+        "agentcore.tools.builtin.file_ops.read._extract_office",
+        side_effect=AssertionError("oversize pages must not extract"),
+    ):
+        result = await FileReadTool().execute(
+            {"file_path": "paper.pdf", "pages": "1-80"}, _ctx(tmp_path)
+        )
+    assert result.success is False
+    assert result.contract_failure is True
+    assert "40" in (result.error or "")
 
 async def test_file_read_xlsx_does_not_extract(tmp_path: Path):
     from unittest.mock import patch
@@ -535,12 +604,14 @@ async def test_file_read_utf8_fail_pdf_magic_routes_to_extract(tmp_path: Path):
     from agentcore.workspace.attachment_parse import ExtractResult, ParseStatus
 
     (tmp_path / "notes.txt").write_bytes(b"%PDF-" + b"\x00" * 40)
-    with patch(
-        "agentcore.tools.builtin.file_ops.read._extract_office",
-        new=AsyncMock(
-            return_value=ExtractResult(
-                status=ParseStatus.OK, text="Abstract from sniffed PDF\n", detail="ok"
-            )
+    with (
+        patch(
+            "agentcore.tools.builtin.file_ops.read._extract_office",
+            new=AsyncMock(
+                return_value=ExtractResult(
+                    status=ParseStatus.OK, text="Abstract from sniffed PDF\n", detail="ok"
+                )
+            ),
         ),
     ):
         result = await FileReadTool().execute({"file_path": "notes.txt"}, _ctx(tmp_path))
@@ -573,35 +644,93 @@ async def test_file_read_office_offset_limit_on_extracted_lines(tmp_path: Path):
     assert "共 " in out
 
 
-async def test_file_read_prefers_existing_md_sidecar(tmp_path: Path):
+async def test_file_read_extracts_original_ignoring_leftover_md(tmp_path: Path):
+    from agentcore.workspace.attachment_parse import ExtractResult, ParseStatus
+
     (tmp_path / "memo.docx").write_bytes(b"PK-original")
     (tmp_path / "memo.docx.md").write_text(
         "Sidecar text already prepared with enough body.\n", encoding="utf-8"
     )
     with patch(
         "agentcore.tools.builtin.file_ops.read._extract_office",
-        side_effect=AssertionError("extract must not run when sidecar exists"),
-    ):
+        new=AsyncMock(
+            return_value=ExtractResult(
+                status=ParseStatus.OK,
+                text="Extract from original docx with enough alphanumeric body.\n",
+                detail="ok",
+            )
+        ),
+    ) as mocked:
         result = await FileReadTool().execute({"file_path": "memo.docx"}, _ctx(tmp_path))
+    mocked.assert_awaited()
     assert result.success is True
-    assert "Sidecar text already prepared" in (result.output or "")
+    assert "Extract from original docx" in (result.output or "")
+    assert "Sidecar text already prepared" not in (result.output or "")
 
 
-async def test_file_read_scan_sidecar_is_scan_envelope(tmp_path: Path):
-    from agentcore.workspace.attachment_parse import SCAN_NOTICE
+async def test_file_read_pdf_ignores_stale_md_sidecar(tmp_path: Path):
+    from agentcore.workspace.attachment_parse import (
+        SCAN_NOTICE,
+        ExtractResult,
+        ParseStatus,
+    )
 
     (tmp_path / "scan.pdf").write_bytes(b"%PDF-x")
     (tmp_path / "scan.pdf.md").write_text(SCAN_NOTICE + "\n", encoding="utf-8")
     with patch(
         "agentcore.tools.builtin.file_ops.read._extract_office",
-        side_effect=AssertionError("extract must not run for scan sidecar"),
-    ):
+        new=AsyncMock(
+            return_value=ExtractResult(
+                status=ParseStatus.SCANNED,
+                text=SCAN_NOTICE,
+                detail="scanned_or_empty_text_layer",
+                page_start=1,
+                page_end=1,
+                page_total=1,
+            )
+        ),
+    ) as mocked:
         result = await FileReadTool().execute({"file_path": "scan.pdf"}, _ctx(tmp_path))
+    mocked.assert_awaited()
     assert result.success is True
     out = result.output or ""
     assert "[观察信封]" in out
     assert "kind: scan" in out
     assert "请用户" not in out
+
+
+async def test_file_read_pdf_vision_parts_when_model_accepts(tmp_path: Path):
+    from agentcore.workspace.attachment_parse import ExtractResult, ParseStatus
+
+    (tmp_path / "paper.pdf").write_bytes(b"%PDF-x")
+    ctx = replace(_ctx(tmp_path), accepts_images=True)
+    with (
+        patch(
+            "agentcore.tools.builtin.file_ops.read._extract_office",
+            new=AsyncMock(
+                return_value=ExtractResult(
+                    status=ParseStatus.OK,
+                    text="Visible page body with enough alphanumeric content here.",
+                    detail="ok:pdfminer",
+                    page_start=1,
+                    page_end=3,
+                    page_total=3,
+                )
+            ),
+        ),
+        patch(
+            "agentcore.tools.builtin.file_ops.read._render_pdf_window_jpegs",
+            new=AsyncMock(return_value=[b"\xff\xd8fakejpeg"]),
+        ),
+    ):
+        result = await FileReadTool().execute(
+            {"file_path": "paper.pdf", "pages": "1-3"}, ctx
+        )
+    assert result.success is True
+    parts = (result.metadata or {}).get("native_image_parts")
+    assert isinstance(parts, list) and len(parts) == 1
+    assert parts[0]["image_url"]["url"].startswith("data:image/jpeg;base64,")
+    assert "本窗前 1 页图像" in (result.output or "")
 
 
 async def test_file_read_office_extract_failure_soft(tmp_path: Path):
@@ -940,6 +1069,9 @@ def test_file_read_schema_teaches_default_full_read():
     assert "起始行号" in offset["description"]
     assert "已达安全顶" in offset["description"]
     assert "start_page" not in schema.parameters["properties"]
+    pages = schema.parameters["properties"]["pages"]
+    assert pages["type"] == "string"
+    assert "页窗" in pages["description"]
 
 
 @pytest.mark.parametrize("path", [".", "pkg"])

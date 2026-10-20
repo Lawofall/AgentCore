@@ -1,6 +1,6 @@
 """Cloud sandbox Python list is a single file; consumers must read it.
 
-Hand-copied inventories in Dockerfile / docs / data_file_landing
+Hand-copied inventories in Dockerfile / docs
 drifted (pillow vs Pillow). These tests lock the wiring: the list file is the
 only inventory, and editing a consumer copy in isolation goes red.
 """
@@ -10,7 +10,6 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from agentcore.runtime.skills import build_system_skill_registry
 from agentcore.tools.builtin.run import run_description
 from agentcore.tools.sandbox.cloud_python import (
     DOCKER_CONTEXT_PATH,
@@ -23,15 +22,6 @@ _REPO = Path(__file__).resolve().parents[3]
 _DOCKERFILE = _REPO / "apps" / "server" / "Dockerfile"
 _RUN_TOOL = (
     _REPO / "apps" / "server" / "agentcore" / "tools" / "builtin" / "run.py"
-)
-_DATA_FILE_LANDING = (
-    _REPO
-    / "apps"
-    / "server"
-    / "agentcore"
-    / "runtime"
-    / "skills"
-    / "data_file_landing.py"
 )
 _DEPLOY_DOC = _REPO / "docs" / "05-平台与运维" / "部署拓扑与环境.md"
 
@@ -128,17 +118,6 @@ def test_run_sources_have_no_inventory_literals():
     assert _literal_errors(src, where="run.py") == []
 
 
-def test_data_file_landing_names_no_sandbox_libs():
-    src = _DATA_FILE_LANDING.read_text(encoding="utf-8")
-    assert _literal_errors(src, where="data_file_landing.py") == []
-    skill = build_system_skill_registry().get("data_file_landing")
-    assert skill is not None
-    body = skill.body
-    assert "抽表" in body
-    assert "按页抽文本" in body
-    assert "工具描述" in body
-
-
 def test_deploy_doc_points_at_the_list_file():
     text = _DEPLOY_DOC.read_text(encoding="utf-8")
     assert "cloud_python.txt" in text
@@ -169,10 +148,3 @@ def test_hardcoded_description_list_goes_red():
     errors = _literal_errors(broken, where="run.py")
     assert errors, "hand-copying names into run.py must fail the gate"
 
-
-def test_skill_naming_a_lib_goes_red():
-    src = _DATA_FILE_LANDING.read_text(encoding="utf-8")
-    broken = src.replace("抽表专用库", "pypdf")
-    assert broken != src
-    errors = _literal_errors(broken, where="data_file_landing.py")
-    assert errors, "naming a sandbox lib in data_file_landing must fail the gate"

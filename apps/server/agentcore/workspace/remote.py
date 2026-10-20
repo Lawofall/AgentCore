@@ -220,7 +220,15 @@ class RemoteCloudWorkspace:
         data = await self.read_bytes(path, max_bytes=None)
         return ReadHeadResult(data=data[:peek], size_bytes=len(data))
 
-    async def extract_office(self, path: str, *, ext: str, start_page: int = 1):
+    async def extract_office(
+        self,
+        path: str,
+        *,
+        ext: str,
+        start_page: int = 1,
+        page_end: int | None = None,
+        page_total: int | None = None,
+    ):
         from agentcore.workspace.attachment_parse import extract_office_file
 
         data = await self.read_bytes(path, max_bytes=OFFICE_EXTRACT_DISK_MAX_BYTES)
@@ -230,7 +238,13 @@ class RemoteCloudWorkspace:
         try:
             with open(tmp, "wb") as fh:
                 fh.write(data)
-            return await extract_office_file(Path(tmp), ext=ext, start_page=start_page)
+            return await extract_office_file(
+                Path(tmp),
+                ext=ext,
+                start_page=start_page,
+                page_end=page_end,
+                page_total=page_total,
+            )
         finally:
             with contextlib.suppress(OSError):
                 os.unlink(tmp)

@@ -44,6 +44,39 @@ describe("buildReceivedContextCatalog", () => {
     expect(groups.find((g) => g.id === "standing")).toBeUndefined();
   });
 
+  it("buckets materials under 材料 and request under 本回合", () => {
+    const groups = buildReceivedContextCatalog(
+      [
+        block({ channel: "request", body: "整理下这个资料" }),
+        block({ channel: "materials", body: "--- File: a.rar ---" }),
+      ],
+      { includeSystem: true },
+    );
+    expect(groups.map((g) => g.id)).toEqual(["turn", "material"]);
+    expect(groups[0].items.map((i) => i.channel)).toEqual(["request"]);
+    expect(groups[1].items.map((i) => i.label)).toEqual(["材料"]);
+  });
+
+  it("lifts 本轮材料 scene gate and hides empty factory", () => {
+    const text = `<工作区>
+桌面已连接。
+</工作区>
+
+<本轮材料>
+姿势：先读已给材料再产出。
+</本轮材料>`;
+    const groups = buildReceivedContextCatalog(
+      [block({ channel: "system", body: text, chars: text.length })],
+      { includeSystem: true },
+    );
+    expect(groups[0].items.map((i) => i.label)).toEqual([
+      "设定",
+      "工作区",
+      "本轮材料",
+    ]);
+    expect(groups[0].items.some((i) => i.label === "出厂指令")).toBe(false);
+  });
+
   it("buckets 本回合工具 with request under 本回合", () => {
     const groups = buildReceivedContextCatalog(
       [
@@ -324,18 +357,16 @@ describe("openingContextView", () => {
     );
     expect(view.sections.map((section) => section.channel)).toEqual([
       "system",
-      "tools",
       "history",
       "request",
     ]);
     expect(view.sections.map((section) => section.heading)).toEqual([
       "CEO 系统提示",
-      "本回合工具",
       "对话历史（本回合之前的往来）",
       "原始用户请求",
     ]);
     expect(view.sections[0]?.body).toBe(system);
-    expect(view.chars).toBe(108);
+    expect(view.chars).toBe(103);
   });
 
   it("drops the system block when includeSystem is false", () => {
@@ -352,11 +383,8 @@ describe("openingContextView", () => {
       ],
       { includeSystem: false },
     );
-    expect(view.sections.map((section) => section.channel)).toEqual([
-      "tools",
-      "request",
-    ]);
-    expect(view.chars).toBe(5);
+    expect(view.sections.map((section) => section.channel)).toEqual(["request"]);
+    expect(view.chars).toBe(2);
   });
 });
 

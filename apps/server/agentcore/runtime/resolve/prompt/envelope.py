@@ -5,14 +5,15 @@ If this turn's composed system differs from that node 0, DeepSeek in-history
 appends the changed ``<设定>`` / ``<按需目录>`` (or the full new string when the
 rest drifted) as ``role: system`` after history and before the envelope
 (``usage.in_history_system`` replay). Date, workspace (+ folder-chat
-this-conversation writes), scene gates, and attachments ride a
-synthetic user message fenced with ``[系统提示]``. A new envelope that
+this-conversation writes), scene gates, and pinned entries ride a
+synthetic user message fenced with ``[系统提示]``. File parts are sibling
+``materials`` blocks on the utterance, not this envelope. A new envelope that
 matches the last one already in the window is omitted. The envelope is
 snapshotted on ``turn_started`` and stamped onto the prompting user row
 (``usage.turn_envelope``) so later turns replay it in order. The LLM window
 is append-only: prior envelopes stay; this turn appends a new envelope only
 when it differs, plus the new user utterance. UI bubbles still show the original user text.
-Workers use the same fence for date / workspace / attachments (opening user
+Workers use the same fence for date / workspace / pinned entries (opening user
 tail, not ``role: system``) so sibling runs share a frozen system prefix.
 Do not copy the CEO conversation-edits pin onto workers. Resume restamp of
 worker facts appends ``[系统提示]`` after history and never rewrites the

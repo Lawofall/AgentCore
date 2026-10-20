@@ -34,11 +34,7 @@ ExternalEvidencePath = Literal[
     "no_pack",
 ]
 
-# 与 ``_build_attachment_context`` 产出的块头对齐。
-_ATTACHED_RE = re.compile(
-    r"<附件>(.*?)</附件>",
-    re.DOTALL | re.IGNORECASE,
-)
+# 与材料 part 的块头对齐（不再依赖 ``<附件>`` HOW 信封）。
 _BLOCK_RE = re.compile(
     r"---\s*(File|Conversation|Directory):\s*(.+?)\s*\(([^)]+)\)([^\n]*)---\n"
     r"(.*?)(?=\n---\s*(?:File|Conversation|Directory):|\Z)",
@@ -139,24 +135,24 @@ def _kind_from_header(header: str) -> EvidenceSourceKind | None:
 
 
 def _is_binary_stub(flags: str, body: str) -> bool:
-    """``[binary]`` 且正文只是「用 code_execute」说明 → 无可用正文。"""
-    if "[binary]" not in (flags or "").lower():
+    """``[binary]`` / ``[office-pdf]`` / unreadable archive with no extractable body."""
+    flags_l = (flags or "").lower()
+    if "[archive / password]" in flags_l or "[archive / unreadable]" in flags_l:
+        return True
+    if "[binary]" not in flags_l and "[office-pdf]" not in flags_l:
         return False
     b = (body or "").strip().lower()
     if not b:
         return True
-    return "binary file" in b or "code_execute" in b
+    return "no inline text" in b or "binary file" in b or "code_execute" in b
 
 
 def parse_attached_file_sources(system_prompt: str) -> list[EvidenceSource]:
-    """从主持人/worker 系统提示中的 ``<附件>`` 抽出可用正文来源。"""
+    """从主持人/worker 上下文中的 ``--- File:`` 块抽出可用正文来源。"""
     if not isinstance(system_prompt, str):
         return []
     raw = system_prompt
-    m = _ATTACHED_RE.search(raw)
-    if not m:
-        return []
-    block = m.group(1)
+    block = raw
     out: list[EvidenceSource] = []
     for i, bm in enumerate(_BLOCK_RE.finditer(block), start=1):
         header, name, path, flags, body = bm.group(1), bm.group(2), bm.group(3), bm.group(4), bm.group(5)
@@ -239,7 +235,7 @@ def assemble_evidence_pack_from_host(
 ) -> EvidencePack | None:
     """若主持人上下文已有可用正文附件 → 组装 Evidence Pack；否则 ``None``。
 
-    判定：``<附件>`` 内至少一条 File/Conversation 带来源正文。
+    判定：材料 part 中至少一条 File/Conversation 带来源正文。
     纯 binary / 空正文 / 仅 Directory → 不走本路径（回落 no_pack）。
     """
     sources = parse_attached_file_sources(system_prompt)

@@ -51,6 +51,7 @@ def build_agent_executor(
     local_root_claims: object | None = None,
     permission_axes_obj: object | None = None,
     worker_envelope: str = "",
+    materials_body: str = "",
 ) -> RunExecutor:
     """Build a :class:`RunExecutor` bound to one turn's wiring.
 
@@ -95,6 +96,7 @@ def build_agent_executor(
         local_root_claims=local_root_claims,
         permission_axes_obj=permission_axes_obj,
         worker_envelope=worker_envelope,
+        materials_body=materials_body,
     )
 
     async def execute(spec: RunSpec, completed: Mapping[str, RunState]) -> RunState:

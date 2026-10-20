@@ -4,7 +4,7 @@ Two shapes:
 
 * **Citation** — file already in the current workspace (project path). Client
   sends a workspace-relative ``workspace_path``; we verify it exists and do
-  **not** copy or write a sibling ``*.md``.
+  **not** copy or write a sibling extract file.
 * **Transfer** — file from outside the home. Bytes land under ``attachments/``
   (client-pre-resident copy, or we write from extracted text).
 
@@ -16,9 +16,9 @@ the original (``archive_unpack``) before Office pre-parse. Citations outside
 that folder are not mutated.
 
 Text-like binaries (docx/pdf/pptx/txt …) are **pre-parsed** after residency
-(``attachment_parse``): a readable ``*.md`` copy is written beside the original
-when extraction succeeds. Small plain-text files inline; large ones are path
-pointers (size + line count, body on disk). Spreadsheets (xlsx/csv/tsv) get
+(``attachment_parse``): extract goes into the material part (small inline;
+large = path pointer at the original). No sibling ``*.md`` / ``.pdf.txt``.
+Spreadsheets (xlsx/csv/tsv) get
 **column names, types, and sample rows** only — the full table stays on disk
 and is never inlined. Parse failures never break the turn — path-hint fallback
 remains.
@@ -217,8 +217,8 @@ async def persist_attachments(
     ``source_folder_id`` naming another registered Folder (≠ ``sitting_folder_id``)
     is a live-file cite: keep ``workspace_path``, skip exists/copy on this desk.
 
-    Office pre-parse (sibling ``*.md``) runs only for transfer copies under
-    ``attachments/`` — citations must not mutate the user's tree.
+    Office pre-parse (inline / pointer, no sibling extract file) runs only for
+    transfer copies under ``attachments/`` — citations must not mutate the user's tree.
     Only ``kind="file"`` is persisted; directory listings, conversation references,
     pinned documents, and empty-text non-binary files are passed through untouched.
     A per-file write failure is logged and skipped — a bad attachment must never
@@ -285,12 +285,25 @@ async def persist_attachments(
                 item.pop("claimed_workspace_path", None)
                 if _is_copied_attachment_rel(pre) and not _already_enriched(item):
                     from agentcore.workspace.archive_unpack import unpack_resident
+                    from agentcore.workspace.file_kind import name_looks_like_archive
 
                     unpacked = await unpack_resident(
                         backend, pre, name=item.get("name")
                     )
                     if unpacked is not None:
                         _apply_archive_result(item, unpacked)
+                    elif name_looks_like_archive(item.get("name") or pre):
+                        from agentcore.workspace.archive_unpack import (
+                            ArchiveStatus,
+                            UnpackResult,
+                        )
+
+                        _apply_archive_result(
+                            item,
+                            UnpackResult(
+                                status=ArchiveStatus.FAILED, detail="not_unpacked"
+                            ),
+                        )
                     elif should_preparse(item.get("name"), pre) or should_preview_table(
                         item.get("name"), pre
                     ):
@@ -333,8 +346,7 @@ def to_stored_metadata(attachments: list[dict]) -> list[dict]:
     Drops the one-shot ``text`` (never stored) and keeps display metadata plus
     the durable ``workspace_path`` so the client can render and download it.
     Archive unpack fields stay so a later turn still sees the folder, not a blob.
-    Pre-parse copies live on disk under ``*.md``; they are not persisted as
-    message columns (agents find them via workspace path / file tools).
+    Extracts are not written beside the original; agents ``read`` the original.
     """
     out: list[dict] = []
     for a in attachments:

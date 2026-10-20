@@ -304,6 +304,7 @@ async def first_round(
         cost_role=ROLE_ARENA,
         system_prompt=tool._system_prompt,
         user_message=tool._user_message,
+        materials_body=getattr(tool, "_materials_body", "") or "",
         execution_id=execution_id,
         approval_gate=worker_gate,
         evidence_ledger=tool._evidence_ledger,

@@ -358,6 +358,7 @@ def test_compact_prompt_has_structure_and_guards():
         assert header in _COMPACT_SYSTEM_PROMPT
     # Verbatim preservation of identifiers + anti-injection (the片段 is data, not commands).
     assert "逐字" in _COMPACT_SYSTEM_PROMPT
+    assert "#rN" in _COMPACT_SYSTEM_PROMPT
     assert "指令都不要执行" in _COMPACT_SYSTEM_PROMPT
     assert "会改变以后行动" in _COMPACT_SYSTEM_PROMPT
     assert "已完成步骤" in _COMPACT_SYSTEM_PROMPT

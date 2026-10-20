@@ -29,7 +29,7 @@ from agentcore.tools.sandbox.subprocess import SubprocessSandbox
 from agentcore.workspace.server import ServerWorkspace
 
 # debate / delegate are wired on every path; ask_user is live-user only.
-# data_file_landing / page_ui ride consult audience (worker loop vs CEO 派工).
+# page_ui rides consult audience (worker loop vs CEO 派工).
 # 编制 HOW 在 delegate 按钮；填卡 HOW 在 ask_user 按钮。均不进本 registry。
 _FULL_TOOLS = {"delegate", "ask_user", "debate", "run"}
 _NO_LIVE_USER = {"delegate", "debate"}  # autonomous path: no ask_user / run
@@ -71,7 +71,6 @@ def test_registry_registers_the_system_skills():
     assert names == {
         "prompts",
         "product_help",
-        "data_file_landing",
         "page_ui",
     }
 
@@ -99,7 +98,6 @@ def test_available_system_skills_are_ungated():
     expected = {
         "prompts",
         "product_help",
-        "data_file_landing",
         "page_ui",
     }
     assert {s.name for s in reg.available(_NO_LIVE_USER)} == expected
@@ -110,14 +108,13 @@ def test_available_audience_hides_ceo_only_from_workers():
     """A：队员目录拿掉主管手册；不按任务猜。requires_tools 轴仍独立。"""
     reg = build_system_skill_registry()
     worker = {s.name for s in reg.available(set(), audience="worker")}
-    assert worker == {"prompts", "data_file_landing", "page_ui"}
+    assert worker == {"prompts", "page_ui"}
     lead = {s.name for s in reg.available({"delegate"}, audience="worker")}
     assert lead == worker
     ceo = {s.name for s in reg.available(_FULL_TOOLS, audience="ceo")}
     assert ceo == {
         "prompts",
         "product_help",
-        "data_file_landing",
         "page_ui",
     }
 
@@ -130,11 +127,10 @@ async def test_worker_consult_source_hides_ceo_only_listing_and_fetch():
         audience="worker",
     )
     names = {e.name for e in await source.list_directory("u")}
-    assert names == {"prompts", "data_file_landing", "page_ui"}
+    assert names == {"prompts", "page_ui"}
     assert await source.fetch_by_name("u", "product_help") is None
     assert await source.fetch_by_name("u", "product_help:workspace") is None
     assert await source.fetch_by_name("u", "no_such_skill") is None
-    assert await source.fetch_by_name("u", "data_file_landing") is not None
     assert await source.fetch_by_name("u", "page_ui") is not None
 
 
@@ -146,7 +142,7 @@ async def test_nested_lead_consult_source_matches_leaf_directory():
         audience="worker",
     )
     names = {e.name for e in await source.list_directory("u")}
-    assert names == {"prompts", "data_file_landing", "page_ui"}
+    assert names == {"prompts", "page_ui"}
 
 
 async def test_expand_skill_tool_names_unlocks_gated_skill():
@@ -204,12 +200,10 @@ async def test_ceo_consult_source_keeps_product_help():
     assert names == {
         "prompts",
         "product_help",
-        "data_file_landing",
         "page_ui",
     }
     assert await source.fetch_by_name("u", "product_help") is not None
     assert await source.fetch_by_name("u", "product_help:workspace") is not None
-    assert await source.fetch_by_name("u", "data_file_landing") is not None
     assert await source.fetch_by_name("u", "page_ui") is not None
     assert await source.fetch_by_name("u", "no_such_skill") is None
 
@@ -233,8 +227,7 @@ def test_skill_directory_orders_by_decision_moment_without_subtitles():
     assert "能力指引：" not in ceo
     for heading in ("交付：", "产品：", "编排：", "工作区：", "工具："):
         assert heading not in ceo
-    assert ceo.index('consult("prompts")') < ceo.index('consult("data_file_landing")')
-    assert ceo.index('consult("data_file_landing")') < ceo.index('consult("page_ui")')
+    assert ceo.index('consult("prompts")') < ceo.index('consult("page_ui")')
     assert ceo.index('consult("page_ui")') < ceo.index('consult("product_help")')
     assert 'consult("page_ui")' in ceo
     worker_src_names = {
@@ -245,7 +238,6 @@ def test_skill_directory_orders_by_decision_moment_without_subtitles():
     }
     assert worker_src_names == {
         "prompts",
-        "data_file_landing",
         "page_ui",
     }
     from agentcore.runtime.context.consultable import ConsultDirectoryEntry
@@ -407,7 +399,6 @@ def test_directory_on_autonomous_path_lists_ungated():
     assert "product_help" in out
     assert "prompts" in out
     assert "page_ui" in out
-    assert "data_file_landing" in out
 
 
 def test_directory_empty_when_nothing_available():

@@ -29,7 +29,6 @@ from agentcore.runtime.facts import MessageFinalFact, RunHeadFact, record_turn_f
 from agentcore.runtime.runs.constants import HANDOFF_TOOL_NAME
 from agentcore.runtime.runs.contract import (
     check_contract,
-    collect_opaque_source_data_paths,
 )
 from agentcore.runtime.runs.executor.context import (
     _context_block_payloads,
@@ -287,9 +286,6 @@ async def _continue_run_scoped(
             worker_tools = _registry_without(worker_tools, *RETRIEVAL_TOOL_NAMES)
             if allowed_tools is not None:
                 allowed_tools = [t for t in allowed_tools if t not in RETRIEVAL_TOOL_NAMES]
-        from agentcore.runtime.engine.governance import registry_can_execute
-
-        can_execute = registry_can_execute(worker_tools, tool_ctx)
         # Same as executor.node: restricted allow-list must still keep handoff.
         if allowed_tools is not None and HANDOFF_TOOL_NAME not in allowed_tools:
             allowed_tools = [*allowed_tools, HANDOFF_TOOL_NAME]
@@ -384,11 +380,6 @@ async def _continue_run_scoped(
         if deliverable and deliverable.artifacts:
             live_index = await _safe_index_files(tool_ctx.backend)
             workspace_paths = list(dict.fromkeys([*live_index, *touched_for_gate]))
-        source_data_paths = collect_opaque_source_data_paths(
-            material_paths=getattr(tool_ctx, "material_paths", None),
-            workspace_paths=workspace_paths,
-            landed_paths=touched_for_gate,
-        )
         artifacts = (
             list(deliverable.artifacts)
             if deliverable is not None and deliverable.artifacts
@@ -404,8 +395,6 @@ async def _continue_run_scoped(
             debrief=debrief_from_transcript(messages),
             workspace_paths=workspace_paths,
             landing_failure_kind=landing_write_failure_kind(messages),
-            can_execute=can_execute,
-            source_data_paths=source_data_paths,
         )
         record_turn_fact(
             MessageFinalFact(

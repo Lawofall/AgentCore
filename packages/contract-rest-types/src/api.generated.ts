@@ -10485,7 +10485,7 @@ export interface components {
          *     they become native ``image_url`` parts on the **current main** model when it
          *     accepts images, else an honest「当前主模型不收图」note (no sidecar eye).
          *     Binary office/PDF may gain
-         *     server-side ``text`` after分流预解析 (markitdown → ``*.md`` copy); xlsx/csv
+         *     server-side ``text`` after分流预解析 (inline extract, no sibling copy); xlsx/csv
          *     stay path-only so workers can ``code_execute``. ``kind="conversation"`` references
          *     another of the user's conversations: recent messages are materialized into
          *     ``text`` client-side, and ``conversation_id`` records which one (for the chip +

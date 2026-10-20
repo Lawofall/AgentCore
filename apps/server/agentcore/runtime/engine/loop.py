@@ -802,7 +802,7 @@ async def react_loop(
             _maybe_retire_workspace_channel_dead()
             _maybe_retire_exec_env_dead()
             try:
-                if role in ("worker", "captain") and run_id and turn_evidence_ledger is None:
+                if role in ("worker", "captain") and run_id:
                     from .window_compact import maybe_compact_worker_window
 
                     await maybe_compact_worker_window(
@@ -815,6 +815,7 @@ async def react_loop(
                         user_id=tool_context.user_id or "",
                         model_id=active_model,
                         tools=tool_defs,
+                        search_policy=tool_context.search_policy or "",
                     )
                 round_result = await run_llm_round(
                     llm=llm,

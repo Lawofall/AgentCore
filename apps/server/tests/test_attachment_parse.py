@@ -22,7 +22,6 @@ from agentcore.workspace.attachment_parse import (
     extract_office_payload,
     extract_table_preview,
     looks_like_scanned,
-    parsed_copy_path,
     preparse_resident,
     should_preparse,
     should_preview_table,
@@ -55,12 +54,33 @@ def _docx_bytes(*, paragraphs: list[str], table: list[list[str]] | None = None) 
 def _inprocess_extract():
     """Run the worker payload in-process so markitdown mocks still apply (pdf)."""
 
-    def _run(data, ext, timeout, *, holder=None, source_path=None, start_page=1):
+    def _run(
+        data,
+        ext,
+        timeout,
+        *,
+        holder=None,
+        source_path=None,
+        start_page=1,
+        page_end=None,
+        page_total=None,
+        **_kw,
+    ):
         if source_path is not None:
             return extract_office_from_disk(
-                Path(source_path), ext, start_page=start_page
+                Path(source_path),
+                ext,
+                start_page=start_page,
+                page_end=page_end,
+                page_total=page_total,
             )
-        return extract_office_payload(data or b"", ext, start_page=start_page)
+        return extract_office_payload(
+            data or b"",
+            ext,
+            start_page=start_page,
+            page_end=page_end,
+            page_total=page_total,
+        )
 
     return patch(
         "agentcore.workspace.attachment_parse._run_extract_subprocess",
@@ -97,10 +117,6 @@ def test_looks_like_scanned_and_truncate():
     body2, clipped2 = truncate_for_prompt("short", limit=50)
     assert clipped2 is False
     assert body2 == "short"
-
-
-def test_parsed_copy_path():
-    assert parsed_copy_path("attachments/report.docx") == "attachments/report.docx.md"
 
 
 async def test_extract_office_bytes_ok_and_skip(tmp_path: Path):
@@ -155,6 +171,25 @@ def test_extract_office_from_disk_pdf_passes_path(tmp_path: Path):
     )
     assert result.status == ParseStatus.OK
     assert result.size_bytes == path.stat().st_size
+
+
+def test_extract_office_from_disk_pdf_page_end_window(tmp_path: Path):
+    path = tmp_path / "x.pdf"
+    path.write_bytes(b"%PDF-x")
+    seen: dict = {}
+
+    def fake_extract_text(source, **kwargs):  # noqa: ARG001
+        seen["kwargs"] = kwargs
+        return "b" * 50
+
+    with patch("pdfminer.high_level.extract_text", fake_extract_text):
+        result = extract_office_from_disk(
+            path, ".pdf", start_page=41, page_end=50
+        )
+    assert seen["kwargs"].get("page_numbers") == list(range(40, 50))
+    assert result.page_start == 41
+    assert result.page_end == 50
+    assert result.status == ParseStatus.OK
 
 
 def test_extract_office_from_disk_pdf_start_page_window(tmp_path: Path):
@@ -234,7 +269,7 @@ async def test_extract_hanging_worker_fails_within_budget_and_kills():
     orig = ap._run_extract_subprocess
     seen: dict = {}
 
-    def wrapped(data, ext, timeout, *, holder=None, source_path=None, start_page=1):
+    def wrapped(data, ext, timeout, *, holder=None, source_path=None, start_page=1, **kw):
         result = orig(
             data,
             ext,
@@ -242,6 +277,7 @@ async def test_extract_hanging_worker_fails_within_budget_and_kills():
             holder=holder,
             source_path=source_path,
             start_page=start_page,
+            **kw,
         )
         seen["proc"] = None if holder is None else holder.get("proc")
         return result
@@ -251,7 +287,7 @@ async def test_extract_hanging_worker_fails_within_budget_and_kills():
         patch.object(
             ap,
             "_extract_worker_argv",
-            lambda ext, *, source_path=None, start_page=1: [
+            lambda ext, *, source_path=None, **_kw: [
                 sys.executable,
                 "-c",
                 "import sys,time; sys.stdin.buffer.read(); time.sleep(60)",
@@ -273,7 +309,7 @@ async def test_extract_hanging_worker_fails_within_budget_and_kills():
 async def test_extract_does_not_block_event_loop():
     with patch(
         "agentcore.workspace.attachment_parse._extract_worker_argv",
-        lambda ext, *, source_path=None, start_page=1: [
+        lambda ext, *, source_path=None, **_kw: [
             sys.executable,
             "-c",
             "import sys,time; sys.stdin.buffer.read(); time.sleep(60)",
@@ -297,7 +333,7 @@ async def test_extract_does_not_block_event_loop():
     assert "timeout" in result.detail
 
 
-async def test_preparse_docx_writes_md_copy(tmp_path: Path):
+async def test_preparse_docx_inlines_without_md_copy(tmp_path: Path):
     ws = _ws(tmp_path)
     (tmp_path / "attachments").mkdir()
     (tmp_path / "attachments" / "brief.docx").write_bytes(
@@ -315,11 +351,9 @@ async def test_preparse_docx_writes_md_copy(tmp_path: Path):
         )
 
     assert result.status == ParseStatus.OK
-    assert result.parsed_workspace_path == "attachments/brief.docx.md"
+    assert result.parsed_workspace_path is None
     assert "Hello from docx" in result.text
-    assert "Hello from docx" in (
-        tmp_path / "attachments" / "brief.docx.md"
-    ).read_text(encoding="utf-8")
+    assert not (tmp_path / "attachments" / "brief.docx.md").exists()
 
 
 async def test_preparse_pdf_success_via_persist(tmp_path: Path):
@@ -345,9 +379,10 @@ async def test_preparse_pdf_success_via_persist(tmp_path: Path):
         )
 
     assert out[0]["parse_status"] == "ok"
-    assert out[0]["parsed_workspace_path"] == "attachments/paper.pdf.md"
+    assert "parsed_workspace_path" not in out[0]
     assert "This paper studies agents" in out[0]["text"]
-    assert (tmp_path / "attachments" / "paper.pdf.md").exists()
+    assert not (tmp_path / "attachments" / "paper.pdf.txt").exists()
+    assert not (tmp_path / "attachments" / "paper.pdf.md").exists()
 
 
 async def test_preparse_scanned_pdf_writes_notice(tmp_path: Path):
@@ -365,10 +400,10 @@ async def test_preparse_scanned_pdf_writes_notice(tmp_path: Path):
 
     assert result.status == ParseStatus.SCANNED
     assert "扫描" in result.text or "OCR" in result.text
-    assert result.parsed_workspace_path == "attachments/scan.pdf.md"
-    note = (tmp_path / "attachments" / "scan.pdf.md").read_text(encoding="utf-8")
-    assert "OCR" in note
-    assert "请用户" not in note
+    assert result.parsed_workspace_path is None
+    assert not (tmp_path / "attachments" / "scan.pdf.md").exists()
+    assert not (tmp_path / "attachments" / "scan.pdf.txt").exists()
+    assert "请用户" not in result.text
 
 async def test_preparse_xlsx_invalid_has_no_body(tmp_path: Path):
     ws = _ws(tmp_path)
@@ -422,11 +457,10 @@ async def test_preparse_failure_falls_back(tmp_path: Path):
     # Prompt steers read for office/PDF — not code_execute.
     ctx = await _build_attachment_context(out)
     assert ctx is not None
-    assert "[binary / office-pdf]" in ctx
-    assert "read" in ctx
-    assert "do not default to run" in ctx
+    assert "[office-pdf]" in ctx
+    assert "No inline text." in ctx
+    assert "do not default to run" not in ctx
     assert "code_execute" not in ctx
-    assert "openpyxl" not in ctx
 
 async def test_context_preparsed_inline_and_large_truncation():
     small = {
@@ -434,31 +468,25 @@ async def test_context_preparsed_inline_and_large_truncation():
         "path": "attachments/a.docx",
         "binary": True,
         "workspace_path": "attachments/a.docx",
-        "parsed_workspace_path": "attachments/a.docx.md",
         "parse_status": "ok",
         "text": "Hello world from docx extract.",
     }
     out = await _build_attachment_context([small])
     assert out is not None
     assert "Hello world from docx extract" in out
-    assert "预解析 → attachments/a.docx.md" in out
-    assert "pre-parsed at upload" in out
-    assert "lossy for tabular content" in out
-    assert "Do not use this extract as the data source" in out
+    assert "预解析 →" not in out
+    assert "pre-parsed at upload" not in out
 
     huge_text = "Z" * (ATTACHMENT_INLINE_MAX_CHARS + 500)
     large = {
         **small,
         "name": "big.docx",
         "text": huge_text,
-        "parsed_workspace_path": "attachments/big.docx.md",
         "workspace_path": "attachments/big.docx",
     }
     out2 = await _build_attachment_context([large])
     assert out2 is not None
     assert "truncated" in out2
-    assert "全文在 attachments/big.docx.md" in out2
-    # Inline body capped.
     assert "Z" * (ATTACHMENT_INLINE_MAX_CHARS + 1) not in out2
 
 

@@ -1,8 +1,7 @@
-"""Attachment prompt block: column/type/sample preview + capability-aware steer.
+"""This-turn material parts: name, kind, extracted text or path pointer.
 
-``_build_attachment_context`` walks this-turn attachments and renders the
-``<附件>`` block. ``code_execute`` copy follows ``available_tools``
-(this turn's assembled table) — never invents the tool.
+File facts are woven into the user message in pill order. HOW lives on tools
+and the one-sentence ``<本轮材料>`` scene gate — not in these parts.
 """
 
 from __future__ import annotations
@@ -31,95 +30,33 @@ from agentcore.workspace.attachment_parse import (
     table_preview_from_mapping,
     truncate_for_prompt,
 )
+from agentcore.workspace.file_kind import name_looks_like_archive
 
 if TYPE_CHECKING:
     from agentcore.workspace.protocol import WorkspaceBackend
 
 logger = get_logger(__name__)
 
-# 本条 vs 工作区历轮 attachments/：同名跨轮复用同一路径是故意设计，缺判别位会让模型
-# 把上一轮同名文件当成本条、或把「无 [resident missing]」误读成「本条没传文件」。
-_ATTACH_THIS_MESSAGE_FRAME = (
-    "以下是本条消息的附件。工作区内已有文件按原路径引用（不另复制）；"
-    "复制进 attachments/ 的同名跨轮复用同一路径，最新上传覆盖旧字节；"
-    "工作区索引里其它 attachments/ 条目属历史轮。"
-)
-
-# @ 点名按需设定：本回合当常驻。单独成段，不进 <附件>，以免触发附件收窄场面。
+# @ 点名按需设定：本回合当常驻。单独成段，不是附件。
 _PINNED_ENTRIES_FRAME = (
     "用户本条点名了下列按需设定，本回合当作常驻遵守。"
     "不是本条上传的附件，不必落盘。"
 )
 _PINNED_MISS = "（点名的设定未能加载，本回合不按该条执行。）"
 
-_INLINE_ORDER_FACT = (
-    "Materials are inlined in the user message in the order the user placed them."
-)
-
 
 @dataclass(frozen=True)
 class AttachmentPrompt:
-    """Per-turn attachment prompt: full envelope, per-file blocks, slim envelope."""
+    """This-turn material parts. No HOW envelope."""
 
-    envelope: str | None
     file_blocks: tuple[str, ...]
-    slim_envelope: str | None
-
-# Unconditional: office/PDF extract is never a product-grade table source.
-_OFFICE_TABLE_LOSSY = (
-    "Office/PDF text extraction is lossy for tabular content and is not a data "
-    "grid. Do not use this extract as the data source for a spreadsheet/CSV "
-    "product when an execution environment is available this turn."
-)
-
-
-def _tool_table_has(available_tools: Collection[str] | None, name: str) -> bool | None:
-    """None when the caller did not supply this turn's assembled tool table."""
-    if available_tools is None:
-        return None
-    return name in available_tools
-
-
-def _code_execute_steer(*, has_code_execute: bool | None, spreadsheet: bool) -> str:
-    """Capability copy that follows the assembled tool table — never invents the tool."""
-    sheet = " (e.g. openpyxl / pandas for .xlsx/.csv)" if spreadsheet else ""
-    if has_code_execute is True:
-        return (
-            "This turn's tool table includes run — parse the "
-            f"workspace-relative path with it{sheet}. "
-            "Do NOT use an OS absolute path."
-        )
-    if has_code_execute is False:
-        return (
-            "This turn's tool table does not include run — do not call "
-            "or plan run. Complete delivery this turn is a structure report "
-            "from the preview facts plus a ready-to-run transform script; do not invent "
-            "or hand-copy rows. Do NOT use an OS absolute path."
-        )
-    return (
-        "Full data stays in the workspace file and is not inlined. "
-        "Do not invent rows. Do NOT use an OS absolute path."
-    )
-
-
-def _office_lossy_steer(*, has_code_execute: bool | None) -> str:
-    extra = ""
-    if has_code_execute is True:
-        extra = (
-            " Parse the original workspace file with run; do not treat "
-            "this extract as the dataset."
-        )
-    elif has_code_execute is False:
-        extra = (
-            " This turn has no run. Complete delivery is a structure report "
-            "of what this extract actually shows plus a ready-to-run transform script "
-            "— not a hand-copied spreadsheet."
-        )
-    return f"{_OFFICE_TABLE_LOSSY}{extra}"
+    pinned_xml: str | None
+    has_file_parts: bool
+    has_resident_missing: bool
 
 
 def _archive_attachment_block(att: dict, *, name: str, path: str) -> str:
-    """Scene door: an attached archive is a folder, not a blob to decode with run."""
+    """An attached archive is a folder. Facts only — unpack is platform."""
     status = str(att.get("archive_status") or "")
     dest = att.get("archive_dir")
     if status == "ok" and isinstance(dest, str) and dest:
@@ -134,20 +71,17 @@ def _archive_attachment_block(att: dict, *, name: str, path: str) -> str:
             more = f"\n… {count} files total; listing truncated."
         return (
             f"--- File: {name} ({path}) [archive / unpacked → {dest}] ---\n"
-            f"{count} files in `{dest}`. Original kept at the path above.\n"
-            f"{listing}{more}\n"
-            "Use file tools on that directory. The archive is already a folder."
+            f"{count} files in `{dest}`.\n"
+            f"{listing}{more}"
         )
     if status == "password":
         return (
             f"--- File: {name} ({path}) [archive / password] ---\n"
-            "This archive is password-protected. ask_user for the password "
-            "or an unpacked folder."
+            "Password-protected. Need the password or an unpacked folder."
         )
     return (
         f"--- File: {name} ({path}) [archive / unreadable] ---\n"
-        "Could not unpack this archive (too large, encrypted, or no decoder "
-        "in this process). ask_user for an unpacked folder or a zip."
+        "Could not unpack (too large, encrypted, or no decoder)."
     )
 
 
@@ -176,42 +110,6 @@ async def _resolve_table_preview(
         result = extract_table_preview(data, ext)
         return result.preview
     return None
-
-
-def _attached_files_envelope(
-    body: str,
-    *,
-    conversation_note: str,
-    resident_note: str,
-    table_note: str,
-    binary_note: str,
-    office_note: str,
-    preparsed_note: str,
-    large_text_note: str,
-    missing_note: str,
-    image_note: str,
-    archive_note: str,
-    inline_in_user_message: bool = False,
-) -> str:
-    inline_note = f" {_INLINE_ORDER_FACT}" if inline_in_user_message else ""
-    inner = f"{body}\n" if body else ""
-    return (
-        "<附件>\n"
-        f"{_ATTACH_THIS_MESSAGE_FRAME} "
-        "The user attached the following files, directories and past "
-        "conversations as actionable inputs for this turn—not mere optional "
-        "reference. When the user narrows scope to these materials and/or "
-        "existing workspace products, start from them (gap analysis or a "
-        "revision); do not idle solely because a full repo is missing. Cite "
-        "them by name when relevant. Directory entries list file paths only "
-        "(file contents are not included)."
-        f"{inline_note}"
-        f"{conversation_note}"
-        f"{resident_note}{table_note}{binary_note}{office_note}{preparsed_note}"
-        f"{large_text_note}{missing_note}{image_note}{archive_note}\n\n"
-        f"{inner}"
-        "</附件>"
-    )
 
 
 def _pinned_entries_envelope(body: str) -> str:
@@ -284,30 +182,11 @@ async def _build_attachment_prompt(
     native_image_parts: list[dict] | None = None,
     available_tools: Collection[str] | None = None,
 ) -> AttachmentPrompt:
-    """Render user-referenced files / dirs / conversations into a prompt block.
-
-    Text files carry pre-extracted text; pre-parsed binaries (docx/pdf/…) carry
-    inline text (context-capped) plus a pointer to the ``*.md`` workspace copy;
-    office/PDF that missed pre-parse steer ``read`` (transparent extract);
-    spreadsheet / delimited files carry **column names, types, and sample rows**
-    only (never the full table). ``code_execute`` steer follows ``available_tools`` (this turn's
-    assembled table); when the table is omitted or lacks the tool, the block
-    does not tell the model to call it.
-    Resident **image** attachments: when ``main_native_vision`` and
-    ``native_image_parts`` is provided, bytes become multimodal ``image_url``
-    parts on the current main model; otherwise an honest「当前主模型不收图」
-    note (never silent path-only, never a sidecar eye, never「用 run 开图」).
-    Directories carry a recursive file listing (paths only);
-    ``kind=conversation`` is **server deep-read** via ``log_export``
-    (client shallow ``text`` is ignored). ``kind=document`` pins an on-demand
-    setting for this turn in ``<钉住条目>`` (not ``<附件>``).
-    A file with a ``workspace_path``
-    was persisted into the workspace, so the header points the agent at that
-    durable path. Empty prompt when there is nothing to inject so the base
-    prompt stays unchanged.
-    """
+    """Render this-turn files / dirs / conversations into ordered file parts."""
+    del available_tools
+    empty = AttachmentPrompt((), None, False, False)
     if not attachments:
-        return AttachmentPrompt(None, (), None)
+        return empty
 
     blocks: list[str] = []
     slots: list[str] = []
@@ -317,18 +196,7 @@ async def _build_attachment_prompt(
         blocks.append(block)
         slots.append(block)
 
-    resident = False
-    has_binary = False
-    has_table = False
-    has_office_unparsed = False
-    has_office_inline = False
-    has_preparsed = False
-    has_large_text = False
-    has_conversation = False
     has_resident_missing = False
-    has_image_unconfigured = False
-    has_archive = False
-    has_code_execute = _tool_table_has(available_tools, "run")
     for att in attachments:
         name = att.get("name") or "untitled"
         kind = att.get("kind") or "file"
@@ -336,7 +204,6 @@ async def _build_attachment_prompt(
         binary = bool(att.get("binary"))
         ws_path = att.get("workspace_path")
         parse_status = att.get("parse_status")
-        parsed_path = att.get("parsed_workspace_path")
         ws_str = ws_path if isinstance(ws_path, str) and ws_path else None
         ext = extension_of(name, ws_str)
 
@@ -350,10 +217,7 @@ async def _build_attachment_prompt(
             )
             add_block(
                 f"--- File: {name} ({claimed}) [resident missing] ---\n"
-                "Attachment metadata lists this path, but the bytes are NOT in "
-                "the workspace (upload/residency failed or incomplete). "
-                "Do NOT treat this as delivered source. Do NOT delegate unzip/"
-                "edit against this path. Immediately ask_user to re-upload."
+                "Metadata lists this path, but the bytes are not in the workspace."
             )
             continue
 
@@ -370,11 +234,9 @@ async def _build_attachment_prompt(
             path = att.get("path") or name
             note = " (partial listing)" if att.get("truncated") else ""
             add_block(
-                f"--- Directory: {name} ({path}){note} ---\n"
-                f"File paths (contents not included):\n{text}"
+                f"--- Directory: {name} ({path}){note} ---\n{text}"
             )
         elif kind == "conversation":
-            has_conversation = True
             add_block(
                 await _deep_read_conversation_attachment(
                     att,
@@ -385,43 +247,27 @@ async def _build_attachment_prompt(
             )
         elif parse_status == "scanned" and text:
             path = ws_path or att.get("path") or name
-            if ws_path:
-                resident = True
-            has_preparsed = True
-            copy_note = f" [扫描说明 → {parsed_path}]" if parsed_path else ""
             add_block(
-                f"--- File: {name} ({path}) [扫描件 / 无文本层]{copy_note} ---\n{text}"
+                f"--- File: {name} ({path}) [扫描件 / 无文本层] ---\n{text}"
             )
         elif kind == "file" and ext in TABLE_EXTENSIONS:
             path = ws_path or att.get("path") or name
-            if ws_path:
-                resident = True
-            has_table = True
             preview = await _resolve_table_preview(
                 att, name=name, ws_path=ws_str, text=text, backend=backend
-            )
-            steer = _code_execute_steer(
-                has_code_execute=has_code_execute, spreadsheet=True
             )
             if preview is not None:
                 structure = format_table_preview(preview)
                 add_block(
                     f"--- File: {name} ({path}) [表格 / 列名与样例] ---\n"
-                    f"{structure}\n\n"
-                    "This shows column names, types, and sample rows only — "
-                    f"the full table stays in the workspace file. {steer}"
+                    f"{structure}"
                 )
             else:
                 add_block(
                     f"--- File: {name} ({path}) [表格 / 仅路径] ---\n"
-                    "Could not read column names and sample rows. "
-                    f"{steer} Do NOT treat file_list emptiness as missing."
+                    "Could not read column names and sample rows."
                 )
         elif parse_status == "ok" and att.get("truncated") and not text:
             path = ws_path or att.get("path") or name
-            if ws_path:
-                resident = True
-            has_large_text = True
             size = att.get("size_bytes")
             lines = att.get("total_lines")
             bits: list[str] = []
@@ -432,46 +278,22 @@ async def _build_attachment_prompt(
             meta = ", ".join(bits) if bits else "size unknown"
             add_block(
                 f"--- File: {name} ({path}) [large text / path pointer] ---\n"
-                f"{meta}. Body stays on disk at this workspace path and is not "
-                "inlined. Use read for the first window, or grep. Do not assume "
-                "the file is missing."
+                f"{meta}. Body stays on disk at this path."
             )
         elif parse_status == "ok" and text:
             path = ws_path or att.get("path") or name
-            if ws_path:
-                resident = True
-            has_preparsed = True
             body, clipped = truncate_for_prompt(text)
             client_trunc = bool(att.get("truncated"))
-            flags: list[str] = []
-            if parsed_path and parsed_path != path:
-                flags.append(f"预解析 → {parsed_path}")
-            if clipped or client_trunc:
-                flags.append("truncated")
-            flag_s = f" [{'; '.join(flags)}]" if flags else ""
+            flag_s = " [truncated]" if clipped or client_trunc else ""
             block = f"--- File: {name} ({path}){flag_s} ---\n{body}"
-            if clipped and parsed_path:
-                block += (
-                    f"\n\n… [上下文截到 {len(body)} 字；全文在 {parsed_path}]"
-                )
-            elif clipped:
+            if clipped:
                 block += f"\n\n… [上下文截到 {len(body)} 字]"
-            if ext in MARKITDOWN_EXTENSIONS:
-                has_office_inline = True
-                block += f"\n\n{_office_lossy_steer(has_code_execute=has_code_execute)}"
             add_block(block)
-        elif att.get("archive_status"):
+        elif att.get("archive_status") or name_looks_like_archive(name):
             path = ws_path or att.get("path") or name
-            if ws_path:
-                resident = True
-            has_archive = True
             add_block(_archive_attachment_block(att, name=name, path=path))
         elif binary or (ws_path and not text):
-            # Binary (or empty-body resident / preparse failed): path only —
-            # except resident images → native multimodal or an honest note.
             path = ws_path or att.get("path") or name
-            if ws_path:
-                resident = True
             if (
                 binary
                 and ws_str
@@ -500,130 +322,34 @@ async def _build_attachment_prompt(
                             "无法读取驻留图片字节，本回合未把该图发给主模型。"
                         )
                     continue
-                has_image_unconfigured = True
                 add_block(_image_unsupported_block(name=name, path=path))
                 continue
             if ext in MARKITDOWN_EXTENSIONS:
-                has_office_unparsed = True
                 add_block(
-                    f"--- File: {name} ({path}) [binary / office-pdf] ---\n"
-                    "No inline text for this office/PDF attachment (pre-parse missed or "
-                    "failed). Use read on the workspace-relative path above — "
-                    "text is extracted automatically. Do NOT default to run "
-                    "for office/PDF. Do NOT use an OS absolute path."
+                    f"--- File: {name} ({path}) [office-pdf] ---\n"
+                    "No inline text."
                 )
             else:
-                has_binary = True
-                steer = _code_execute_steer(
-                    has_code_execute=has_code_execute, spreadsheet=False
-                )
                 add_block(
                     f"--- File: {name} ({path}) [binary] ---\n"
-                    "This is a binary file saved in the workspace (no text inline). "
-                    f"{steer} Do NOT treat file_list emptiness as missing."
+                    "No inline text."
                 )
         elif text:
             path = ws_path or att.get("path") or name
-            if ws_path:
-                resident = True
             note = " (truncated)" if att.get("truncated") else ""
             add_block(f"--- File: {name} ({path}){note} ---\n{text}")
 
     pinned_xml = (
-        _pinned_entries_envelope("\n\n".join(pinned_blocks)) if pinned_blocks else ""
+        _pinned_entries_envelope("\n\n".join(pinned_blocks)) if pinned_blocks else None
     )
     if not blocks and not pinned_xml:
-        return AttachmentPrompt(None, (), None)
-
-    notes = dict(
-        conversation_note=(
-            " A Conversation block is the user/assistant transcript of a past chat;"
-            " when truncated, continue with read_conversation using conversation_id"
-            " and next_cursor. Do not treat a truncated block as the full log."
-            if has_conversation
-            else ""
-        ),
-        resident_note=(
-            " Files shown with an in-workspace path are in your workspace at that "
-            "path (cited in place, or copied under attachments/) — read or edit "
-            "them with the file tools by that path."
-            if resident
-            else ""
-        ),
-        table_note=(
-            " Spreadsheet / delimited attachments include column names, row counts, "
-            "inferred types, and sample rows only. Full data stays in "
-            "the workspace file and is not inlined."
-            if has_table
-            else ""
-        ),
-        binary_note=(
-            (
-                " Unknown binary attachments have no inline body. "
-                + _code_execute_steer(
-                    has_code_execute=has_code_execute, spreadsheet=False
-                )
-            )
-            if has_binary
-            else ""
-        ),
-        office_note=(
-            " Office/PDF attachments without inline text: use read on the "
-            "workspace path (automatic text extract); do not default to run."
-            if has_office_unparsed
-            else ""
-        ),
-        preparsed_note=(
-            (
-                " Some office/PDF attachments were pre-parsed at upload: inline text may "
-                "be truncated — use the ``*.md`` workspace copy (or the original path) "
-                "with file tools for the full extract."
-                + (f" {_OFFICE_TABLE_LOSSY}" if has_office_inline else "")
-            )
-            if has_preparsed
-            else ""
-        ),
-        large_text_note=(
-            " Large plain-text attachments list path, size, and line count only; "
-            "the body stays on disk — use read or grep."
-            if has_large_text
-            else ""
-        ),
-        missing_note=(
-            " A [resident missing] block means chip/metadata claimed a workspace "
-            "path but bytes are absent — ask_user to re-upload; never dispatch "
-            "unzip/remediation as if the file were already delivered."
-            if has_resident_missing
-            else ""
-        ),
-        image_note=(
-            " Image attachments: the current main model does not accept images "
-            "— do not treat a bare path as a reading, and do not default to "
-            "run to open images."
-            if has_image_unconfigured
-            else ""
-        ),
-        archive_note=(
-            " Archive attachments were unpacked at upload into a sibling folder "
-            "(original kept). Work from that folder with file tools; installing "
-            "extractors is not the job."
-            if has_archive
-            else ""
-        ),
+        return empty
+    return AttachmentPrompt(
+        tuple(slots),
+        pinned_xml,
+        has_file_parts=bool(blocks),
+        has_resident_missing=has_resident_missing,
     )
-    attached_full = None
-    attached_slim = None
-    if blocks:
-        body = "\n\n".join(blocks)
-        attached_full = _attached_files_envelope(
-            body, inline_in_user_message=False, **notes
-        )
-        attached_slim = _attached_files_envelope("", inline_in_user_message=True, **notes)
-    parts_full = [p for p in (pinned_xml, attached_full) if p]
-    parts_slim = [p for p in (pinned_xml, attached_slim) if p]
-    envelope = "\n\n".join(parts_full) if parts_full else None
-    slim = "\n\n".join(parts_slim) if parts_slim else None
-    return AttachmentPrompt(envelope, tuple(slots), slim)
 
 
 async def _build_attachment_context(
@@ -636,7 +362,7 @@ async def _build_attachment_context(
     native_image_parts: list[dict] | None = None,
     available_tools: Collection[str] | None = None,
 ) -> str | None:
-    """Render user-referenced files into ``<附件>`` (tests / legacy seam)."""
+    """Join this-turn file parts (tests). No HOW envelope."""
     prompt = await _build_attachment_prompt(
         attachments,
         user_id=user_id,
@@ -646,4 +372,12 @@ async def _build_attachment_context(
         native_image_parts=native_image_parts,
         available_tools=available_tools,
     )
-    return prompt.envelope
+    parts = [
+        p
+        for p in (
+            prompt.pinned_xml,
+            "\n\n".join(b for b in prompt.file_blocks if b),
+        )
+        if p
+    ]
+    return "\n\n".join(parts) if parts else None

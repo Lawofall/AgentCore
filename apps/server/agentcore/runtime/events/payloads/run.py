@@ -110,6 +110,7 @@ ContextChannel = Literal[
     "tools",
     "history",
     "request",
+    "materials",
     "team_position",
     "dependency",
     "workspace",
