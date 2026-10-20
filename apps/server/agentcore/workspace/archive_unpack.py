@@ -22,6 +22,7 @@ import zipfile
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
+from typing import Literal
 
 from agentcore.core.logging import get_logger
 from agentcore.storage._archive import (
@@ -50,7 +51,8 @@ from agentcore.workspace.protocol import (
 logger = get_logger(__name__)
 
 _SEVEN_Z_BINS = ("7z", "7zz", "7za")
-_TAR_MODES = ("r:*", "r:gz", "r:bz2", "r:xz")
+_TarReadMode = Literal["r:*", "r:gz", "r:bz2", "r:xz"]
+_TAR_MODES: tuple[_TarReadMode, ...] = ("r:*", "r:gz", "r:bz2", "r:xz")
 _ZIP_READ_CHUNK = 1024 * 1024
 
 
@@ -282,7 +284,7 @@ def _members_from_tar(data: bytes) -> list[tuple[str, bytes]]:
     raise UnpackFailedError("bad_tar")
 
 
-def _read_tar(data: bytes, mode: str) -> list[tuple[str, bytes]]:
+def _read_tar(data: bytes, mode: _TarReadMode) -> list[tuple[str, bytes]]:
     out: list[tuple[str, bytes]] = []
     total = 0
     with tarfile.open(fileobj=io.BytesIO(data), mode=mode) as tf:
