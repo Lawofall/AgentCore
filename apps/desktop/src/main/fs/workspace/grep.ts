@@ -61,9 +61,11 @@ function productIgnoreGlobs(
     for (const s of AI_NOISE_FILE_SUFFIXES) suffixes.add(s);
   } else {
     for (const s of AI_NOISE_FILE_SUFFIXES) {
-      if (!images.has(s)) suffixes.add(s);
+      if (!images.has(s) && !archives.has(s)) suffixes.add(s);
     }
-    for (const s of archives) suffixes.delete(s);
+    if (revealArchives) {
+      for (const s of archives) suffixes.delete(s);
+    }
   }
   for (const suf of [...suffixes].sort()) {
     globs.push(`!**/*${suf}`);

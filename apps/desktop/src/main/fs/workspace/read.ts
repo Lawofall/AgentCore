@@ -1,4 +1,4 @@
-import { createReadStream, promises as fs } from "node:fs";
+import { promises as fs, createReadStream } from "node:fs";
 import { join, relative } from "node:path";
 import type { WorkspaceOpResult } from "@shared/ipc-contract";
 import {
@@ -213,9 +213,10 @@ export async function opList(
 }
 
 function stripLineEnding(line: string): string {
-  if (line.endsWith("\n")) line = line.slice(0, -1);
-  if (line.endsWith("\r")) line = line.slice(0, -1);
-  return line;
+  let text = line;
+  if (text.endsWith("\n")) text = text.slice(0, -1);
+  if (text.endsWith("\r")) text = text.slice(0, -1);
+  return text;
 }
 
 async function streamTextLines(

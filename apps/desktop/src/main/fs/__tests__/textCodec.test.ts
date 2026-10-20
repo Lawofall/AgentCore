@@ -22,7 +22,8 @@ describe("textCodec", () => {
     const raw = iconv.encode("你好世界", "gb18030");
     const decoded = decodeStoredText(raw);
     expect(decoded).toEqual({ encoding: "gbk", text: "你好世界" });
-    const written = encodeStoredText(decoded!.text, decoded!.encoding);
+    if (!decoded) throw new Error("expected gbk decode");
+    const written = encodeStoredText(decoded.text, decoded.encoding);
     expect(written.equals(raw)).toBe(true);
     expect(written.equals(Buffer.from("你好世界", "utf-8"))).toBe(false);
   });

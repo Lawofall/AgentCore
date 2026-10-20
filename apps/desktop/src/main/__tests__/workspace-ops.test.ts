@@ -143,7 +143,8 @@ describe("executeWorkspaceOp (本地工作区写类 op，P2b)", () => {
 
   it("read_lines windows a file larger than the 5 MiB whole-file gate", async () => {
     const line = "row-token-line\n";
-    const repeats = Math.ceil((WORKSPACE_READ_MAX + 16) / Buffer.byteLength(line)) + 8;
+    const repeats =
+      Math.ceil((WORKSPACE_READ_MAX + 16) / Buffer.byteLength(line)) + 8;
     await writeFile(join(dir, "novel.txt"), line.repeat(repeats), "utf-8");
     const denied = errOf(await run("read_bytes", { path: "novel.txt" }));
     expect(denied.kind).toBe("WorkspaceIOError");

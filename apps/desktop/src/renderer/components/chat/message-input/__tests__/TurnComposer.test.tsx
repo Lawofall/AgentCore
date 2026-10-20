@@ -824,8 +824,7 @@ describe("TurnComposer variants", () => {
       ).toBe("stack");
       expect(detail.getAttribute("data-side")).toBeNull();
       expect(
-        list.compareDocumentPosition(detail) &
-          Node.DOCUMENT_POSITION_FOLLOWING,
+        list.compareDocumentPosition(detail) & Node.DOCUMENT_POSITION_FOLLOWING,
       ).toBeTruthy();
       expect(list.closest("[data-side]")?.className).toContain(
         "w-[min(20rem,calc(100vw-2rem))]",
@@ -1408,9 +1407,7 @@ describe("TurnComposer variants", () => {
       expect(actions?.contains(model)).toBe(true);
       expect(actions?.contains(send)).toBe(true);
       expect(
-        card
-          ?.querySelector("[data-composer-send-cluster]")
-          ?.contains(model),
+        card?.querySelector("[data-composer-send-cluster]")?.contains(model),
       ).toBe(false);
       expect(
         body.compareDocumentPosition(actions as Node) &

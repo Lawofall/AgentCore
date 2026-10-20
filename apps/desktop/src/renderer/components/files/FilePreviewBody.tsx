@@ -69,7 +69,7 @@ export function FilePreviewBody({
               <button
                 type="button"
                 onClick={() => onOpenEntry(entry)}
-                className="w-full truncate rounded-md px-2 py-1 text-left text-foreground hover:bg-accent"
+                className="w-full truncate rounded-lg px-2 py-1 text-left text-foreground hover:bg-accent"
               >
                 {entry.isDir ? `${entry.name}/` : entry.name}
               </button>

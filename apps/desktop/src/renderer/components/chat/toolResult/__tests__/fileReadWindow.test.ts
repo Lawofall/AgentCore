@@ -22,9 +22,7 @@ describe("parseFileReadWindow", () => {
 
   it("parses a requested window that has not hit a safety cap", () => {
     expect(
-      parseFileReadWindow(
-        "191| x\n\n（第 1–200 行，共 242 行；未达安全顶）",
-      ),
+      parseFileReadWindow("191| x\n\n（第 1–200 行，共 242 行；未达安全顶）"),
     ).toEqual({ start: 1, end: 200, total: 242 });
   });
 
@@ -70,9 +68,7 @@ describe("stripFileReadFooter", () => {
 
   it("removes a requested-window footer", () => {
     expect(
-      stripFileReadFooter(
-        "191| x\n\n（第 1–200 行，共 242 行；未达安全顶）",
-      ),
+      stripFileReadFooter("191| x\n\n（第 1–200 行，共 242 行；未达安全顶）"),
     ).toBe("191| x");
   });
 

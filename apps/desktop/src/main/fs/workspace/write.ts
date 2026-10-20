@@ -596,10 +596,7 @@ export async function opReplace(
   }
   if (!st.isFile()) return opErr("NotAFile", relPath);
   if (st.size > WORKSPACE_REPLACE_MAX) {
-    return opErr(
-      "WorkspaceIOError",
-      `文件过大，无法读取（${st.size}字节）`,
-    );
+    return opErr("WorkspaceIOError", `文件过大，无法读取（${st.size}字节）`);
   }
 
   let content: string;

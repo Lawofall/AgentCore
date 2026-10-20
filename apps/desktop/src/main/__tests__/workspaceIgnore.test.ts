@@ -137,7 +137,9 @@ describe("workspaceIgnore", () => {
   it("AI list exempts reveal_paths materials outside attachments/", () => {
     const reveal = new Set(["src/pack.zip"]);
     expect(shouldSkipAiListEntry("pack.zip", false, "src", reveal)).toBe(false);
-    expect(shouldSkipAiListEntry("other.zip", false, "src", reveal)).toBe(false);
+    expect(shouldSkipAiListEntry("other.zip", false, "src", reveal)).toBe(
+      false,
+    );
     expect(shouldSkipAiListEntry("pack.zip", false, "src")).toBe(false);
     expect(shouldSkipAiListEntry("shot.png", false, "src")).toBe(false);
     // System noise never exempt via reveal

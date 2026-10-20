@@ -265,7 +265,8 @@ export function shouldSkipAiListEntry(
   if (isDirectory) return shouldSkipDirName(name, parentRel);
   if (shouldSkipSystemFileName(name)) return true;
   if (!shouldSkipAiNoiseFileName(name)) return false;
-  if (isAiImageFileName(name) || shouldSkipAiArchiveFileName(name)) return false;
+  if (isAiImageFileName(name) || shouldSkipAiArchiveFileName(name))
+    return false;
   const parent = parentRel.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
   const child = parent && parent !== "." ? `${parent}/${name}` : name;
   if (isAttachmentPath(child)) return false;

@@ -1,5 +1,5 @@
-import iconv from "iconv-lite";
 import type { FsEncoding } from "@shared/ipc-contract";
+import iconv from "iconv-lite";
 
 /**
  * Shared decode/encode for workspace text: UTF-8 (BOM), UTF-8, then GB18030.
@@ -9,7 +9,12 @@ export function decodeStoredText(
   buf: Buffer,
 ): { encoding: FsEncoding; text: string } | null {
   if (buf.includes(0)) return null;
-  if (buf.length >= 3 && buf[0] === 0xef && buf[1] === 0xbb && buf[2] === 0xbf) {
+  if (
+    buf.length >= 3 &&
+    buf[0] === 0xef &&
+    buf[1] === 0xbb &&
+    buf[2] === 0xbf
+  ) {
     return {
       encoding: "utf-8-bom",
       text: new TextDecoder("utf-8").decode(buf.subarray(3)),

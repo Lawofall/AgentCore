@@ -35,16 +35,15 @@ export function AttachmentChip({
   const openable = interactive && canOpenPreview(att);
   const openPath = previewPath(att);
   const asFolder = Boolean(att.archiveDir) || att.kind === "dir";
-  const icon =
-    asFolder ? (
-      <DirTypeIcon name={att.name} path={att.archiveDir || att.path} size={12} />
-    ) : att.kind === "conversation" ? (
-      <MessageSquare size={12} className="shrink-0" />
-    ) : att.kind === "document" ? (
-      <Bookmark size={12} className="shrink-0" />
-    ) : (
-      <FileTypeIcon name={att.name} path={att.path} size={12} />
-    );
+  const icon = asFolder ? (
+    <DirTypeIcon name={att.name} path={att.archiveDir || att.path} size={12} />
+  ) : att.kind === "conversation" ? (
+    <MessageSquare size={12} className="shrink-0" />
+  ) : att.kind === "document" ? (
+    <Bookmark size={12} className="shrink-0" />
+  ) : (
+    <FileTypeIcon name={att.name} path={att.path} size={12} />
+  );
   const tooltip =
     att.kind === "conversation"
       ? "引用对话"
