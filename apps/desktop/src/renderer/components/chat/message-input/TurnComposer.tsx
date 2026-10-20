@@ -112,9 +112,11 @@ const MIN_COMPOSER_HEIGHT_CARD = 56;
 const MIN_COMPOSER_HEIGHT_BAR = 36;
 const MAX_COMPOSER_HEIGHT = 200;
 
-/** bar 单行盒：更多|＋ · 输入 · 改动? · 模型 · 语音 · 发送。窗外环用同一 `py-1` 对齐。 */
+/** bar 工具行：宽屏与输入同一行；窄屏单独一行（输入在上）。窗外环用同一 `py-1` 对齐。 */
 const COMPOSER_BAR_ROW = "flex items-end gap-1 py-1";
 const COMPOSER_BAR_CLUSTER = "flex shrink-0 items-center pb-0.5";
+/** 窄屏下行：模型在更多和发送簇之间，空间不够先截名字。 */
+const COMPOSER_BAR_MODEL = "flex min-w-0 max-w-64";
 /** card 底栏：窗外环与工具条同一 `pb-3`，不跟卡片边框底边对齐。 */
 const COMPOSER_CARD_ENDCAP = "flex items-end pb-3";
 /**
@@ -140,8 +142,9 @@ const DEFAULT_COMPOSER_PLACEHOLDER = "输入消息，@ 引用内容…";
  * {@link import("../MessageInput").MessageInput}. Canvas is look-only; 下达指令
  * stays in chat. Hosts only pick chrome (placeholder).
  *
- * `variant="bar"` is the compact chrome used only by the chat bottom dock:
- * 输入与按钮同一行：更多|＋ · 编辑区 · 改动? · 模型 · 语音 · 发送。
+ * `variant="bar"` is the compact chrome used only by the chat bottom dock.
+ * 宽屏同一行：更多|＋ · 编辑区 · 改动? · 模型 · 语音 · 发送。
+ * 窄屏两行：上行输入，下行更多|＋ · 改动? · 模型 · 语音 · 发送。
  * 空草稿：工作区 / Git / 能力 / 委派 / 权限挂在卡片上方常显（`data-composer-world`），＋打开引用目录。
  * 有会话：世界行与＋收进「更多」（第一行添加引用目录）。`@` 在输入里打字引用。
  * 有可回滚改动时「改动」chip 留在更多旁边。
@@ -167,7 +170,7 @@ export function TurnComposer({
   placeholder?: string;
   /**
    * `card` = editor above toolbar (default; centered new-chat composer).
-   * `bar` = compact dock: editor and send on one row.
+   * `bar` = compact dock: wide = one row; narrow = editor above toolbar.
    */
   variant?: TurnComposerVariant;
   /** Visually fuse with ApprovalPrompt stacked above (工具审批 A · Composer 一体). */
@@ -175,6 +178,7 @@ export function TurnComposer({
 }) {
   const isBar = variant === "bar";
   const { isNarrow } = useNarrowLayoutState();
+  const stackBar = isBar && isNarrow;
   const sendOnEnter = useUIStore((s) => s.sendOnEnter);
   const minComposerHeight = isBar
     ? MIN_COMPOSER_HEIGHT_BAR
@@ -869,6 +873,7 @@ export function TurnComposer({
           onDragLeave={drop.handleDragLeave}
           onDrop={drop.handleDrop}
           data-composer-variant={variant}
+          data-composer-stacked={stackBar ? "" : undefined}
           data-composer-attached-approval={
             attachedBelowApproval ? "true" : undefined
           }
@@ -957,24 +962,47 @@ export function TurnComposer({
           )}
 
           {isBar ? (
-            <div
-              className={`${COMPOSER_BAR_ROW} px-2`}
-              data-composer-actions=""
-            >
-              <div className={COMPOSER_BAR_CLUSTER}>
-                {compactWorld ? moreMenu : attachButton}
-                {changesChip}
-              </div>
-              {editorBlock}
+            stackBar ? (
+              <>
+                {editorBlock}
+                <div
+                  className={`${COMPOSER_BAR_ROW} px-2`}
+                  data-composer-actions=""
+                >
+                  <div className={COMPOSER_BAR_CLUSTER}>
+                    {compactWorld ? moreMenu : attachButton}
+                    {changesChip}
+                  </div>
+                  <div className={COMPOSER_BAR_MODEL}>{modelChip}</div>
+                  <div
+                    className={`${COMPOSER_BAR_CLUSTER} ml-auto gap-1`}
+                    data-composer-send-cluster=""
+                  >
+                    {voiceControl}
+                    {sendControls}
+                  </div>
+                </div>
+              </>
+            ) : (
               <div
-                className={`${COMPOSER_BAR_CLUSTER} ml-auto gap-1`}
-                data-composer-send-cluster=""
+                className={`${COMPOSER_BAR_ROW} px-2`}
+                data-composer-actions=""
               >
-                {modelChip}
-                {voiceControl}
-                {sendControls}
+                <div className={COMPOSER_BAR_CLUSTER}>
+                  {compactWorld ? moreMenu : attachButton}
+                  {changesChip}
+                </div>
+                {editorBlock}
+                <div
+                  className={`${COMPOSER_BAR_CLUSTER} ml-auto gap-1`}
+                  data-composer-send-cluster=""
+                >
+                  {modelChip}
+                  {voiceControl}
+                  {sendControls}
+                </div>
               </div>
-            </div>
+            )
           ) : (
             <>
               {editorBlock}

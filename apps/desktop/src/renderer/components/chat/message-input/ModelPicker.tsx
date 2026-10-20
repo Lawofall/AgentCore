@@ -19,8 +19,13 @@ import {
   useComposerActiveProfile,
   useComposerProfileDraftStore,
 } from "@/lib/composerModelProfile";
-import { isModelPickerFloatTarget } from "@/lib/modelPicker";
+import {
+  composerShelfLayout,
+  isModelPickerFloatTarget,
+} from "@/lib/modelPicker";
+import { useNarrowLayoutState } from "@/lib/narrowLayout";
 import { notifyError } from "@/lib/toast";
+import { cn } from "@/lib/utils";
 import { type ProfileDraft, ProfileEditor } from "@/pages/more/ModelSettings";
 import { setConversationModelOverride } from "@/services/conversations";
 import { slotDisplayName } from "@/services/llmModelProfiles";
@@ -153,6 +158,11 @@ export function ModelPicker({ disabled }: { disabled?: boolean }) {
     loading,
   } = session;
   const [open, setOpen] = useState(false);
+  const { isNarrow } = useNarrowLayoutState();
+  const shelfLayout = composerShelfLayout({
+    plusPanel: plus.mode === "panel",
+    narrow: isNarrow,
+  });
 
   if (plus.mode === "hidden") return null;
 
@@ -178,7 +188,7 @@ export function ModelPicker({ disabled }: { disabled?: boolean }) {
       showCancel={false}
       framed={false}
       surface="shelf"
-      shelfLayout={plus.mode === "panel" ? "stack" : "columns"}
+      shelfLayout={shelfLayout}
       providers={providers}
       catalog={catalog}
       catalogModels={catalogModels}
@@ -215,12 +225,12 @@ export function ModelPicker({ disabled }: { disabled?: boolean }) {
       aria-label={`模型：${label}`}
       aria-expanded={plus.mode === "panel" || open}
       onClick={plus.mode === "row" ? plus.drill : undefined}
-      className={`inline-flex h-8 max-w-64 items-center gap-1 rounded-lg px-2 text-xs text-foreground hover:bg-accent/60 ${
+      className={`inline-flex h-8 min-w-0 max-w-64 items-center gap-1 rounded-lg px-2 text-xs text-foreground hover:bg-accent/60 ${
         disabled || pending ? "cursor-not-allowed opacity-60" : ""
       }`}
     >
       {pending ? <Loader2 size={14} className="shrink-0 animate-spin" /> : null}
-      <span className="truncate">{name}</span>
+      <span className="min-w-0 truncate">{name}</span>
       {effort ? (
         <span className="shrink-0 text-muted-foreground">{effort}</span>
       ) : null}
@@ -259,7 +269,12 @@ export function ModelPicker({ disabled }: { disabled?: boolean }) {
               e.preventDefault();
             }
           }}
-          className="w-[min(13rem,calc(100vw-2rem))] overflow-hidden p-0"
+          className={cn(
+            "p-0",
+            isNarrow
+              ? "flex max-h-[min(22rem,70vh)] w-[min(20rem,calc(100vw-2rem))] flex-col overflow-y-auto"
+              : "w-[min(13rem,calc(100vw-2rem))] overflow-hidden",
+          )}
         >
           {editor}
         </PopoverContent>

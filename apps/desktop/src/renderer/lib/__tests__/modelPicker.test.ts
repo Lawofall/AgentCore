@@ -5,6 +5,7 @@ import {
 import {
   byokHandFillGroups,
   clusterSettingsRows,
+  composerShelfLayout,
   emptyByokGroups,
   flattenPickerRows,
   isPickerEnabled,
@@ -270,5 +271,18 @@ describe("clusterSettingsRows", () => {
     expect(clusters.map((c) => c.vendor)).toEqual(["智谱 AI", "xAI"]);
     expect(clusters[0]?.rows).toEqual([glm]);
     expect(clusters[1]?.rows).toEqual([grok]);
+  });
+});
+
+describe("composerShelfLayout", () => {
+  it("keeps two panes on a wide chip", () => {
+    expect(composerShelfLayout({ narrow: false })).toBe("columns");
+  });
+
+  it("stacks when the chip is narrow or inside「＋」", () => {
+    expect(composerShelfLayout({ narrow: true })).toBe("stack");
+    expect(composerShelfLayout({ plusPanel: true, narrow: false })).toBe(
+      "stack",
+    );
   });
 });

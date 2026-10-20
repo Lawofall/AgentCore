@@ -682,6 +682,7 @@ describe("TurnComposer variants", () => {
     expect(card?.contains(screen.getByLabelText("在哪工作"))).toBe(false);
     expect(actions?.contains(screen.getByTestId("composer-body"))).toBe(true);
     expect(card?.contains(screen.getByTestId("composer-body"))).toBe(true);
+    expect(card?.hasAttribute("data-composer-stacked")).toBe(false);
     expect(document.querySelector("[data-composer-name-row]")).toBeNull();
     expectWorldThenSend();
     expect(screen.queryByText("后台云端")).toBeNull();
@@ -808,6 +809,30 @@ describe("TurnComposer variants", () => {
       screen.getByTestId("composer-model-detail").getAttribute("data-side"),
     ).toBe("right");
     expect(screen.getByLabelText("在哪工作")).toBeTruthy();
+  });
+
+  it("narrow card: 模型弹层上下叠，不另开右侧卡", () => {
+    const view = renderNarrowComposer("card");
+    try {
+      fireEvent.click(screen.getByLabelText(/模型：/));
+      const list = screen.getByRole("listbox", { name: "模型" });
+      const detail = screen.getByTestId("composer-model-detail");
+      expect(
+        screen
+          .getByTestId("assembly-model-row")
+          .getAttribute("data-shelf-layout"),
+      ).toBe("stack");
+      expect(detail.getAttribute("data-side")).toBeNull();
+      expect(
+        list.compareDocumentPosition(detail) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      expect(list.closest("[data-side]")?.className).toContain(
+        "w-[min(20rem,calc(100vw-2rem))]",
+      );
+    } finally {
+      view.restore();
+    }
   });
 
   it("bar: 能力弹层直接从芯片打开", () => {
@@ -1366,7 +1391,7 @@ describe("TurnComposer variants", () => {
     }
   });
 
-  it("narrow bar keeps the field on the same row as ＋ and 发送", () => {
+  it("narrow bar stacks the field above ＋ and 发送", () => {
     const view = renderNarrowComposer("bar");
     try {
       const card = document.querySelector('[data-composer-variant="bar"]');
@@ -1374,16 +1399,25 @@ describe("TurnComposer variants", () => {
       const body = screen.getByTestId("composer-body");
       const plus = screen.getByRole("button", { name: "添加" });
       const send = screen.getByRole("button", { name: "发送" });
+      const model = screen.getByLabelText(/模型：/);
       expect(actions).toBeTruthy();
+      expect(card?.hasAttribute("data-composer-stacked")).toBe(true);
       expect(card?.contains(body)).toBe(true);
-      expect(actions?.contains(body)).toBe(true);
+      expect(actions?.contains(body)).toBe(false);
       expect(actions?.contains(plus)).toBe(true);
+      expect(actions?.contains(model)).toBe(true);
       expect(actions?.contains(send)).toBe(true);
       expect(
-        plus.compareDocumentPosition(body) & Node.DOCUMENT_POSITION_FOLLOWING,
+        card
+          ?.querySelector("[data-composer-send-cluster]")
+          ?.contains(model),
+      ).toBe(false);
+      expect(
+        body.compareDocumentPosition(actions as Node) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
       ).toBeTruthy();
       expect(
-        body.compareDocumentPosition(send) & Node.DOCUMENT_POSITION_FOLLOWING,
+        plus.compareDocumentPosition(send) & Node.DOCUMENT_POSITION_FOLLOWING,
       ).toBeTruthy();
       expect(
         actions?.contains(screen.getByRole("switch", { name: "统筹" })),

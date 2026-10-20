@@ -1,6 +1,6 @@
 {
   "name": "agentcore-desktop",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "AgentCore Desktop - Multi-Agent AI Workspace",
   "author": "AgentCore",
   "main": "./out/main/index.js",
@@ -54,12 +54,7 @@
     "extends": "./electron-builder.config.mjs"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "1.30.0",
-    "electron-updater": "^6.8.9",
-    "ignore": "^7.0.5",
-    "jszip": "^3.10.1",
-    "node-pty": "^1.1.0",
-    "react-material-icon-theme": "1.2.0"
+    "node-pty": "^1.1.0"
   },
   "devDependencies": {
     "@agentcore/contract-rest-types": "workspace:*",
@@ -83,6 +78,7 @@
     "@electron-toolkit/utils": "^4.0.0",
     "@electron/rebuild": "^4.0.4",
     "@lezer/highlight": "^1.2.3",
+    "@modelcontextprotocol/sdk": "1.30.0",
     "@playwright/test": "1.61.0",
     "@radix-ui/react-context-menu": "^2.3.1",
     "@radix-ui/react-dialog": "^1.1.17",
@@ -106,8 +102,11 @@
     "cmdk": "^1.1.1",
     "electron": "^42.5.1",
     "electron-builder": "^26.15.3",
+    "electron-updater": "^6.8.9",
     "electron-vite": "^5.0.0",
+    "ignore": "^7.0.5",
     "jsdom": "^29.1.1",
+    "jszip": "^3.10.1",
     "katex": "^0.17.0",
     "lucide-react": "^0.400.0",
     "markmap-lib": "^0.18.12",
@@ -118,6 +117,7 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-markdown": "^9.0.0",
+    "react-material-icon-theme": "1.2.0",
     "react-router-dom": "^7.18.2",
     "rehype-highlight": "^7.0.2",
     "rehype-katex": "^7.0.1",

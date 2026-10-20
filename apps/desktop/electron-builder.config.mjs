@@ -48,10 +48,10 @@ const config = {
     buildResources: "build",
   },
 
-  // out/ 是 electron-vite 自包含产物（renderer 已 bundle；main/preload 仅保留少量运行时
-  // 外部依赖）。renderer 专用包放在 package.json devDependencies，electron-builder 不会
-  // 把它们打进 node_modules。shoot 截图在 shoot-out/（须在 out/ 外）；下列排除为
-  // 历史/防御性规则，防止旧路径或手误产物再次进包。
+  // out/ 是 electron-vite 自包含产物：renderer 已 bundle；main/preload 的 JS 依赖也打进
+  // out/（它们在 package.json devDependencies）。asar 里的 node_modules 只收
+  // `dependencies`——现仅原生模块 node-pty。shoot 截图在 shoot-out/（须在 out/ 外）；
+  // 下列排除为历史/防御性规则，防止旧路径或手误产物再次进包。
   files: [
     "out/**",
     "package.json",

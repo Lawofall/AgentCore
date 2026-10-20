@@ -1,7 +1,7 @@
 import { dirname, resolve } from "path";
 import { fileURLToPath } from "url";
 import react from "@vitejs/plugin-react";
-import { defineConfig, externalizeDepsPlugin } from "electron-vite";
+import { defineConfig } from "electron-vite";
 import { loadEnv, searchForWorkspaceRoot } from "vite";
 import { viteClientBuildDefine } from "../../scripts/client-build-info.mjs";
 import {
@@ -55,7 +55,12 @@ export default defineConfig(({ mode, command }) => {
 
   return {
     main: {
-      plugins: [externalizeDepsPlugin()],
+      // `package.json.dependencies` 只留原生模块（现仅 node-pty）。electron-vite 5
+      // 默认把这一列 externalize，运行时从 asar node_modules 加载；JS 库在
+      // devDependencies，打进 out/（传递依赖如 jszip→setimmediate 一并打进产物）。
+      build: {
+        externalizeDeps: true,
+      },
       define: {
         __API_BASE_URL__: JSON.stringify(apiBaseUrl),
         ...channelBuildDefine,
@@ -67,7 +72,9 @@ export default defineConfig(({ mode, command }) => {
       },
     },
     preload: {
-      plugins: [externalizeDepsPlugin()],
+      build: {
+        externalizeDeps: true,
+      },
       resolve: {
         alias: {
           "@shared": resolve(packageDir, "src/shared"),

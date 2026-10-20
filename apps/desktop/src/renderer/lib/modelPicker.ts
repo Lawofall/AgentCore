@@ -26,6 +26,14 @@ export type PickerRow = {
   option: DefaultModelOption;
 };
 
+/** Wide chip: catalog + right-hand card. Narrow / 「＋」panel: one column so the knobs stay on screen. */
+export function composerShelfLayout(opts: {
+  plusPanel?: boolean;
+  narrow: boolean;
+}): "columns" | "stack" {
+  return opts.plusPanel || opts.narrow ? "stack" : "columns";
+}
+
 /** Portaled picker layers (detail card, 积分价目). Outside-click must not close the catalog. */
 export const MODEL_PICKER_FLOAT_SELECTOR =
   "[data-testid=composer-model-detail], [data-catalog-rate-guide]";

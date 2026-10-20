@@ -779,7 +779,7 @@ export function ProfileEditor({
   framed?: boolean;
   /** `shelf` is the composer model block: catalog plus the checked model's knobs, save on change. */
   surface?: "card" | "shelf";
-  /** Composer shelf: two panes, or one column inside「＋」. */
+  /** Composer shelf: two panes on wide; one column inside「＋」 or the narrow chip. */
   shelfLayout?: "columns" | "stack";
 }) {
   const [name, setName] = useState(initial.name);
