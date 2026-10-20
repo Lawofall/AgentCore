@@ -38,6 +38,24 @@ async def test_persist_writes_file_and_sets_workspace_path(tmp_path: Path):
     assert out[0].get("parse_status") == "ok"
 
 
+async def test_persist_repass_keeps_inline_text_and_disk(tmp_path: Path):
+    """已入场附件再 persist 一次不得改盘、也不得用盘上现文覆盖入场快照。"""
+    ws = _ws(tmp_path)
+    first = await persist_attachments(
+        ws, [{"name": "notes.md", "path": "/local/notes.md", "text": "hello body"}]
+    )
+    assert first[0]["text"] == "hello body"
+    (tmp_path / "attachments" / "notes.md").write_text(
+        "SHOULD_NOT_OVERWRITE", encoding="utf-8"
+    )
+    second = await persist_attachments(ws, first)
+    assert second[0]["workspace_path"] == "attachments/notes.md"
+    assert second[0]["text"] == "hello body"
+    assert (tmp_path / "attachments" / "notes.md").read_text(encoding="utf-8") == (
+        "SHOULD_NOT_OVERWRITE"
+    )
+
+
 async def test_persist_keeps_client_pre_resident_path(tmp_path: Path):
     """引用即驻留：客户端已写入 attachments/ 时跳过 rewrite，保留 workspace_path。"""
     ws = _ws(tmp_path)

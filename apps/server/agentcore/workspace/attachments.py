@@ -135,6 +135,11 @@ def _is_copied_attachment_rel(rel: str) -> bool:
     return bool(rest) and "/" not in rest and ".." not in rest
 
 
+def _already_enriched(item: dict) -> bool:
+    """True after first-touch unpack/preparse — drain re-pass must not refresh from disk."""
+    return bool(item.get("parse_status") or item.get("archive_status"))
+
+
 def _apply_table_preview(item: dict, result: TablePreviewResult) -> None:
     """Attach a column/type/sample preview and drop any inline table body from the item."""
     item["parse_status"] = result.status.value
@@ -223,6 +228,9 @@ async def persist_attachments(
     ``parsed_workspace_path``, and ``parse_status`` from pre-parse. Spreadsheet
     / delimited residents gain ``table_preview`` (structure only) and have
     ``text`` cleared so the full table never rides into the prompt.
+
+    Drain re-pass of an already-enriched row is idempotent: verify residency,
+    skip rewrite, keep the entry snapshot (do not re-read disk into ``text``).
     """
     if not attachments:
         return []
@@ -275,7 +283,7 @@ async def persist_attachments(
                 item["binary"] = binary
                 item.pop("resident_missing", None)
                 item.pop("claimed_workspace_path", None)
-                if _is_copied_attachment_rel(pre):
+                if _is_copied_attachment_rel(pre) and not _already_enriched(item):
                     from agentcore.workspace.archive_unpack import unpack_resident
 
                     unpacked = await unpack_resident(
