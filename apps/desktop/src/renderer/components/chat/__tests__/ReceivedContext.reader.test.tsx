@@ -526,7 +526,7 @@ describe("ReceivedContextDialog reader", () => {
 
     const allBtn = screen.getByRole("button", { name: /全部/ });
     expect(allBtn.getAttribute("aria-current")).toBeNull();
-    expect(allBtn.textContent).toContain("96 字");
+    expect(allBtn.textContent).toContain("84 字");
     const nav = screen.getByRole("navigation", { name: "上下文目录" });
     expect(nav.textContent?.indexOf("全部")).toBeLessThan(
       nav.textContent?.indexOf("设定") ?? -1,
@@ -545,7 +545,6 @@ describe("ReceivedContextDialog reader", () => {
     );
     expect(headings).toEqual([
       "CEO 系统提示（本回合实际遵循的系统指令）",
-      "本回合工具",
       "原始用户请求",
     ]);
     expect(all.textContent).toContain("你是 CEO。");
