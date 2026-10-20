@@ -35,7 +35,7 @@ describe("parseFileReadWindow", () => {
   it("finds the window footer when a PDF page HOW follows", () => {
     expect(
       parseFileReadWindow(
-        "body\n\n（第 1–200 行，共 500 行）\n\n抽取第 1–3 页，共 12 页。后面的页再 read 并带 pages（如 \"4-43\"）。当前主模型不收图，本回合只有文本层",
+        'body\n\n（第 1–200 行，共 500 行）\n\n抽取第 1–3 页，共 12 页。后面的页再 read 并带 pages（如 "4-43"）。当前主模型不收图，本回合只有文本层',
       ),
     ).toEqual({ start: 1, end: 200, total: 500 });
   });
@@ -79,10 +79,10 @@ describe("stripFileReadFooter", () => {
   it("keeps a following PDF page HOW", () => {
     expect(
       stripFileReadFooter(
-        "body\n\n（第 1–200 行，共 500 行）\n\n抽取第 1–3 页，共 12 页。后面的页再 read 并带 pages（如 \"4-43\"）。当前主模型不收图，本回合只有文本层",
+        'body\n\n（第 1–200 行，共 500 行）\n\n抽取第 1–3 页，共 12 页。后面的页再 read 并带 pages（如 "4-43"）。当前主模型不收图，本回合只有文本层',
       ),
     ).toBe(
-      "body\n\n抽取第 1–3 页，共 12 页。后面的页再 read 并带 pages（如 \"4-43\"）。当前主模型不收图，本回合只有文本层",
+      'body\n\n抽取第 1–3 页，共 12 页。后面的页再 read 并带 pages（如 "4-43"）。当前主模型不收图，本回合只有文本层',
     );
   });
 });

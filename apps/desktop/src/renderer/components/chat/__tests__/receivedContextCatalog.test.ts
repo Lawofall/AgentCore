@@ -383,7 +383,9 @@ describe("openingContextView", () => {
       ],
       { includeSystem: false },
     );
-    expect(view.sections.map((section) => section.channel)).toEqual(["request"]);
+    expect(view.sections.map((section) => section.channel)).toEqual([
+      "request",
+    ]);
     expect(view.chars).toBe(2);
   });
 });

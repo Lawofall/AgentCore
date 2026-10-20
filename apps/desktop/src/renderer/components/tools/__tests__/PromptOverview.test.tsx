@@ -380,7 +380,9 @@ describe("PromptOverview", () => {
       name: "页面长什么样、交互怎么铺",
     });
     expect(
-      within(factory).getByText("用户要打开的展示页、落地页、工具壳、仪表盘或原型才查阅。"),
+      within(factory).getByText(
+        "用户要打开的展示页、落地页、工具壳、仪表盘或原型才查阅。",
+      ),
     ).toBeTruthy();
     expect(factory.textContent).not.toContain("脚本");
     expect(title.nextElementSibling?.textContent).toContain("官方");
