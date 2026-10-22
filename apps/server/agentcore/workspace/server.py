@@ -595,6 +595,44 @@ class ServerWorkspace:
                 continue
         return _posix(os.path.relpath(resolved, self._root.resolve()))
 
+    def _listing_anchor(self, directory: str) -> Path:
+        """Root whose relative names feed ignore rules (not the host prefix)."""
+        if is_external_namespace(directory):
+            routed = route_external(directory, self._mounts)
+            if routed and routed.mount.abs_path:
+                return Path(routed.mount.abs_path)
+        if routes_to_working_root(directory, self._mounts):
+            working = working_mount(self._mounts)
+            if working and working.abs_path:
+                return Path(working.abs_path)
+        return self._root
+
+    def _ignore_rel(self, abs_dir: Path, directory: str) -> str:
+        """Mount- or workspace-relative parent for ``is_ignored_dir_entry``.
+
+        Model-facing extras are OS-absolute; feeding that into ignore rules
+        treats host segments like ``tmp`` as workspace noise and hides the grant.
+        """
+        try:
+            rel = abs_dir.resolve().relative_to(
+                self._listing_anchor(directory).resolve()
+            ).as_posix()
+        except (OSError, ValueError):
+            return ""
+        return "" if rel in (".", "") else rel
+
+    def _listed_model_path(self, ignore_rel: str, directory: str) -> str:
+        remainder = posix_rel(ignore_rel)
+        if is_external_namespace(directory):
+            routed = route_external(directory, self._mounts)
+            if routed:
+                return model_facing_path(routed.mount, remainder)
+        if routes_to_working_root(directory, self._mounts):
+            working = working_mount(self._mounts)
+            if working:
+                return model_facing_path(working, remainder)
+        return "" if remainder == "." else remainder
+
     def _reject_oversized_file(
         self,
         target: Path,
@@ -885,23 +923,27 @@ class ServerWorkspace:
             if not base.exists() and is_declared_latent_dir(directory):
                 return DirListing(entries=[], truncated=False)
             raise NotADirectory(directory)
-        # Entry paths are built from the list root's model-facing path, so nested
-        # ``**/*`` hits keep their real parent: treating ``AgentCore/index`` as a
-        # bare ``index`` would leak internal zones into the user file UI.
-        base_rel = self._model_path(base, logical=directory)
+        # Walk ignore-rel inside the mount/workspace root so host prefixes
+        # (Linux ``/tmp/…``) are not treated as ``IGNORED_DIRS``. Emit the
+        # model-facing path afterwards (OS abs for extras with abs).
+        start_rel = self._ignore_rel(base, directory)
         try:
             # UI REST shares ``list`` — only system noise is pruned here; AI
             # ``file_list`` applies AI-noise filtering in the tool layer.
             entries, truncated = await asyncio.to_thread(
                 _list_entries_sync,
                 base,
-                base_rel=base_rel,
+                base_rel=start_rel,
                 name_pattern=normalize_glob(pattern) or "*",
                 recursive="**" in pattern,
                 cap=cap if cap and cap > 0 else _MAX_LIST_ENTRIES,
             )
         except OSError as e:
             raise WorkspaceIOError(str(e)) from e
+        entries = [
+            replace(e, path=self._listed_model_path(e.path, directory))
+            for e in entries
+        ]
         return DirListing(entries=entries, truncated=truncated)
 
     async def exists(self, path: str) -> bool:
@@ -988,34 +1030,18 @@ class ServerWorkspace:
                     return
                 raise WorkspaceIOError(str(e)) from e
 
-            # Prefer model-facing ``external/<alias>/…`` when the list root is
-            # in that namespace — mount abs may sit under the primary tree in
-            # tests / edge layouts, which would otherwise hide archives as
-            # workspace AI-noise.
-            if parse_external_path(directory) is not None:
-                parent_rel = self._model_path(dir_path, logical=directory)
-            else:
-                try:
-                    parent_rel = dir_path.resolve().relative_to(
-                        self._root.resolve()
-                    ).as_posix()
-                except ValueError:
-                    parent_rel = self._model_path(dir_path, logical=directory)
-            if parent_rel in (".", ""):
-                parent_rel = ""
-            elif parent_rel.endswith("/."):
-                parent_rel = parent_rel[:-2]
+            ignore_parent = self._ignore_rel(dir_path, directory)
 
             for child in children:
                 # Name-first prune — do not ``is_dir`` locked ignore-set dirs.
-                if is_ignored_dir_entry(parent_rel=parent_rel, name=child.name):
+                if is_ignored_dir_entry(parent_rel=ignore_parent, name=child.name):
                     continue
                 try:
                     is_dir = child.is_dir() and not child.is_symlink()
                     is_file = child.is_file()
                 except OSError as e:
                     if is_access_denied_oserror(e):
-                        rel = f"{parent_rel}/{child.name}" if parent_rel else child.name
+                        rel = self._model_path(child, logical=directory)
                         warnings.append(f"跳过无权限条目：{rel}")
                         continue
                     raise WorkspaceIOError(str(e)) from e
@@ -1023,7 +1049,7 @@ class ServerWorkspace:
                 # AI list_tree: system noise always; images/archives listed by
                 # name; other AI noise except attachments/ / materials.
                 if is_file and is_ai_list_hidden_file(
-                    parent_rel=parent_rel,
+                    parent_rel=ignore_parent,
                     name=child.name,
                     materials=self.ai_list_materials,
                     reveal_archives=reveal_archives,

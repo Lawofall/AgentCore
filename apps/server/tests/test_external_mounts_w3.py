@@ -408,8 +408,10 @@ async def test_server_workspace_model_path_no_dotdot_leak(tmp_path: Path):
     """list_tree / _model_path must not emit ``../`` when abs is under an external mount."""
     primary = tmp_path / "ws"
     primary.mkdir()
-    ext = tmp_path / "ext"
-    ext.mkdir()
+    # Host prefix often contains ``tmp`` (Linux CI). Ignore rules must not
+    # treat that segment as workspace noise and hide the grant.
+    ext = tmp_path / "tmp" / "ext"
+    ext.mkdir(parents=True)
     (ext / "a.txt").write_text("x", encoding="utf-8")
 
     class _Sandbox:
