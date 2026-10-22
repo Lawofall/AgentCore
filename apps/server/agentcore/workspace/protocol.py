@@ -31,6 +31,7 @@ from agentcore.tools.sandbox.protocol import ExecutionRequest, ExecutionResult
 
 if TYPE_CHECKING:
     from agentcore.workspace.attachment_parse import ExtractResult
+    from agentcore.workspace.image_raster import RasterResult
 
 
 class WorkspaceError(Exception):
@@ -334,10 +335,12 @@ class WorkspaceBackend(Protocol):
         ``max_bytes`` may rise to ``WORKSPACE_REPLACE_MAX_BYTES`` (edit ingest).
         Channel-side Office/PDF extract (``LocalWorkspace``) still passes
         ``OFFICE_EXTRACT_CHANNEL_MAX_BYTES``. On-disk backends must use
-        :meth:`extract_office` instead of this method for Office/PDF. HTTP panel
-        download must not use this — it goes through the dedicated download path
-        (upload-aligned ceiling + ``FileResponse``). Raises ``OutsideWorkspace`` /
-        ``PathNotFound`` / ``NotAFile`` / ``WorkspaceIOError``.
+        :meth:`extract_office` instead of this method for Office/PDF. Vision
+        ingest uses :meth:`raster_for_vision` (not this 5 MiB text gate). HTTP
+        panel download must not use this — it goes through the dedicated
+        download path (upload-aligned ceiling + ``FileResponse``). Raises
+        ``OutsideWorkspace`` / ``PathNotFound`` / ``NotAFile`` /
+        ``WorkspaceIOError``.
         """
         ...
 
@@ -373,6 +376,17 @@ class WorkspaceBackend(Protocol):
         recount when the caller already knows the document length. Path errors
         raise like ``read_bytes``; conversion failures return an
         ``ExtractResult``, they are not raised.
+        """
+        ...
+
+    async def raster_for_vision(self, path: str) -> RasterResult:
+        """Decode a workspace raster to a model-bound JPEG.
+
+        Original stays on disk. On-disk backends stat then open the file in a
+        killable child (upload-aligned ingest). Channel ``LocalWorkspace``
+        slurps via ``read_bytes`` (IPC ingest cap) then the same child.
+        Path errors raise like ``read_bytes``. Decode / timeout / oversize
+        ingest return a ``RasterResult``; they are not raised.
         """
         ...
 

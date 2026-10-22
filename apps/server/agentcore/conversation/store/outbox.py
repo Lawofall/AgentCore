@@ -687,16 +687,27 @@ class OutboxStore:
                 record["evidence_ledger"] = list(kwargs["evidence_ledger"] or [])
             if kwargs.get("runs") is not None:
                 record["runs"] = kwargs["runs"]
-            # Prefer complete result journal over progressive mid-run map: cloud
-            # local-turns persists ``journal`` first, so an incomplete progressive
-            # map would otherwise eclipse full ``runs`` (CEO process_* lost).
+            # Pause 封盘 still replace_prefix (authoritative hang-frame for
+            # overflow). Complete / error / cancel is append-only: progressive
+            # occupancy stays; snapshot facts the map does not already hold
+            # land at next_live_seq. A shorter in-memory dump must not tear
+            # pages the live journal already wrote.
             journal_entries = kwargs.get("journal_entries")
             if isinstance(journal_entries, list):
-                from agentcore.runtime.journal.seq_space import replace_prefix_map
-
-                record["journal"] = replace_prefix_map(
-                    journal_entries, record.get("journal")
+                from agentcore.runtime.journal.seq_space import (
+                    merge_append_map,
+                    replace_prefix_map,
                 )
+
+                finish = kwargs.get("finish_reason")
+                if finish == "paused":
+                    record["journal"] = replace_prefix_map(
+                        journal_entries, record.get("journal")
+                    )
+                else:
+                    record["journal"] = merge_append_map(
+                        journal_entries, record.get("journal")
+                    )
             copy_usage_settle_into_record(kwargs, record)
             if kwargs.get("finish_reason") is not None:
                 record["finish_reason"] = kwargs["finish_reason"]

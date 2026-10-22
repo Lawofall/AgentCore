@@ -4,6 +4,7 @@ import {
 } from "@/components/chat/debate/CollapsibleSpeech";
 import { Button, IconButton } from "@/components/ui";
 import { SimpleTooltip } from "@/components/ui/tooltip";
+import { useConversationFileSourceState } from "@/hooks/useConversationFileSource";
 import { useChatPaneId } from "@/lib/chatPane";
 import { hasInlineMarkers, renderInlineLabels } from "@/lib/inlineBody";
 import {
@@ -11,6 +12,7 @@ import {
   USER_MESSAGE_CHROME_OVERLAY_CLASS,
 } from "@/lib/messageActionReveal";
 import { cn } from "@/lib/utils";
+import { isVisualImageAttachment } from "@/services/messaging";
 import { runRegenerate } from "@/services/turns";
 import {
   useActiveGenerating,
@@ -23,6 +25,7 @@ import { MessageTime } from "./MessageActions";
 import { SyncStatusHint } from "./SyncStatusHint";
 import {
   UserChipTray,
+  UserImageStrip,
   UserInlineBody,
   UserInlineDraft,
   type UserInlineDraftHandle,
@@ -38,19 +41,25 @@ export function UserMessage({ message }: MessageBubbleProps) {
   const draftRef = useRef<UserInlineDraftHandle>(null);
   const attachments = message.attachments ?? [];
   const agentMentions = message.agentMentions ?? [];
+  const [editAtts, setEditAtts] = useState(attachments);
   const { copied, onCopy } = useCopyAction(() =>
     renderInlineLabels(message.content, attachments, agentMentions),
   );
   const conversationId = useChatPaneId();
+  const { source: fileSource, pending: fileSourcePending } =
+    useConversationFileSourceState(conversationId);
   const marked = hasInlineMarkers(message.content) || hasInlineMarkers(draft);
+  const inlineDraft =
+    marked || attachments.some((att) => isVisualImageAttachment(att));
 
   const startEdit = () => {
     setDraft(message.content);
+    setEditAtts(attachments);
     setEditing(true);
   };
 
   useEffect(() => {
-    if (editing && !marked) {
+    if (editing && !inlineDraft) {
       const el = editRef.current;
       if (el) {
         el.focus();
@@ -59,10 +68,10 @@ export function UserMessage({ message }: MessageBubbleProps) {
         el.style.height = `${Math.min(el.scrollHeight, 240)}px`;
       }
     }
-  }, [editing, marked]);
+  }, [editing, inlineDraft]);
 
   const submitEdit = () => {
-    const flushed = marked ? draftRef.current?.flush() : null;
+    const flushed = inlineDraft ? draftRef.current?.flush() : null;
     const nextContent = (flushed?.content ?? draft).trim();
     const nextAtts = flushed?.attachments ?? attachments;
     const nextMents = flushed?.mentions ?? agentMentions;
@@ -113,13 +122,16 @@ export function UserMessage({ message }: MessageBubbleProps) {
         data-copy-plain=""
       >
         <div className="w-full max-w-[80%] rounded-xl rounded-br-none border border-border bg-card p-2">
-          {marked ? (
+          {inlineDraft ? (
             <UserInlineDraft
               ref={draftRef}
               value={draft}
               attachments={attachments}
               mentions={agentMentions}
+              source={fileSource}
+              sourcePending={fileSourcePending}
               onChange={setDraft}
+              onAttachmentsChange={(next) => setEditAtts([...next])}
               onKeyDown={onEditKeyDown}
             />
           ) : (
@@ -147,7 +159,11 @@ export function UserMessage({ message }: MessageBubbleProps) {
             <Button
               icon={<Check size={13} />}
               onClick={submitEdit}
-              disabled={!draft.trim()}
+              disabled={
+                inlineDraft
+                  ? !draft.trim() && editAtts.length === 0
+                  : !draft.trim()
+              }
             >
               发送
             </Button>
@@ -163,6 +179,11 @@ export function UserMessage({ message }: MessageBubbleProps) {
       data-testid="user-message"
       data-copy-plain=""
     >
+      <UserImageStrip
+        attachments={attachments}
+        source={fileSource}
+        sourcePending={fileSourcePending}
+      />
       {!hasInlineMarkers(message.content) && (
         <UserChipTray attachments={attachments} mentions={agentMentions} />
       )}

@@ -11,8 +11,10 @@ import {
 } from "@/components/chat/interjectionStatus";
 import {
   UserChipTray,
+  UserImageStrip,
   UserInlineBody,
 } from "@/components/chat/message-bubble/UserInlineBody";
+import { useConversationFileSourceState } from "@/hooks/useConversationFileSource";
 import { getConversations } from "@/hooks/useConversations";
 import { useChatPaneId, useChatPaneSliceKey } from "@/lib/chatPane";
 import { hasInlineMarkers } from "@/lib/inlineBody";
@@ -168,11 +170,19 @@ function InterjectionUserBubble({
   const attachments = interjectionAtts(item);
   const mentions = item.agentMentions ?? [];
   const marked = hasInlineMarkers(item.content);
+  const conversationId = useChatPaneId();
+  const { source: fileSource, pending: fileSourcePending } =
+    useConversationFileSourceState(conversationId);
   return (
     <div
       className="flex flex-col items-end gap-1.5"
       data-testid={`interjection-bubble-${item.interjectionId}`}
     >
+      <UserImageStrip
+        attachments={attachments}
+        source={fileSource}
+        sourcePending={fileSourcePending}
+      />
       {!marked && (
         <UserChipTray attachments={attachments} mentions={mentions} />
       )}

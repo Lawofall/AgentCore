@@ -30,7 +30,7 @@ skip_if:
 
 **识图槽 `vision`（可选，已停用）**：组合列与 API 仍保留该槽，设置页不再编辑。图只进**当前主力**原生多模态（贴图挂当前 user；工作区光栅走 `read`）。主模型不收图 → 诚实说明，不另开眼睛轨。推理代理仍硬拒 `X-AgentCore-Role: vision`。历史 `role=vision` 入账行仍可折账。visual critic **已退役**。能力位只认该厂商契约（精确 id + 进程内负例），不是展示元数据家族继承、也不是 id 关键词。
 
-**对话贴图路由**：main 收图（`llm/image_accept.model_accepts_images`）→ 原生 multimodal（`image_url` 挂当前 user）；否则诚实「当前主模型不收图」，不静默丢像素、不另开眼睛轨。工作区图片同一条：`read` 把像素发给这只模型。
+**对话贴图路由**：main 收图（`llm/image_accept.model_accepts_images`）→ 原生 multimodal（`image_url` 挂当前 user）；否则诚实「当前主模型不收图」，不静默丢像素、不另开眼睛轨。工作区图片同一条：`read` 把像素发给这只模型。入模前压成 JPEG（长边 1568 / 扫描件 2048），不走文本 5 MiB 闸、不改盘上原件；权威 → [工具与能力 · 工作区识图](/docs/03-AI核心/工具与能力系统.md)。
 
 `llm/resolve.py` 单点：
 

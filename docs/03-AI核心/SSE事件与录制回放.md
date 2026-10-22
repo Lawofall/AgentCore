@@ -39,6 +39,20 @@ skip_if:
 - **`message_end.team_batch`**（✅）：本回合团队状态，turn journal 派生。`no_batch` | `in_flight` | `settled`。没派工是确定态。不进 ProjectedTurn（旁路字段，与 `collab` 同）；**用户面不渲染**。→ [执行引擎 · 团队状态](/docs/03-AI核心/执行引擎架构设计.md)
 - **旧 journal / 录制回放**：不在现行 `EventType` 的名字 skip；跨回合同图走 `run_plan.prev_execution_id`。推进卡不在 live resolve union，不再投影。
 
+### 助手消息块序列
+
+一条助手消息的用户可见形状是**有序块**（思考 / 正文 / 工具 / 协作图标记）。直播、落盘、刷新、协议巡检读同一份：`runs.process`（journal `process_*`）。云端 `turn_runner` 与本机 sidecar **同一 GET 投影**，不是两条水合。
+
+进行中的开放正文来自 `turn_stream_state` 队长通道，**折进过程车道尾块**，不灌进 `messages.content`。已落盘的 `content` 步从这段里剥掉前缀；余量才是还没闭合的那一段。已收口回合没有 stream 时，若交付投影列有过程车道尚未包含的余量，同样折进尾块——旧行兼容，不是画面第二真源。
+
+`messages.content` 只给**下一轮模型窗口**（`deliverable_only`：旁白不进历史投影）。气泡不读这一列当答案脸。无过程车道的素聊仍只画 `content`（journal 投影为 `None` 的 plain bubble）。
+
+进行中的工具以 `status=running` 入过程车道；`tool_use_end` 同 `id` 覆盖为终态（fold 后写胜出）。**否决**运行中不落盘——刷新会丢掉这张卡之后的一切。
+
+本机 sidecar **完成 / error / cancel 封盘**只追加（`merge_append_map`）：已占用的 live seq 不动，终稿里本子还没有的事实（含 `turn_end`）接到下一号。**暂停封盘**仍 `replace_prefix`（给溢出带腾位置）。`POST …/local-turns` 写回的是这份**已经合并**的 journal，不是内存里那份更短的 dump。
+
+**否决**：刷新用 `messages.content` 盖掉或替代过程车道；结构化回合 skip 把 stream 折进过程尾；finalize 用更短 snapshot 换掉已有块日志。
+
 `finish_reason` → 见代码 `FinishReason`。
 
 ## 二、契约生成

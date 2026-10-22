@@ -197,6 +197,9 @@ async def test_local_gate_forces_without_baseline(tmp_path: Path):
         assert hit is not None
         assert hit.verdict is BreakerVerdict.FORCE_APPROVAL
         assert hit.rule_id == "destructive.no_turn_baseline"
+        assert "无法保证可回滚" in hit.reason
+        assert "并非完整拦截" not in hit.reason
+        assert "需人工确认" not in hit.reason
     finally:
         current_journal_writer.reset(token)
 

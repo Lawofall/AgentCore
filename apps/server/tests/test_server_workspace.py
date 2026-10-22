@@ -550,6 +550,25 @@ async def test_extract_office_disk_cap_allows_above_channel(tmp_path: Path):
             await ws.read_bytes("big.pdf")
 
 
+async def test_raster_for_vision_bypasses_text_gate(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    from PIL import Image
+
+    monkeypatch.setattr("agentcore.workspace.limits.WORKSPACE_READ_MAX_BYTES", 64)
+    buf = __import__("io").BytesIO()
+    Image.new("RGB", (40, 40), "white").save(buf, format="PNG")
+    payload = buf.getvalue()
+    assert len(payload) > 64
+    (tmp_path / "shot.png").write_bytes(payload)
+    ws = _ws(tmp_path)
+    with pytest.raises(WorkspaceIOError):
+        await ws.read_bytes("shot.png")
+    result = await ws.raster_for_vision("shot.png")
+    assert result.status == "ok"
+    assert result.jpeg[:3] == b"\xff\xd8\xff"
+
+
 async def test_read_head_peeks_past_text_gate(tmp_path: Path):
     from agentcore.workspace.limits import (
         WORKSPACE_READ_HEAD_MAX_BYTES,

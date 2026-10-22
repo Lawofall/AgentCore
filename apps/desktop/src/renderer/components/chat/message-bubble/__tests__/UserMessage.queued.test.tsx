@@ -10,6 +10,11 @@ vi.mock("@/services/turns", () => ({
   runRegenerate: vi.fn(),
 }));
 
+vi.mock("@/hooks/useConversationFileSource", () => ({
+  useConversationFileSource: () => null,
+  useConversationFileSourceState: () => ({ source: null, pending: false }),
+}));
+
 vi.mock("@/stores/conversation", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/stores/conversation")>();
   const storeApi = {

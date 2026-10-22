@@ -2,16 +2,18 @@
 
 from __future__ import annotations
 
-import base64
 from typing import TYPE_CHECKING
 
 from agentcore.core.logging import get_logger
 from agentcore.workspace.attachment_parse import extension_of
 from agentcore.workspace.image_files import (
-    EXT_TO_IMAGE_MIME,
     IMAGE_EXTENSIONS,
     IMAGE_MIME_EXCLUDE,
     IMAGE_MIMES,
+)
+from agentcore.workspace.image_raster import (
+    jpeg_native_part,
+    raster_fail_note,
 )
 
 if TYPE_CHECKING:
@@ -28,6 +30,11 @@ _IMAGE_UNSUPPORTED = (
 _IMAGE_NATIVE_INDEX = (
     "此图已随当前用户消息以多模态附件发送给主模型；"
     "勿假定未看见像素。"
+)
+
+_IMAGE_TURN_CAP = (
+    "已达本回合识图张数顶，本回合未把该图发给主模型。"
+    "工作区路径仍可用。"
 )
 
 
@@ -53,37 +60,28 @@ def _is_image_attachment(att: dict, *, name: str, ws_path: str | None) -> bool:
     return ext in IMAGE_EXTENSIONS
 
 
-def _image_data_mime(att: dict, *, name: str, ws_path: str | None) -> str:
-    """MIME for data-URL parts — prefer attachment mime, else extension map."""
-    mime = _attachment_mime(att)
-    if mime.startswith("image/") and mime not in IMAGE_MIME_EXCLUDE:
-        return mime
-    ext = extension_of(name, ws_path if isinstance(ws_path, str) else None)
-    return EXT_TO_IMAGE_MIME.get(ext, "image/png")
-
-
 async def _build_native_image_part(
     *,
-    att: dict,
-    name: str,
     ws_path: str,
     backend: WorkspaceBackend,
-) -> dict | None:
-    """Read resident image bytes into an OpenAI ``image_url`` content part."""
+) -> tuple[dict | None, str]:
+    """Raster a resident image into an OpenAI ``image_url`` part, or an honest note."""
     try:
-        raw = await backend.read_bytes(ws_path)
+        result = await backend.raster_for_vision(ws_path)
     except Exception:  # noqa: BLE001 — native path must not break prepare
         logger.warning("attachment.native_image_read_failed", path=ws_path, exc_info=True)
-        return None
-    if not raw:
-        return None
-    b64 = base64.b64encode(raw).decode("ascii")
-    mime = _image_data_mime(att, name=name, ws_path=ws_path)
-    return {
-        "type": "image_url",
-        "image_url": {"url": f"data:{mime};base64,{b64}"},
-    }
+        return None, "无法读取驻留图片，本回合未把该图发给主模型。"
+    if result.status == "ok" and result.jpeg:
+        return jpeg_native_part(result.jpeg), _IMAGE_NATIVE_INDEX
+    return None, raster_fail_note(result)
 
 
 def _image_unsupported_block(*, name: str, path: str) -> str:
     return f"--- File: {name} ({path}) [image] ---\n{_IMAGE_UNSUPPORTED}"
+
+
+def _image_turn_cap_block(*, name: str, path: str) -> str:
+    return (
+        f"--- File: {name} ({path}) [image / multimodal skipped] ---\n"
+        f"{_IMAGE_TURN_CAP}"
+    )

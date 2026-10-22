@@ -66,6 +66,15 @@ OFFICE_EXTRACT_PDF_MAX_IMAGES = 8
 # liveness_timeout. Tests may patch this down to sub-second.
 OFFICE_EXTRACT_TIMEOUT_SECONDS = 12.0
 
+# Vision ingest — not the text 5 MiB ``read_bytes`` gate. Original stays on
+# disk; the child opens these bytes only to produce a model-bound JPEG.
+# Disk aligns with upload; Local still slurps via JSON/base64 IPC.
+VISION_INGEST_DISK_MAX_BYTES = 50 * 1024 * 1024  # 50 MiB — upload-aligned
+VISION_INGEST_CHANNEL_MAX_BYTES = OFFICE_EXTRACT_CHANNEL_MAX_BYTES  # 25 MiB
+VISION_TIMEOUT_SECONDS = 12.0
+# This-turn attachment native parts (PDF page windows keep OFFICE_EXTRACT_PDF_MAX_IMAGES).
+VISION_MAX_ATTACHMENTS_PER_TURN = 20
+
 # Attachment archive unpack (zip/tar/7z/rar). Same order as snapshot handoff:
 # uncompressed bytes + member count, not the 50 MiB upload ticket.
 ARCHIVE_UNPACK_MAX_BYTES = 100 * 1024 * 1024  # 100 MiB

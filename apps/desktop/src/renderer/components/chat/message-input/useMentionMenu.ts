@@ -16,6 +16,7 @@ import { insertInlineToken } from "@/lib/inlineBody";
 import { logEvent } from "@/lib/log";
 import { listScopeEntries } from "@/services/documents";
 import { fetchMessageWindow } from "@/services/messages";
+import { isVisualImageAttachment } from "@/services/messaging";
 import { useConversationStore } from "@/stores/conversation";
 import { useExecutionStore } from "@/stores/execution";
 import {
@@ -556,6 +557,18 @@ export function useMentionMenu({
     }
   }, [menuMode, value, setValue, bodyRef, focusCaret]);
 
+  const commitFileAttachment = useCallback(
+    (att: PendingAttachment, index: number) => {
+      if (isVisualImageAttachment(att)) {
+        stripMentionQuery();
+        closeMenu();
+        return;
+      }
+      commitInline("A", index);
+    },
+    [closeMenu, commitInline, stripMentionQuery],
+  );
+
   const openMention = useCallback(
     (
       start: number,
@@ -847,18 +860,18 @@ export function useMentionMenu({
         if (resolved) onAttachmentFolderHint(resolved);
       }
 
-      commitInline("A", index);
+      commitFileAttachment(attachment, index);
     },
     [
       attachments,
       conversationId,
       fileIndex,
       closeMenu,
+      stripMentionQuery,
       onAttachmentFolderHint,
       setAttachments,
       startCloudUpload,
-      stripMentionQuery,
-      commitInline,
+      commitFileAttachment,
     ],
   );
 
@@ -927,11 +940,11 @@ export function useMentionMenu({
       if (cited) onAttachmentFolderHint(cited);
     }
     logEvent("info", "mention.select", { category: "attach" });
-    commitInline("A", index);
+    commitFileAttachment(attachment, index);
   }, [
     attachments,
     clearActiveMention,
-    commitInline,
+    commitFileAttachment,
     conversationId,
     menuMode,
     onAttachmentFolderHint,

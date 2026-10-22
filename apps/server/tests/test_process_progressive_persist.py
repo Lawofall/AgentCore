@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 from agentcore.conversation.store.merge import MESSAGE_STATUS_RUNNING
-from agentcore.conversation.store.overlay import overlay_message_fields
+from agentcore.conversation.store.overlay import (
+    complete_process_transcript,
+    display_transcript_extra,
+    overlay_message_fields,
+)
 from agentcore.runtime.events import (
     EventSink,
     FinishReason,
@@ -33,16 +37,17 @@ def test_sink_persists_closed_content_before_tool():
         assert "process_content" in kinds
         content_facts = [e for e in log.entries() if e["kind"] == "process_content"]
         assert content_facts[0]["payload"]["text"] == "## 旁白\n先介绍。"
-        # Tool still running — not journaled until tool_use_end.
-        assert "process_tool" not in kinds
+        running = next(e for e in log.entries() if e["kind"] == "process_tool")
+        assert running["payload"]["status"] == "running"
         sink.emit(
             tool_use_end("tc1", "web_search", success=True, output="ok")
         )
         kinds2 = [e["kind"] for e in log.entries()]
         assert "process_tool" in kinds2
-        tool = next(e for e in log.entries() if e["kind"] == "process_tool")
-        assert tool["payload"]["status"] == "success"
-        assert tool["payload"]["result"] == "ok"
+        tools = [e for e in log.entries() if e["kind"] == "process_tool"]
+        assert tools[0]["payload"]["status"] == "running"
+        assert tools[-1]["payload"]["status"] == "success"
+        assert tools[-1]["payload"]["result"] == "ok"
     finally:
         current_fact_log.reset(token)
 
@@ -56,7 +61,8 @@ def test_sink_persists_run_process_symmetrically():
         sink.emit(tool_use_start("tc1", "web_search", {"query": "q"}, run_id="r1"))
         kinds = [e["kind"] for e in log.entries()]
         assert "run_process_reasoning" in kinds
-        assert "run_process_tool" not in kinds
+        running = next(e for e in log.entries() if e["kind"] == "run_process_tool")
+        assert running["payload"]["status"] == "running"
         sink.emit(
             tool_use_end("tc1", "web_search", success=True, output="hit", run_id="r1")
         )
@@ -89,7 +95,7 @@ def test_finalize_only_appends_turn_end_when_process_already_in_log():
         # No second full process dump — process_* count did not double.
         process_kinds = [e["kind"] for e in durable if e["kind"].startswith("process_")]
         assert process_kinds.count("process_content") == 2  # 旁白 + 交付 (flushed tail)
-        assert process_kinds.count("process_tool") == 1
+        assert process_kinds.count("process_tool") == 2  # running + terminal
         # Flush may add the open trailing content; only turn_end is the finalize-only append.
         assert durable[-1] == {
             "kind": "turn_end",
@@ -233,6 +239,33 @@ def test_overlay_skips_captain_content_when_process_present():
     assert content2 == "旁白不该进 content"
 
 
+def test_complete_process_transcript_appends_deliverable_after_tools():
+    process = [
+        {"kind": "content", "text": "三份核查都已交回。现在我核对条文原文。"},
+        {"kind": "tool", "id": "t1", "tool_name": "web_search", "status": "success"},
+    ]
+    extra = "三份核查都已交回。现在我核对条文原文。\n\n正式备忘录已写好。"
+    out = complete_process_transcript(process, extra)
+    assert out is not None
+    assert out[-1] == {"kind": "content", "text": "正式备忘录已写好。"}
+    assert out[1]["id"] == "t1"
+
+
+def test_complete_process_transcript_extends_open_tail():
+    process = [{"kind": "content", "text": "现在落"}]
+    out = complete_process_transcript(process, "现在落正式备忘录。")
+    assert out == [{"kind": "content", "text": "现在落正式备忘录。"}]
+
+
+def test_display_transcript_extra_prefers_in_flight_channel():
+    extra = display_transcript_extra(
+        content="旧终稿",
+        segments=[{"channel": CHANNEL_CAPTAIN_CONTENT, "text": "开放中"}],
+        usage={"status": MESSAGE_STATUS_RUNNING},
+    )
+    assert extra == "开放中"
+
+
 def test_seed_process_skips_rewriting_on_flush():
     log = TurnFactLog()
     token = current_fact_log.set(log)
@@ -329,12 +362,7 @@ _WEB_SEARCH_DISPLAY = {
 
 
 def test_flush_while_tool_running_then_end_journals_terminal_display():
-    """flush during a running tool must not pin ``status=running``; tool_use_end wins.
-
-    Regression for cold-reload skeleton: an early flush that journaled a running
-    tool left the ordinal cursor past that step, so tool_use_end's in-memory
-    success+display never reached ``runs.process``.
-    """
+    """Running tool is journaled for mid-run refresh; tool_use_end last-wins on fold."""
     from agentcore.runtime.journal.fold import runs_from_entries
 
     log = TurnFactLog()
@@ -346,9 +374,10 @@ def test_flush_while_tool_running_then_end_journals_terminal_display():
                 "tc1", "web_search", {"query": "LV诉茉莉奶白商标侵权"}
             )
         )
-        # Mid-turn / finalize-style flush while the tool is still open.
         sink.flush_process_to_journal()
-        assert not any(e["kind"] == "process_tool" for e in log.entries())
+        running = [e for e in log.entries() if e["kind"] == "process_tool"]
+        assert len(running) == 1
+        assert running[0]["payload"]["status"] == "running"
 
         sink.emit(
             tool_use_end(
@@ -360,9 +389,8 @@ def test_flush_while_tool_running_then_end_journals_terminal_display():
             )
         )
         tool_facts = [e for e in log.entries() if e["kind"] == "process_tool"]
-        assert len(tool_facts) == 1
-        assert tool_facts[0]["payload"]["status"] == "success"
-        assert tool_facts[0]["payload"]["display"] == _WEB_SEARCH_DISPLAY
+        assert tool_facts[-1]["payload"]["status"] == "success"
+        assert tool_facts[-1]["payload"]["display"] == _WEB_SEARCH_DISPLAY
 
         runs = runs_from_entries(log.entries())
         assert runs is not None
@@ -409,10 +437,9 @@ def test_tool_end_compensates_stale_running_process_tool():
             )
         )
         tool_facts = [e for e in log.entries() if e["kind"] == "process_tool"]
-        assert len(tool_facts) == 2
-        assert tool_facts[0]["payload"]["status"] == "running"
-        assert tool_facts[1]["payload"]["status"] == "success"
-        assert tool_facts[1]["payload"]["display"] == _WEB_SEARCH_DISPLAY
+        assert tool_facts[-1]["payload"]["status"] == "success"
+        assert tool_facts[-1]["payload"]["display"] == _WEB_SEARCH_DISPLAY
+        assert any(e["payload"]["status"] == "running" for e in tool_facts)
 
         runs = runs_from_entries(log.entries())
         assert runs is not None
@@ -439,7 +466,9 @@ def test_flush_while_run_tool_running_then_end_journals_terminal_display():
             )
         )
         sink.flush_process_to_journal()
-        assert not any(e["kind"] == "run_process_tool" for e in log.entries())
+        running = [e for e in log.entries() if e["kind"] == "run_process_tool"]
+        assert len(running) == 1
+        assert running[0]["payload"]["status"] == "running"
 
         sink.emit(
             tool_use_end(
@@ -452,9 +481,8 @@ def test_flush_while_run_tool_running_then_end_journals_terminal_display():
             )
         )
         tool_facts = [e for e in log.entries() if e["kind"] == "run_process_tool"]
-        assert len(tool_facts) == 1
-        assert tool_facts[0]["payload"]["status"] == "success"
-        assert tool_facts[0]["payload"]["display"] == _WEB_SEARCH_DISPLAY
+        assert tool_facts[-1]["payload"]["status"] == "success"
+        assert tool_facts[-1]["payload"]["display"] == _WEB_SEARCH_DISPLAY
 
         runs = runs_from_entries(log.entries())
         assert runs is not None

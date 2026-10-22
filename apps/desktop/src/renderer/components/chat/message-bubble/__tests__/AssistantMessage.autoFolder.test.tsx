@@ -85,6 +85,7 @@ vi.mock("@/stores/sidePanel", () => ({
 }));
 vi.mock("@/hooks/useConversationFileSource", () => ({
   useConversationFileSource: () => null,
+  useConversationFileSourceState: () => ({ source: null, pending: false }),
 }));
 vi.mock("@/hooks/useWorkspaces", () => ({
   useConversationWorkspace: () => null,

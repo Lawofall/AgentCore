@@ -1,6 +1,9 @@
 import { inlineToken } from "@/lib/inlineBody";
 import { describe, expect, it } from "vitest";
-import { composerHasSendableDraft } from "../composerAttachments";
+import {
+  composerHasSendableDraft,
+  mergeComposerStripImages,
+} from "../composerAttachments";
 
 describe("composerHasSendableDraft", () => {
   it("allows attachment-only (empty / whitespace text)", () => {
@@ -18,5 +21,26 @@ describe("composerHasSendableDraft", () => {
     expect(composerHasSendableDraft("", [])).toBe(false);
     expect(composerHasSendableDraft("   ", [])).toBe(false);
     expect(composerHasSendableDraft("hi", [])).toBe(true);
+  });
+});
+
+describe("mergeComposerStripImages", () => {
+  const image = {
+    id: "img",
+    name: "shot.png",
+    kind: "file" as const,
+  };
+  const pdf = {
+    id: "pdf",
+    name: "brief.pdf",
+    kind: "file" as const,
+  };
+
+  it("keeps strip images when the editor pass dropped them", () => {
+    expect(mergeComposerStripImages([image, pdf], [pdf])).toEqual([image, pdf]);
+  });
+
+  it("drops a non-image the editor removed and keeps later images in place", () => {
+    expect(mergeComposerStripImages([pdf, image], [])).toEqual([image]);
   });
 });

@@ -2049,7 +2049,7 @@ async def test_persist_turn_journal_end_turn_supersedes_paused_closer(monkeypatc
 
 
 async def test_persist_turn_journal_replaces_via_record(monkeypatch):
-    """``replace=True`` rewrites the live-band prefix via record() (resume / outbox)."""
+    """``replace=True`` rewrites the live-band prefix via record() (pause / resume)."""
     from agentcore.runtime.journal.persist import persist_turn_journal
 
     recorded: list[tuple[str, list]] = []

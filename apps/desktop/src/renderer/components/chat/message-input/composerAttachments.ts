@@ -7,6 +7,7 @@ import {
   buildLocalMentionPicks,
   collectRootUseEvents,
 } from "@/services/mentionRoots";
+import { isVisualImageAttachment } from "@/services/messaging";
 import { resolveConversationLocalTarget } from "@/services/sidecarRouting";
 import { createLocalRootSource } from "@/services/sources/localRootSource";
 import { createCloudWorkspaceSource } from "@/services/sources/workspaceSource";
@@ -81,6 +82,32 @@ export const CONV_MENTION_CHAR_CAP = 60 * 1024;
 export const MAX_AGENT_MENTIONS = 10;
 /** 空 `@` 时各索引分区默认条数。 */
 export const EMPTY_MENTION_INDEX_LIMIT = 6;
+
+/**
+ * Editor reconcile only sees inline tokens. Image thumbs live in the strip,
+ * so put them back at their previous indices after a DOM pass.
+ */
+export function mergeComposerStripImages<
+  T extends { id: string; name: string; kind?: string },
+>(previous: readonly T[], fromEditor: readonly T[]): T[] {
+  const keptEditor = new Set(
+    fromEditor.filter((a) => !isVisualImageAttachment(a)).map((a) => a.id),
+  );
+  const merged: T[] = [];
+  const seen = new Set<string>();
+  for (const a of previous) {
+    if (isVisualImageAttachment(a) || keptEditor.has(a.id)) {
+      merged.push(a);
+      seen.add(a.id);
+    }
+  }
+  for (const a of fromEditor) {
+    if (seen.has(a.id)) continue;
+    merged.push(a);
+    seen.add(a.id);
+  }
+  return merged;
+}
 
 /** True when the composer can send: non-blank text, or at least one pill. */
 export function composerHasSendableDraft(

@@ -2,6 +2,7 @@ import { MentionMenu } from "@/components/chat/MentionMenu";
 import {
   type AttachSourceHandle,
   AttachSourceInputs,
+  AttachSourcePopover,
 } from "@/components/chat/message-input/AttachSourceInputs";
 import {
   ComposerBodyEditor,
@@ -16,6 +17,8 @@ import {
 import { settleAttachments } from "@/components/chat/message-input/settleAttachments";
 import { useComposerDrop } from "@/components/chat/message-input/useComposerDrop";
 import { useMentionMenu } from "@/components/chat/message-input/useMentionMenu";
+import { ImageThumbStrip } from "@/components/files/ImageThumbStrip";
+import { useConversationFileSourceState } from "@/hooks/useConversationFileSource";
 import { hasNativeMediaCapture } from "@/lib/capabilities";
 import { handlePlainPaste } from "@/lib/clipboardPlain";
 import { dropInlineIndex, insertInlineToken } from "@/lib/inlineBody";
@@ -114,6 +117,8 @@ export function QueuedTurnEditor({
   const [value, setValue] = useState(initialContent);
   const [attachments, setAttachments] = useState(initialAttachments);
   const [agentMentions, setAgentMentions] = useState(initialMentions);
+  const { source: fileSource, pending: fileSourcePending } =
+    useConversationFileSourceState(conversationId);
   draftRef.current = { content: value, attachments, mentions: agentMentions };
   const [busy, setBusy] = useState(false);
 
@@ -311,6 +316,20 @@ export function QueuedTurnEditor({
           searchInputRef={mention.searchInputRef}
         />
       ) : null}
+      <ImageThumbStrip
+        attachments={attachments}
+        source={fileSource}
+        sourcePending={fileSourcePending}
+        onRemove={(id) => {
+          const index = attachments.findIndex((att) => att.id === id);
+          forgetAttachmentUpload(id);
+          if (index >= 0) {
+            setValue((prev) => dropInlineIndex(prev, "attachment", index));
+          }
+          setAttachments((prev) => prev.filter((att) => att.id !== id));
+        }}
+        className="px-2 pt-2"
+      />
       <ComposerBodyEditor
         ref={bodyRef}
         value={value}
@@ -381,15 +400,33 @@ export function QueuedTurnEditor({
         >
           <AtSign size={14} />
         </button>
-        <button
-          type="button"
-          className="shrink-0 rounded-lg p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          aria-label="添加附件"
-          disabled={busy}
-          onClick={() => mention.openBrowse()}
-        >
-          <Paperclip size={14} />
-        </button>
+        {nativeCapture ? (
+          <AttachSourcePopover
+            trigger={
+              <button
+                type="button"
+                className="shrink-0 rounded-lg p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+                aria-label="添加附件"
+                disabled={busy}
+              >
+                <Paperclip size={14} />
+              </button>
+            }
+            onCamera={() => attachSourceRef.current?.pickCamera()}
+            onGallery={() => attachSourceRef.current?.pickGallery()}
+            onFiles={() => attachSourceRef.current?.pickFiles()}
+          />
+        ) : (
+          <button
+            type="button"
+            className="shrink-0 rounded-lg p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            aria-label="添加附件"
+            disabled={busy}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <Paperclip size={14} />
+          </button>
+        )}
         <span className="min-w-0 flex-1" />
         <button
           type="button"

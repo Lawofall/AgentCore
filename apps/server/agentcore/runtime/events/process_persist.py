@@ -5,9 +5,9 @@ written to ``turn_journal`` at a semantic boundary (before the user-visible next
 DURABLE, or on explicit flush) so mid-run refresh replays from journal alone.
 
 Kinds follow ``journal.entries``: ``process_{step.kind}`` / ``run_process_{step.kind}``.
-Text steps are persisted when closed; tool steps at ``tool_use_end`` (never while
-``status=running`` — a flush must not pin a waiting tool, or cold reload shows the
-skeleton forever after ``tool_use_end`` mutates memory); markers at insert.
+Text steps are persisted when closed; tool steps at ``tool_use_start``
+(``status=running``) and again at ``tool_use_end`` (same ``id``, fold last-write
+wins). Markers at insert.
 """
 
 from __future__ import annotations
@@ -80,8 +80,8 @@ class ProcessPersistCursor:
     Resume seeds the cursor past the inherited timeline so seeded steps are not
     rewritten.
 
-    Open (``status=running``) tool steps hold the cursor: they are not written and
-    nothing after them is written until ``tool_use_end`` resolves them. If the
+    Running tools are written (``status=running``) so a mid-run refresh still
+    shows the current card. ``tool_use_end`` overwrites the same ``id``. If the
     cursor was already advanced past a tool (legacy flush / seed skip),
     :meth:`persist_resolved_captain_tool` / :meth:`persist_resolved_run_tool`
     append a compensating terminal ``process_tool`` fact.
@@ -104,15 +104,10 @@ class ProcessPersistCursor:
         start: int,
         end: int,
     ) -> list[Any]:
-        """Persist ``steps[start:end]`` that are not yet past the cursor.
-
-        Stops before an open tool so a mid-turn flush cannot pin ``status=running``.
-        """
+        """Persist ``steps[start:end]`` that are not yet past the cursor."""
         futures: list[Any] = []
         for i in range(max(start, self.captain), end):
             step = steps[i]
-            if is_open_tool_step(step):
-                break
             fut = schedule_process_step(step)
             if fut is not None:
                 futures.append(fut)
@@ -127,16 +122,11 @@ class ProcessPersistCursor:
         start: int,
         end: int,
     ) -> list[Any]:
-        """Persist a worker run's ``steps[start:end]`` not yet past the cursor.
-
-        Same open-tool hold as :meth:`persist_captain_range`.
-        """
+        """Persist a worker run's ``steps[start:end]`` not yet past the cursor."""
         futures: list[Any] = []
         cursor = self.runs.get(run_id, 0)
         for i in range(max(start, cursor), end):
             step = steps[i]
-            if is_open_tool_step(step):
-                break
             fut = schedule_process_step(step, run_id=run_id)
             if fut is not None:
                 futures.append(fut)

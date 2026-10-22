@@ -9,7 +9,13 @@ import { IconButton } from "@/components/ui";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import type { FileSource } from "@/lib/fileSource";
 import { useSidePanelStore } from "@/stores/sidePanel";
-import { ChevronsDownUp, FilePlus, GitBranch, HardDrive } from "lucide-react";
+import {
+  ChevronsDownUp,
+  FilePlus,
+  FolderPlus,
+  GitBranch,
+  HardDrive,
+} from "lucide-react";
 import { type ReactNode, useRef, useState } from "react";
 
 /**
@@ -17,7 +23,7 @@ import { type ReactNode, useRef, useState } from "react";
  * 点文件 → 经 {@link useSidePanelStore.showFile} 开顶栏 File 内容 tab（多开并存），
  * 不再 swap 掉树。文件中枢页仍用 {@link FileWorkbench} 左右分栏。
  *
- * 单行面板头：左侧 `leading`（文件夹·本地/云端 chip）、中段先新建文件再装入（上传/克隆）、
+ * 单行面板头：左侧 `leading`（文件夹·本地/云端 chip）、中段先新建文件 / 子文件夹再装入（上传/克隆）、
  * 右侧看树（折叠）+ `trailing`（软删）。树跟 SSE / watch / focus
  * 静默补丁，不挂人手刷新。协作桌与自有云夹同一棵 `folder:` 树，不再叠第二根。
  */
@@ -69,6 +75,14 @@ export function FileBrowser({
                     aria-label="新建文件"
                   >
                     <FilePlus size={14} />
+                  </IconButton>
+                </SimpleTooltip>
+                <SimpleTooltip label="新建子文件夹">
+                  <IconButton
+                    onClick={() => treeRef.current?.startCreate("dir")}
+                    aria-label="新建子文件夹"
+                  >
+                    <FolderPlus size={14} />
                   </IconButton>
                 </SimpleTooltip>
               </div>

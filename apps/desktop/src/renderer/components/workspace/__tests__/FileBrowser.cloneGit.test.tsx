@@ -25,14 +25,14 @@ afterEach(() => {
 });
 
 describe("FileBrowser · 工具条顺序", () => {
-  it("左侧先新建文件再装入：文件 / 上传 / 克隆", () => {
+  it("左侧先新建文件 / 子文件夹再装入：文件 / 上传 / 克隆", () => {
     render(
       <TooltipProvider>
         <FileBrowser source={source} onCloneGit={vi.fn()} />
       </TooltipProvider>,
     );
-    const labels = ["新建文件", "上传", "从 Git 克隆"].map((name) =>
-      screen.getByRole("button", { name }),
+    const labels = ["新建文件", "新建子文件夹", "上传", "从 Git 克隆"].map(
+      (name) => screen.getByRole("button", { name }),
     );
     for (let i = 1; i < labels.length; i++) {
       expect(

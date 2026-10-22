@@ -195,7 +195,10 @@ async def test_list_messages_slims_runs(monkeypatch):
     assert runs is not None
     assert runs.events_complete is False
     assert runs.run_processes is None
-    assert runs.process == _FAT_RUNS["process"]
+    assert runs.process == [
+        *_FAT_RUNS["process"],
+        {"kind": "content", "text": "hello"},
+    ]
     assert runs.finish_reason == "stop"
     assert {ev["type"] for ev in runs.events} == {"run_plan", "message_end"}
 

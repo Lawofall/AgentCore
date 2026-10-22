@@ -493,7 +493,8 @@ def test_journal_persist_caps_tool_use_end_live_payload_stays_full():
         assert end["payload"]["result"] == cap_process_result(big)
         fact = next(e for e in log.entries() if e["kind"] == "tool_use_end")
         assert fact["payload"]["result"] == cap_process_result(big)
-        process = next(e for e in log.entries() if e["kind"] == "process_tool")
+        process_facts = [e for e in log.entries() if e["kind"] == "process_tool"]
+        process = process_facts[-1]
         assert process["payload"]["result"] == cap_process_result(big)
     finally:
         current_fact_log.reset(token)

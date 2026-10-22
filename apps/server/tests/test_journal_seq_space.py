@@ -9,6 +9,7 @@ from agentcore.runtime.journal.seq_space import (
     JOURNAL_ENTRY_ORD_KEY,
     JOURNAL_OVERFLOW_SEQ_START,
     map_values_in_emission_order,
+    merge_append_map,
     next_overflow_seq,
     replace_prefix_map,
     seqs_from_map,
@@ -111,3 +112,63 @@ def test_stamp_missing_ords_is_idempotent() -> None:
     stamp_missing_ords(journal)
     assert journal["1"][JOURNAL_ENTRY_ORD_KEY] == 1
     assert journal["0"][JOURNAL_ENTRY_ORD_KEY] == 0
+
+
+def test_merge_append_keeps_occupied_seqs_and_appends_missing_turn_end() -> None:
+    existing = {
+        "0": {
+            "kind": "process_content",
+            "payload": {"kind": "content", "text": "核对"},
+            "ts": None,
+        },
+        "1": _fact("process_tool", id="t1", status="running"),
+        "2": {
+            "kind": "process_content",
+            "payload": {"kind": "content", "text": "备忘录"},
+            "ts": None,
+        },
+    }
+    stamp_missing_ords(existing)
+    snapshot = [
+        {
+            "kind": "process_content",
+            "payload": {"kind": "content", "text": "核对"},
+            "ts": None,
+        },
+        _fact("turn_end", finish_reason="stop"),
+    ]
+    merged = merge_append_map(snapshot, existing)
+    kinds = _kinds(map_values_in_emission_order(merged))
+    assert kinds == [
+        "process_content",
+        "process_tool",
+        "process_content",
+        "turn_end",
+    ]
+    assert merged["2"]["payload"]["text"] == "备忘录"
+    assert "3" in merged
+    assert merged["0"][JOURNAL_ENTRY_ORD_KEY] == 0
+    assert merged["3"][JOURNAL_ENTRY_ORD_KEY] == 3
+
+
+def test_merge_append_empty_snapshot_is_noop() -> None:
+    existing = {"0": _fact("run_started", id="w1")}
+    stamp_missing_ords(existing)
+    merged = merge_append_map([], existing)
+    assert list(merged) == ["0"]
+    assert merged["0"]["kind"] == "run_started"
+
+
+def test_merge_append_does_not_overwrite_overflow() -> None:
+    existing = {
+        "0": _fact("run_plan"),
+        str(JOURNAL_OVERFLOW_SEQ_START): _fact("run_completed", id="r1"),
+    }
+    stamp_missing_ords(existing)
+    merged = merge_append_map(
+        [_fact("run_plan"), _fact("turn_end", finish_reason="stop")],
+        existing,
+    )
+    assert str(JOURNAL_OVERFLOW_SEQ_START) in merged
+    assert merged[str(JOURNAL_OVERFLOW_SEQ_START)]["kind"] == "run_completed"
+    assert merged["1"]["kind"] == "turn_end"

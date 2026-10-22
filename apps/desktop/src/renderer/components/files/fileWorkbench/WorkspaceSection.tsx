@@ -1,5 +1,6 @@
 import { CloneRepoDialog } from "@/components/files/CloneRepoDialog";
 import { FileTree, type FileTreeHandle } from "@/components/files/FileTree";
+import { isUntitledFolderName } from "@/components/files/dedupeName";
 import {
   type TreeAction,
   runTreeAction,
@@ -41,6 +42,7 @@ import { notifyActionError, notifyError, notifyInfo } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import {
   canShareFolder,
+  canWriteFolder,
   folderHasCollaborators,
   folderMyRole,
   folderRoleLabel,
@@ -60,6 +62,7 @@ import {
   FilePlus,
   Folder,
   FolderOpen,
+  FolderPlus,
   FolderSearch,
   FolderUp,
   GitBranch,
@@ -152,6 +155,8 @@ export function WorkspaceSection({
   const treeRef = useRef<FileTreeHandle>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const skipBlurRef = useRef(false);
+  /** First rename after untitled cloud-desk create; Esc deletes the empty desk. */
+  const justCreatedFolderRef = useRef(false);
   const [pendingAction, setPendingAction] = useState<TreeAction | null>(null);
   const [clearScratchOpen, setClearScratchOpen] = useState(false);
   const [clearingScratch, setClearingScratch] = useState(false);
@@ -200,6 +205,13 @@ export function WorkspaceSection({
   const folderRole = folder ? folderMyRole(folder) : "owner";
   /** 删的是文件夹这个容器，不是树里的一个文件。仅所有者；与侧栏同一道门。 */
   const canDeleteFolder = Boolean(folder && folderOwner);
+  /** Nested cloud desk under this row — not mkdir inside the workspace tree. */
+  const canNestCloudFolder = Boolean(
+    folder &&
+      folder.mode === "cloud" &&
+      canWriteFolder(folder) &&
+      !offlineCloud,
+  );
   const memberConversations = () =>
     folder ? getConversations().filter((c) => c.folderId === folder.id) : [];
 
@@ -224,6 +236,7 @@ export function WorkspaceSection({
     if (!folderId || folderId !== pendingRenameFolderId) return;
     setDraft(ws.name);
     setEditing(true);
+    justCreatedFolderRef.current = isUntitledFolderName(ws.name);
     clearPendingRename();
   }, [folderId, pendingRenameFolderId, ws.name, clearPendingRename]);
 
@@ -268,6 +281,7 @@ export function WorkspaceSection({
   };
 
   const commitEdit = () => {
+    justCreatedFolderRef.current = false;
     setEditing(false);
     const name = draft.trim();
     if (!name || name === ws.name) return;
@@ -282,6 +296,22 @@ export function WorkspaceSection({
         { onError: (err) => notifyError(err, "重命名文件夹失败") },
       );
     }
+  };
+
+  const cancelEdit = () => {
+    skipBlurRef.current = true;
+    setEditing(false);
+    const created = justCreatedFolderRef.current;
+    justCreatedFolderRef.current = false;
+    if (
+      !created ||
+      !folder ||
+      !isUntitledFolderName(folder.name) ||
+      !canDeleteFolder
+    ) {
+      return;
+    }
+    void confirmDeleteFolder();
   };
 
   const confirmDeleteFolder = async () => {
@@ -381,8 +411,7 @@ export function WorkspaceSection({
             inputRef.current?.blur();
           } else if (e.key === "Escape") {
             e.preventDefault();
-            skipBlurRef.current = true;
-            setEditing(false);
+            cancelEdit();
           }
         }}
         onBlur={() => {
@@ -447,6 +476,12 @@ export function WorkspaceSection({
           >
             <FilePlus size={14} />
           </IconButton>
+          <IconButton
+            title="新建子文件夹"
+            onClick={() => requestTreeAction("dir")}
+          >
+            <FolderPlus size={14} />
+          </IconButton>
         </div>
       )}
       {showLocationBadge && (
@@ -510,6 +545,22 @@ export function WorkspaceSection({
                   <FilePlus size={14} className="shrink-0" />
                   <span className="flex-1 truncate">新建文件</span>
                 </ContextMenuItem>
+                <ContextMenuItem onSelect={() => requestTreeAction("dir")}>
+                  <FolderPlus size={14} className="shrink-0" />
+                  <span className="flex-1 truncate">新建子文件夹</span>
+                </ContextMenuItem>
+                {canNestCloudFolder && folder ? (
+                  <ContextMenuItem
+                    onSelect={() =>
+                      useFoldersStore
+                        .getState()
+                        .requestUntitledCloudFolder(folder.id)
+                    }
+                  >
+                    <FolderPlus size={14} className="shrink-0" />
+                    <span className="flex-1 truncate">在此新建文件夹</span>
+                  </ContextMenuItem>
+                ) : null}
                 {source.caps.transfer && (
                   <>
                     <ContextMenuItem

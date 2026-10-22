@@ -57,3 +57,12 @@ export function uniqueNumberedName(
 export function uniqueUntitledFolder(existing: Iterable<string>): string {
   return uniqueNumberedName(UNTITLED_FOLDER_NAME, existing);
 }
+
+/** Generated placeholder (`未命名文件夹`, then `未命名文件夹 (2)`…). `(1)` is not in that sequence. */
+export function isUntitledFolderName(name: string): boolean {
+  if (name === UNTITLED_FOLDER_NAME) return true;
+  const prefix = `${UNTITLED_FOLDER_NAME} (`;
+  if (!name.startsWith(prefix) || !name.endsWith(")")) return false;
+  const n = name.slice(prefix.length, -1);
+  return /^[1-9]\d*$/.test(n) && Number(n) >= 2;
+}

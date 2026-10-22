@@ -664,8 +664,10 @@ def test_write_logs_failure_after_exhausted_replace_retries(tmp_path, monkeypatc
     assert not (tmp_path / "outbox" / "u1.json").exists()
 
 
-def test_finalize_replaces_journal_with_complete_result_entries(tmp_path):
-    """When result.journal_entries is passed, seal with that map (not progressive stub)."""
+def test_finalize_appends_complete_result_entries_without_tearing_progressive(
+    tmp_path,
+):
+    """Complete 封盘 keeps progressive occupancy and appends snapshot-only facts."""
     from agentcore.conversation.store.outbox import journal_entries_from_map
 
     store = OutboxStore(tmp_path / "outbox")
@@ -679,7 +681,8 @@ def test_finalize_replaces_journal_with_complete_result_entries(tmp_path):
 
     async def run() -> dict:
         await store.begin_turn(conversation_id="c1", message_id="m1", trace_id="z" * 32)
-        # Incomplete progressive (team only) — would eclipse full process if kept.
+        # Progressive already owns seq 0. Snapshot also carries CEO process_*
+        # and turn_end the live map never saw.
         await store.append_journal(
             turn_id="m1",
             seq=0,
@@ -713,9 +716,83 @@ def test_finalize_replaces_journal_with_complete_result_entries(tmp_path):
     record = _drive(run())
     entries = journal_entries_from_map(record.get("journal")) or []
     kinds = [e.get("kind") for e in entries]
-    assert kinds == ["process_reasoning", "run_started", "turn_end"]
+    assert kinds == ["run_started", "process_reasoning", "turn_end"]
     body = to_record_turn_body(record)
-    assert body["journal"][0]["kind"] == "process_reasoning"
+    assert body["journal"][0]["kind"] == "run_started"
+
+
+def test_finalize_complete_keeps_progressive_tail_when_snapshot_is_shorter(tmp_path):
+    """A shorter in-memory dump must not tear pages the live journal already wrote."""
+    from agentcore.conversation.store.outbox import journal_entries_from_map
+
+    store = OutboxStore(tmp_path / "outbox")
+    store.bind_turn(
+        conversation_id="c1",
+        user_message_id="u1",
+        user_message="hi",
+        message_id="m1",
+        trace_id="y" * 32,
+    )
+
+    async def run() -> dict:
+        await store.begin_turn(conversation_id="c1", message_id="m1", trace_id="y" * 32)
+        for seq, entry in enumerate(
+            [
+                {
+                    "kind": "process_content",
+                    "payload": {"kind": "content", "text": "核对条文"},
+                    "ts": None,
+                },
+                {
+                    "kind": "process_tool",
+                    "payload": {"id": "t1", "name": "search_web", "status": "running"},
+                    "ts": None,
+                },
+                {
+                    "kind": "process_content",
+                    "payload": {"kind": "content", "text": "备忘录全文"},
+                    "ts": None,
+                },
+            ]
+        ):
+            await store.append_journal(
+                turn_id="m1",
+                seq=seq,
+                conversation_id="c1",
+                trace_id="y" * 32,
+                entry=entry,
+            )
+        stale = [
+            {
+                "kind": "process_content",
+                "payload": {"kind": "content", "text": "核对条文"},
+                "ts": None,
+            },
+            {"kind": "turn_end", "payload": {"finish_reason": "stop"}, "ts": None},
+        ]
+        await store.finalize(
+            mode="local",
+            conversation_id="c1",
+            user_message="hi",
+            user_message_id="u1",
+            assistant_content="done",
+            message_id="m1",
+            trace_id="y" * 32,
+            finish_reason="stop",
+            journal_entries=stale,
+        )
+        return json.loads((tmp_path / "outbox" / "u1.json").read_text(encoding="utf-8"))
+
+    record = _drive(run())
+    entries = journal_entries_from_map(record.get("journal")) or []
+    kinds = [e.get("kind") for e in entries]
+    assert kinds == [
+        "process_content",
+        "process_tool",
+        "process_content",
+        "turn_end",
+    ]
+    assert entries[2]["payload"]["text"] == "备忘录全文"
 
 
 def test_concurrent_turns_isolate_context_and_salvage_onto_umid(tmp_path):

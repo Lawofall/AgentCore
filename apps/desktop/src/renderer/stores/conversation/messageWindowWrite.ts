@@ -7,6 +7,7 @@
  * on this client until identity stamps catch up. Stream ownership is only the
  * dual-fold mutex — not a stand-in for that tail.
  */
+import { stitchAssistantProcess } from "@/lib/processTimeline";
 import { DRAFT_KEY } from "./runtime";
 import type { Message } from "./types";
 
@@ -164,8 +165,8 @@ function journalIsComplete(m: Message): boolean {
 /**
  * Server list is window authority (membership / order / body / status).
  * A slim ``eventsComplete=false`` row is not a newer journal — keep the
- * already-complete ``runs`` (and paired process) so offline opened cache
- * can still fold the team graph.
+ * already-complete ``runs`` so offline opened cache can still fold the team
+ * graph. Display ``process`` is re-folded from leftover ``content``.
  */
 export function preserveCompleteRunsFromExisting(
   incoming: Message,
@@ -181,12 +182,14 @@ export function preserveCompleteRunsFromExisting(
   ) {
     return incoming;
   }
-  return {
+  // Keep the complete journal for the graph; re-fold leftover `content` into
+  // process so a slim GET cannot be clobbered by a torn cache timeline.
+  return stitchAssistantProcess({
     ...incoming,
     runs: existing.runs,
     process: existing.process ?? incoming.process,
     executionId: existing.executionId ?? incoming.executionId,
-  };
+  });
 }
 
 /** Stamp complete journals from ``existing`` onto the server window by identity. */

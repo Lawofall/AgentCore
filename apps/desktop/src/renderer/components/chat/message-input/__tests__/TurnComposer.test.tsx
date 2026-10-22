@@ -160,6 +160,10 @@ vi.mock("@/hooks/useWorkspaces", () => ({
   useConversationWorkspace: () => null,
   useWorkspaces: () => ({ data: [] }),
 }));
+vi.mock("@/hooks/useConversationFileSource", () => ({
+  useConversationFileSource: () => null,
+  useConversationFileSourceState: () => ({ source: null, pending: false }),
+}));
 vi.mock("@/hooks/useExternalGrants", () => ({
   useExternalGrants: () => ({ data: [], isError: false, refetch: vi.fn() }),
   useRevokeExternalGrant: () => ({ mutate: vi.fn(), isPending: false }),
@@ -1293,6 +1297,7 @@ describe("TurnComposer variants", () => {
       },
     ]);
     renderComposer("bar");
+    expect(screen.getByTestId("image-thumb-strip")).toBeTruthy();
     expect(screen.getByTestId("composer-vision-hint")).toBeTruthy();
     const send = screen.getByRole("button", { name: "发送" });
     expect((send as HTMLButtonElement).disabled).toBe(false);

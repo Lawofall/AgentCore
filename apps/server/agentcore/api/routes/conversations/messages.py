@@ -66,6 +66,8 @@ from agentcore.conversation.service import (
     upsert_local_turn_stream_segments,
 )
 from agentcore.conversation.store.overlay import (
+    complete_process_transcript,
+    display_transcript_extra,
     overlay_message_fields,
     overlay_runs_with_segments,
 )
@@ -107,6 +109,13 @@ def _project_message_detail(
     usage = m.usage or {}
     runs = runs_from_entries_cached(m.id, journal_rows)
     runs = overlay_runs_with_segments(runs, segments, usage=usage)
+    extra = display_transcript_extra(
+        content=detail.content, segments=segments, usage=usage
+    )
+    if runs is not None and extra:
+        completed = complete_process_transcript(runs.get("process"), extra)
+        if completed is not None and completed is not runs.get("process"):
+            runs = {**runs, "process": completed}
     if slim and runs is not None:
         runs = slim_runs_payload(runs)
     if runs is not None:

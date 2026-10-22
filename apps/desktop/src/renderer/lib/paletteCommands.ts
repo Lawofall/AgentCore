@@ -41,6 +41,7 @@ import {
   Files,
   FlaskConical,
   FolderKey,
+  FolderPlus,
   GitBranch,
   Globe,
   HardDrive,
@@ -152,6 +153,25 @@ export function buildPaletteCommands(ctx: CommandContext): PaletteCommand[] {
       keywords: ["new", "chat", "compose", "xinjian", "duihua"],
       shortcut: chord("n"),
       run: () => startNewConversation(navigate),
+    },
+    {
+      id: "new-folder",
+      title: "新建文件夹",
+      category: "操作",
+      icon: FolderPlus,
+      keywords: [
+        "folder",
+        "cloud",
+        "desk",
+        "xinjian",
+        "wenjianjia",
+        "yun",
+        "files",
+      ],
+      run: () => {
+        navigate("/files");
+        useFoldersStore.getState().requestUntitledCloudFolder();
+      },
     },
     // Dev-only 磁带回放：仅当服务端 DEMO_TAPE_REPLAY_ENABLED 且目录非空时注入。
     // 主入口 = 准备模式（空会话，用户亲自发消息开播）；立即开播为备选。

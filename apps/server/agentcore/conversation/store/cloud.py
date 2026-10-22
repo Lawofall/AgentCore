@@ -1599,10 +1599,10 @@ class CloudStore:
                         finish_value or FinishReason.CANCELLED.value,
                     )
                 if durable is not None:
-                    # Outbox writeback holds this turn's authoritative prefix
-                    # (pause snapshot or resume complete rewrite). Replace the
-                    # live-band occupancy so a resume reusing ``turn_id``
-                    # overwrites the pause prefix; higher seqs stay.
+                    # Outbox already merge-appended complete / error / cancel.
+                    # Writeback records that merged prefix (pause / resume still
+                    # need live-band replace so a reused ``turn_id`` overwrites
+                    # hang-frame occupancy; higher seqs stay).
                     await persist_turn_journal(
                         session,
                         message_id=assistant_msg.id,

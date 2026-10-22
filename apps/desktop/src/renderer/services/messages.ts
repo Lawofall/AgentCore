@@ -5,7 +5,7 @@ import {
 import { ensureTimelineMarkersFromJournal } from "@/lib/foldMessageLane";
 import { logEvent } from "@/lib/log";
 import { isReadOnlyOffline } from "@/lib/offlineMode";
-import { promoteScalarContentIntoProcess } from "@/lib/processTimeline";
+import { completeProcessTranscript } from "@/lib/processTimeline";
 import {
   attestedKindFromEvents,
   parseTurnOutcomeKind,
@@ -185,7 +185,7 @@ export function toMessage(m: BackendMessage): Message {
   const contentText = m.content ?? "";
   const process: ProcessStep[] | undefined =
     m.role === "assistant" && contentText
-      ? promoteScalarContentIntoProcess(markedProcess, contentText)
+      ? completeProcessTranscript(markedProcess, contentText)
       : markedProcess;
   // On reload the row `id` IS the server message_id. Stamp `serverMessageId` so
   // resume guards (`isClientOnlyResumeKey`) match the live path (message_start stamp)

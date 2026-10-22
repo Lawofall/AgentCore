@@ -465,18 +465,9 @@ def _format_extracted_read(
 
 
 def _jpeg_native_parts(jpegs: list[bytes]) -> list[dict[str, Any]]:
-    import base64
+    from agentcore.workspace.image_raster import jpeg_native_part
 
-    parts: list[dict[str, Any]] = []
-    for jpeg in jpegs:
-        b64 = base64.b64encode(jpeg).decode("ascii")
-        parts.append(
-            {
-                "type": "image_url",
-                "image_url": {"url": f"data:image/jpeg;base64,{b64}"},
-            }
-        )
-    return parts
+    return [jpeg_native_part(jpeg) for jpeg in jpegs]
 
 
 async def _render_pdf_window_jpegs(
@@ -527,6 +518,7 @@ class FileReadTool:
                         "description": (
                             f"{TOOL_PATH_DESCRIPTION}"
                             "Office/PDF 抽文本；PDF 可带 pages；表格默认不抽。"
+                            "图片把像素发给当前模型（不收图则诚实说明）。"
                         ),
                     },
                     "offset": {

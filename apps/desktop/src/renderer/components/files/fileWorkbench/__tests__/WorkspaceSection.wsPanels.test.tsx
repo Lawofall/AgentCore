@@ -145,14 +145,25 @@ describe("云端文件夹的版本 / 软删区入口", () => {
   });
 
   it("云端根不挂导出 ZIP", async () => {
+    getFoldersMock.mockReturnValue([
+      {
+        id: "f1",
+        name: "季度报告",
+        mode: "cloud",
+        localRootId: null,
+        localSubpath: null,
+        myRole: "owner",
+      },
+    ]);
     renderSection({});
 
     fireEvent.contextMenu(screen.getByText("季度报告"));
     await screen.findByText("版本…");
     expect(screen.queryByText("导出 ZIP")).toBeNull();
     expect(screen.queryByText("导出到本机文件夹")).toBeNull();
-    expect(screen.queryByText("新建文件夹")).toBeNull();
-    expect(screen.queryByText("在此新建文件夹")).toBeNull();
+    expect(screen.queryByText("新建文件夹", { exact: true })).toBeNull();
+    expect(screen.getByText("在此新建文件夹")).toBeTruthy();
+    expect(screen.getByText("新建子文件夹")).toBeTruthy();
   });
 
   it("本机文件夹挂版本、不挂软删区：回收站是系统轨", async () => {

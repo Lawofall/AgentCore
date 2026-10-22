@@ -7,7 +7,7 @@ import type { FileTreeHandle } from "./fileTreeTypes";
  * 抽出来是因为这些容器**折叠时树还没挂载**：它们都得先记下意图、展开后补跑同一段分派。
  * 各写一份的结果就是新增一个动作（如上传文件夹）时漏掉其中一处。
  */
-export type TreeAction = "file" | "upload" | "upload-folder";
+export type TreeAction = "file" | "dir" | "upload" | "upload-folder";
 
 export function runTreeAction(
   tree: FileTreeHandle | null,

@@ -1,4 +1,5 @@
 import { collectClipboardFiles } from "@/lib/clipboardFiles";
+import { isVisualImageAttachment } from "@/services/messaging";
 import {
   type Dispatch,
   type SetStateAction,
@@ -123,7 +124,9 @@ export function useComposerDrop(
           },
         ];
       });
-      onAttached?.(index);
+      if (!isVisualImageAttachment({ name, kind: "file" })) {
+        onAttached?.(index);
+      }
 
       // 预览元信息只读头部，先落到 chip 上——这样即便上传失败，发送时的重试也拿得到
       // 正确的正文 / 二进制判定，不会把 docx 当空文本发出去。

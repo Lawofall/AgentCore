@@ -319,6 +319,24 @@ class LocalWorkspace:
             page_total=page_total,
         )
 
+    async def raster_for_vision(self, path: str):
+        """IPC ingest: desktop has no Python vision stack, so still ``read_bytes``."""
+        from agentcore.workspace.image_raster import raster_image_bytes, too_large_result
+        from agentcore.workspace.limits import (
+            VISION_INGEST_CHANNEL_MAX_BYTES,
+            is_file_too_large_detail,
+        )
+
+        try:
+            data = await self.read_bytes(
+                path, max_bytes=VISION_INGEST_CHANNEL_MAX_BYTES
+            )
+        except WorkspaceIOError as e:
+            if is_file_too_large_detail(str(e)):
+                return too_large_result(e)
+            raise
+        return await raster_image_bytes(data)
+
     async def write_bytes(self, path: str, data: bytes) -> int:
         root_id, rel, _ = self._route(path, write=True, op="write_bytes")
         value = await self._channel.request(

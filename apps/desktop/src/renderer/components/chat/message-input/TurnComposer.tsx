@@ -1,6 +1,8 @@
 import { DraftWorkspaceAssignPrompt } from "@/components/chat/DraftWorkspaceAssignPrompt";
 import { MentionMenu } from "@/components/chat/MentionMenu";
+import { ImageThumbStrip } from "@/components/files/ImageThumbStrip";
 import { IconButton } from "@/components/ui";
+import { useConversationFileSourceState } from "@/hooks/useConversationFileSource";
 import { useConversations } from "@/hooks/useConversations";
 import { useFolders } from "@/hooks/useFolders";
 import { assemblyIsChatOnly } from "@/lib/assemblyLock";
@@ -341,6 +343,8 @@ export function TurnComposer({
   const attachments = useComposerDraftStore(
     (s) => s.drafts[draftKey]?.attachments ?? EMPTY_ATTACHMENTS,
   );
+  const { source: fileSource, pending: fileSourcePending } =
+    useConversationFileSourceState(conversationId);
   const agentMentions = useComposerDraftStore(
     (s) => s.drafts[draftKey]?.agentMentions ?? EMPTY_AGENT_MENTIONS,
   );
@@ -1031,6 +1035,14 @@ export function TurnComposer({
           {voice.isRecording && (
             <RecordingBar duration={voice.duration} onCancel={voice.cancel} />
           )}
+
+          <ImageThumbStrip
+            attachments={attachments}
+            source={fileSource}
+            sourcePending={fileSourcePending}
+            onRemove={removeAttachment}
+            className={isBar ? "px-2 pt-2" : "px-4 pt-3"}
+          />
 
           {isBar ? (
             stackBar ? (

@@ -3,13 +3,13 @@ import { IconButton } from "@/components/ui";
 import { handlePlainPaste } from "@/lib/clipboardPlain";
 import {
   INLINE_OBJECT,
-  hasInlineMarkers,
   parseInlineBody,
   plainText,
   reconcileInlineBody,
   serializeInlineBody,
 } from "@/lib/inlineBody";
 import { cn } from "@/lib/utils";
+import { isVisualImageAttachment } from "@/services/messaging";
 import {
   AlertCircle,
   Bookmark,
@@ -30,9 +30,10 @@ import {
   useRef,
 } from "react";
 import { type Root, createRoot } from "react-dom/client";
-import type {
-  PendingAgentMention,
-  PendingAttachment,
+import {
+  type PendingAgentMention,
+  type PendingAttachment,
+  mergeComposerStripImages,
 } from "./composerAttachments";
 
 export type ComposerBodyHandle = {
@@ -110,7 +111,7 @@ export const ComposerBodyEditor = forwardRef(function ComposerBodyEditor(
       const index = Number(host.dataset.index);
       if (kind === "attachment") {
         const att = attachments[index];
-        if (!att) return;
+        if (!att || isVisualImageAttachment(att)) return;
         root.render(
           <EditorAttachmentPill
             att={att}
@@ -142,6 +143,10 @@ export const ComposerBodyEditor = forwardRef(function ComposerBodyEditor(
         if (span.text) el.appendChild(document.createTextNode(span.text));
         continue;
       }
+      if (span.kind === "attachment") {
+        const att = attachments[span.index];
+        if (att && isVisualImageAttachment(att)) continue;
+      }
       const host = document.createElement("span");
       host.contentEditable = "false";
       host.dataset.inline = span.kind;
@@ -151,7 +156,7 @@ export const ComposerBodyEditor = forwardRef(function ComposerBodyEditor(
       el.appendChild(host);
       mountPill(host);
     }
-  }, [mountPill, unmountPills, value]);
+  }, [attachments, mountPill, unmountPills, value]);
 
   useLayoutEffect(() => {
     if (value === lastEmittedRef.current) {
@@ -237,15 +242,16 @@ export const ComposerBodyEditor = forwardRef(function ComposerBodyEditor(
     const raw = serialize();
     if (raw.length > maxLength) return;
     const rec = reconcileInlineBody(raw, attachments, agentMentions);
+    const mergedAtts = mergeComposerStripImages(attachments, rec.attachments);
     lastEmittedRef.current = rec.value;
     onChange(rec.value);
     const attChanged =
-      rec.attachments.length !== attachments.length ||
-      rec.attachments.some((a, i) => a.id !== attachments[i]?.id);
+      mergedAtts.length !== attachments.length ||
+      mergedAtts.some((a, i) => a.id !== attachments[i]?.id);
     const mentChanged =
       rec.mentions.length !== agentMentions.length ||
       rec.mentions.some((a, i) => a.id !== agentMentions[i]?.id);
-    if (attChanged || mentChanged) onReconcile(rec.attachments, rec.mentions);
+    if (attChanged || mentChanged) onReconcile(mergedAtts, rec.mentions);
     const caret = getCaretFromDom();
     onCaret(caret);
     if (rec.value !== raw) {
@@ -264,7 +270,14 @@ export const ComposerBodyEditor = forwardRef(function ComposerBodyEditor(
     serialize,
   ]);
 
-  const showPlaceholder = !plainText(value).trim() && !hasInlineMarkers(value);
+  const showPlaceholder =
+    !plainText(value).trim() &&
+    !parseInlineBody(value).some((span) => {
+      if (span.kind === "mention") return Boolean(agentMentions[span.index]);
+      if (span.kind !== "attachment") return false;
+      const att = attachments[span.index];
+      return Boolean(att && !isVisualImageAttachment(att));
+    });
 
   return (
     <div className="relative min-w-0 flex-1">

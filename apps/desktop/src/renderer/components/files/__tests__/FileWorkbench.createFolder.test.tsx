@@ -4,7 +4,14 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { uiSet } from "@/lib/uiStorage";
 import type { FolderMeta } from "@/services/folders";
 import { useFoldersStore } from "@/stores/folders";
-import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -105,11 +112,25 @@ describe("FileWorkbench · 我的文件空态", () => {
     cleanup();
   });
 
-  it("empty 我的文件 keeps the zone header and has no 新建文件夹", () => {
+  it("empty 我的文件 offers 新建文件夹 on the zone header and empty state", async () => {
+    createFolderMutate.mockImplementation(async () => {
+      const folder = untitledFolder({ id: "n1", name: "未命名文件夹" });
+      state.folders = [folder];
+      return { folder, created: true };
+    });
     renderHub();
     expect(screen.getByText("我的文件")).toBeTruthy();
     expect(screen.getByText("还没有文件夹")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "新建文件夹" })).toBeNull();
+    const buttons = screen.getAllByRole("button", { name: "新建文件夹" });
+    expect(buttons.length).toBeGreaterThanOrEqual(2);
+    fireEvent.click(buttons[0]);
+    await waitFor(() => {
+      expect(createFolderMutate).toHaveBeenCalledWith({
+        name: "未命名文件夹",
+        mode: "cloud",
+        parentId: null,
+      });
+    });
   });
 
   it("command-palette untitled request still POSTs 未命名文件夹 and enters rename", async () => {
@@ -135,6 +156,38 @@ describe("FileWorkbench · 我的文件空态", () => {
     });
     expect(useFoldersStore.getState().pendingRenameFolderId).toBe("n1");
     expect(screen.queryByText("还没有文件夹")).toBeNull();
+  });
+
+  it("nested untitled request POSTs parentId", async () => {
+    createFolderMutate.mockImplementation(async () => {
+      const folder = untitledFolder({
+        id: "n2",
+        name: "未命名文件夹",
+        relPath: "设计/未命名文件夹",
+        parentRelPath: "设计",
+      });
+      state.folders = [
+        untitledFolder({
+          id: "p",
+          name: "设计",
+          relPath: "设计",
+          parentRelPath: "",
+        }),
+        folder,
+      ];
+      return { folder, created: true };
+    });
+    renderHub();
+    act(() => {
+      useFoldersStore.getState().requestUntitledCloudFolder("p");
+    });
+    await waitFor(() => {
+      expect(createFolderMutate).toHaveBeenCalledWith({
+        name: "未命名文件夹",
+        mode: "cloud",
+        parentId: "p",
+      });
+    });
   });
 
   it("reveals a nested folder by expanding ancestors so the new row is visible", async () => {

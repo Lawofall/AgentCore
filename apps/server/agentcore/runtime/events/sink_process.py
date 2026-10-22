@@ -301,6 +301,10 @@ class SinkProcessMixin:
                     "status": "running",
                 }
             )
+            seeded = self._seeded_run_processes.get(run_id) or []
+            live = self._run_process(run_id)
+            merged = [*seeded, *live] if seeded else list(live)
+            futures.extend(self._process_cursor.persist_new_run_tail(run_id, merged))
         elif t == EventType.TOOL_USE_END:
             run_id = payload.get("run_id") or ""
             if not run_id:
@@ -321,7 +325,7 @@ class SinkProcessMixin:
             seeded = self._seeded_run_processes.get(run_id) or []
             live = self._run_process(run_id)
             merged = [*seeded, *live] if seeded else list(live)
-            # Terminal tool persist (holds open tools on flush; compensates if cursor
+            # Terminal tool persist (same id overwrites running; compensates if cursor
             # already advanced past a stale running row).
             futures.extend(
                 self._process_cursor.persist_resolved_run_tool(run_id, merged, call_id)
@@ -415,6 +419,9 @@ class SinkProcessMixin:
                     "status": "running",
                 }
             )
+            futures.extend(
+                self._process_cursor.persist_new_captain_tail(self.raw_process())
+            )
         elif t == EventType.TOOL_USE_END:
             payload = event.payload
             if payload.get("run_id") or payload.get("tool_name") in MARKER_STANDIN_TOOLS:
@@ -432,7 +439,7 @@ class SinkProcessMixin:
                     if failure is not None:
                         step["failure"] = failure
                     break
-            # Terminal tool persist (holds open tools on flush; compensates if cursor
+            # Terminal tool persist (same id overwrites running; compensates if cursor
             # already advanced past a stale running row).
             futures.extend(
                 self._process_cursor.persist_resolved_captain_tool(

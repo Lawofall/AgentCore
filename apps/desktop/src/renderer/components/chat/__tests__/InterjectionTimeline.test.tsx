@@ -6,7 +6,12 @@ import { DRAFT_KEY, useConversationStore } from "@/stores/conversation";
 import { useExecutionStore } from "@/stores/execution";
 import { useQueuedTurnsStore } from "@/stores/queuedTurns";
 import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("@/hooks/useConversationFileSource", () => ({
+  useConversationFileSource: () => null,
+  useConversationFileSourceState: () => ({ source: null, pending: false }),
+}));
 
 afterEach(() => {
   cleanup();

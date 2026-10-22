@@ -40,6 +40,30 @@ describe("ChatComposer send-error chrome", () => {
   });
 });
 
+describe("ChatComposer pending image lightbox", () => {
+  it("clicking a pasted image thumb opens the lightbox", () => {
+    URL.createObjectURL = vi.fn(
+      () => "blob:im-pending",
+    ) as unknown as typeof URL.createObjectURL;
+    URL.revokeObjectURL = vi.fn() as unknown as typeof URL.revokeObjectURL;
+    render(<ChatComposer chatId="c1" />);
+    const file = new File([new Uint8Array([1, 2, 3])], "shot.png", {
+      type: "image/png",
+    });
+    fireEvent.paste(screen.getByPlaceholderText("输入消息…"), {
+      clipboardData: {
+        files: [file],
+        items: [],
+        types: ["Files"],
+      },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "查看 shot.png" }));
+    expect(screen.getByTestId("image-lightbox")).toBeTruthy();
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByTestId("image-lightbox")).toBeNull();
+  });
+});
+
 describe("ChatComposer native attach sources", () => {
   it("paperclip opens 拍照/相册/文件 and not 引用", () => {
     window.__NATIVE__ = true;

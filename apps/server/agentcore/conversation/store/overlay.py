@@ -37,6 +37,73 @@ def segments_by_channel(segments: list[dict[str, Any]]) -> dict[str, str]:
     }
 
 
+def complete_process_transcript(
+    process: list[dict[str, Any]] | None,
+    extra_text: str | None,
+) -> list[dict[str, Any]] | None:
+    """Fold leftover user-visible prose into the display block list.
+
+    Already-journaled ``content`` steps are consumed as a prefix of ``extra_text``.
+    Remainder extends a trailing open content step, or appends a new one (before
+    the first ``team`` marker when the lane has no content yet). Same reference
+    when nothing changes. ``extra_text`` is captain ``turn_stream_state`` (in-flight)
+    or ``messages.content`` (deliverable projection) — the bubble reads ``process``.
+    """
+    text = extra_text or ""
+    if not text:
+        return process
+    steps = list(process) if process else []
+    if any(
+        s.get("kind") == "content" and (s.get("text") or "") == text for s in steps
+    ):
+        return process
+    remaining = text
+    last_was_consumed = False
+    for i, step in enumerate(steps):
+        if step.get("kind") != "content":
+            continue
+        block = str(step.get("text") or "")
+        if not block or not remaining.startswith(block):
+            continue
+        remaining = remaining[len(block) :]
+        if remaining.startswith("\n\n"):
+            remaining = remaining[2:]
+        elif remaining.startswith("\n"):
+            remaining = remaining[1:]
+        if i == len(steps) - 1:
+            last_was_consumed = True
+        if not remaining:
+            return process
+    if not remaining:
+        return process
+    if last_was_consumed:
+        last = steps[-1]
+        prev = str(last.get("text") or "")
+        return [*steps[:-1], {**last, "text": prev + remaining}]
+    if not any(s.get("kind") == "content" for s in steps):
+        marker = {"kind": "content", "text": remaining}
+        for i, step in enumerate(steps):
+            if step.get("kind") == "team":
+                return [*steps[:i], marker, *steps[i:]]
+        return [*steps, marker]
+    return [*steps, {"kind": "content", "text": remaining}]
+
+
+def display_transcript_extra(
+    *,
+    content: str | None,
+    segments: list[dict[str, Any]],
+    usage: dict[str, Any] | None,
+) -> str | None:
+    """In-flight captain channel, else stored deliverable — never both."""
+    if should_overlay_stream_state(usage) and segments:
+        cap = segments_by_channel(segments).get(CHANNEL_CAPTAIN_CONTENT)
+        if cap:
+            return cap
+    text = content or ""
+    return text or None
+
+
 def overlay_message_fields(
     *,
     content: str | None,
@@ -47,11 +114,9 @@ def overlay_message_fields(
 ) -> tuple[str | None, str | None]:
     """Return ``(content, reasoning)`` after applying captain channel overlays.
 
-    ``skip_captain_content``: when the journal already has ``process_*`` narration
-    **or** the turn is structured (tools / team / process lane), do **not** pour
-    ``captain:content`` into ``messages.content`` (deliverable_only — mid-run
-    refresh restores process from journal, not the content column). Prose-only
-    turns keep the segment accelerate / salvage path.
+    ``skip_captain_content``: do not pour captain:content into the LLM projection
+    column. Display remainder is ``complete_process_transcript`` (process lane).
+    Prose-only turns keep the segment accelerate / salvage path on this column.
     """
     if not should_overlay_stream_state(usage) or not segments:
         return content, reasoning_content

@@ -12,6 +12,7 @@ import {
   ChevronsDownUp,
   FilePlus,
   FileText,
+  FolderPlus,
   Loader2,
   RefreshCw,
 } from "lucide-react";
@@ -30,7 +31,11 @@ import { InlineCreateRow } from "./FileTreeInline";
 import { FileTreeRow } from "./FileTreeRow";
 import { FileTreeSelectionBar } from "./FileTreeSelectionBar";
 import { UploadMenu } from "./UploadMenu";
-import { dedupeName, uniqueUntitledFolder } from "./dedupeName";
+import {
+  dedupeName,
+  isUntitledFolderName,
+  uniqueUntitledFolder,
+} from "./dedupeName";
 import { setFileClipboard, useFileClipboard } from "./fileClipboard";
 import {
   type BatchFailure,
@@ -64,7 +69,8 @@ export const FILE_TREE_SILENT_DEBOUNCE_MS = 200;
  * tree that backs both the Files page (a local OS root) and the conversation
  * workspace panel (the server workspace). Capabilities gate the chrome: upload
  * appears only when the source can transfer bytes; live updates only when it can
- * watch. New files stay name-first. Right-click + drag-to-move stay on the
+ * watch. New files stay name-first; new dirs land as 「未命名文件夹」 then
+ * rename. Right-click + drag-to-move stay on the
  * tree, with per-source persisted fold state. The container owns where a clicked
  * file opens (via `onOpenFile`).
  */
@@ -175,6 +181,8 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(
       kind: "file" | "dir";
     } | null>(null);
     const [renaming, setRenaming] = useState<string | null>(null);
+    /** Path of a dir just created via 「新建子文件夹」; Esc on that first rename deletes it. */
+    const justCreatedDirRef = useRef<string | null>(null);
     const [dropTarget, setDropTarget] = useState<string | null>(null);
     // 剪贴板是**全局**一份：中枢把每个云文件夹渲染成独立的树，「在 A 剪、到 B 粘」
     // 是基本诉求，跟着树走就永远跨不过去（见 fileClipboard.ts）。
@@ -386,7 +394,8 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(
         const path = joinPath(dir, name);
         try {
           await source.mkdir(path);
-          data.reload(dir);
+          await data.reloadSilent(dir);
+          justCreatedDirRef.current = path;
           setRenaming(path);
         } catch {
           notifyError("已存在同名文件或文件夹，或创建失败");
@@ -427,9 +436,28 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(
       [creating, source, data, onOpenFile],
     );
 
+    const cancelRename = useCallback(() => {
+      const path = renaming;
+      const created = justCreatedDirRef.current;
+      setRenaming(null);
+      justCreatedDirRef.current = null;
+      if (!path || created !== path || !isUntitledFolderName(baseName(path))) {
+        return;
+      }
+      void (async () => {
+        try {
+          await source.delete(path);
+          data.reload(parentDir(path));
+        } catch {
+          notifyError("删除失败");
+        }
+      })();
+    }, [renaming, source, data]);
+
     const submitRename = useCallback(
       async (path: string, rawName: string) => {
         setRenaming(null);
+        justCreatedDirRef.current = null;
         const name = rawName.trim();
         if (!name || name === baseName(path)) return;
         if (name.includes("/")) {
@@ -880,7 +908,7 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(
               onContextCreate={openCreate}
               onStartRename={setRenaming}
               onSubmitRename={submitRename}
-              onCancelRename={() => setRenaming(null)}
+              onCancelRename={cancelRename}
               onSubmitCreate={submitCreate}
               onCancelCreate={() => setCreating(null)}
               onDelete={remove}
@@ -935,6 +963,14 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(
                         aria-label="新建文件"
                       >
                         <FilePlus size={14} />
+                      </IconButton>
+                    </SimpleTooltip>
+                    <SimpleTooltip label="新建子文件夹">
+                      <IconButton
+                        onClick={() => openCreate("", "dir")}
+                        aria-label="新建子文件夹"
+                      >
+                        <FolderPlus size={14} />
                       </IconButton>
                     </SimpleTooltip>
                   </div>

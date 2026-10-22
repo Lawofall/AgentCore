@@ -1,13 +1,13 @@
-import { Button, IconButton } from "@/components/ui";
+import { Button } from "@/components/ui";
 import {
   type FileNode,
   type FilePreviewResult,
   isArchiveFileName,
 } from "@/lib/fileSource";
 import { formatBytes } from "@/lib/format";
-import { Download, ExternalLink, FileText, X } from "lucide-react";
-import { useEffect, useState } from "react";
-import { createPortal } from "react-dom";
+import { Download, ExternalLink, FileText } from "lucide-react";
+import { useState } from "react";
+import { ImageLightbox } from "./ImageLightbox";
 
 /**
  * Shared body renderer for a {@link FilePreviewResult} — the source-agnostic
@@ -179,63 +179,11 @@ function ImagePreviewBody({
       </button>
       {lightbox && (
         <ImageLightbox
-          dataUrl={dataUrl}
-          name={name}
+          images={[{ src: dataUrl, name }]}
+          index={0}
           onClose={() => setLightbox(false)}
         />
       )}
     </div>
-  );
-}
-
-function ImageLightbox({
-  dataUrl,
-  name,
-  onClose,
-}: {
-  dataUrl: string;
-  name: string;
-  onClose: () => void;
-}) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
-  return createPortal(
-    // biome-ignore lint/a11y/useSemanticElements: lightweight image lightbox — role="dialog" + Esc/backdrop close; native <dialog> would add modal/form semantics we don't need.
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label={name || "图片"}
-      className="fixed inset-0 z-50 flex flex-col bg-background/95"
-    >
-      <div className="flex h-12 shrink-0 items-center justify-between gap-2 border-border border-b px-4">
-        <span className="min-w-0 truncate text-sm text-muted-foreground">
-          {name}
-        </span>
-        <IconButton onClick={onClose} aria-label="关闭" title="关闭">
-          <X size={16} />
-        </IconButton>
-      </div>
-      <button
-        type="button"
-        onClick={onClose}
-        className="flex min-h-0 flex-1 cursor-zoom-out items-center justify-center overflow-auto p-6"
-        aria-label="关闭"
-      >
-        <img
-          src={dataUrl}
-          alt={name}
-          className="max-h-full max-w-full object-contain"
-          onClick={(e) => e.stopPropagation()}
-          onKeyDown={(e) => e.stopPropagation()}
-        />
-      </button>
-    </div>,
-    document.body,
   );
 }

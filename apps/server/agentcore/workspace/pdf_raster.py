@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-import io
 from pathlib import Path
 
+from agentcore.workspace.image_raster import VISION_MAX_EDGE, rgb_jpeg_bytes
 from agentcore.workspace.limits import OFFICE_EXTRACT_PDF_MAX_IMAGES
 
-_MAX_EDGE = 1280
 _SCALE = 1.5
-_JPEG_QUALITY = 75
 
 
 def render_pdf_page_jpegs(
@@ -62,11 +60,4 @@ def _to_jpeg(image: object) -> bytes:
     if not isinstance(image, Image.Image):
         return b""
     rgb = image.convert("RGB")
-    width, height = rgb.size
-    longest = max(width, height)
-    if longest > _MAX_EDGE:
-        scale = _MAX_EDGE / longest
-        rgb = rgb.resize((max(1, int(width * scale)), max(1, int(height * scale))))
-    buf = io.BytesIO()
-    rgb.save(buf, format="JPEG", quality=_JPEG_QUALITY, optimize=True)
-    return buf.getvalue()
+    return rgb_jpeg_bytes(rgb, max_edge=VISION_MAX_EDGE)

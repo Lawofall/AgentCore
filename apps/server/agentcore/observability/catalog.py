@@ -1574,6 +1574,7 @@ EVENTS: list[EventSpec] = [
             'turn_id': FieldType('str'),
         },
     ),
+    EventSpec(name='journal.merge_append_live_band_full'),
     EventSpec(name='journal.persist_failed'),
     EventSpec(name='journal.sealed_at_pause'),
     EventSpec(
@@ -2830,6 +2831,8 @@ EVENTS: list[EventSpec] = [
             'error': FieldType('str'),
         },
     ),
+    EventSpec(name='workspace.vision_raster_failed'),
+    EventSpec(name='workspace.vision_raster_spawn_failed'),
     EventSpec(name='workspaces.cloud_unreachable'),
     EventSpec(name='write.collision'),
     EventSpec(name='write.scope_rejected'),

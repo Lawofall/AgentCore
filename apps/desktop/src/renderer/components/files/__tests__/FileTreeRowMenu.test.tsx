@@ -78,6 +78,7 @@ describe("FileTreeRowMenu 目录下载", () => {
       stubSource({ download }),
     );
     expect(await screen.findByText("新建文件")).toBeTruthy();
+    expect(screen.getByText("新建子文件夹")).toBeTruthy();
     expect(screen.queryByText("下载")).toBeNull();
     expect(screen.queryByText("新建文件夹")).toBeNull();
     expect(download).not.toHaveBeenCalled();
@@ -94,6 +95,7 @@ describe("FileTreeRowMenu 目录下载", () => {
     );
     expect(screen.queryByText("下载")).toBeNull();
     expect(screen.queryByText("新建文件")).toBeNull();
+    expect(screen.queryByText("新建子文件夹")).toBeNull();
     expect(screen.queryByText("新建文件夹")).toBeNull();
   });
 

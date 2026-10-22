@@ -51,6 +51,7 @@ from agentcore.workspace.file_kind import decode_stored_text, encode_stored_text
 from agentcore.workspace.limits import (
     FILE_TOO_LARGE_DETAIL,
     OFFICE_EXTRACT_DISK_MAX_BYTES,
+    VISION_INGEST_DISK_MAX_BYTES,
     effective_read_bytes_cap,
     effective_read_head_cap,
     replace_max_bytes,
@@ -821,6 +822,26 @@ class ServerWorkspace:
             page_end=page_end,
             page_total=page_total,
         )
+
+    async def raster_for_vision(self, path: str):
+        """Stat then decode in a child that opens ``path``; do not slurp here."""
+        from agentcore.workspace.image_raster import raster_image_file, too_large_result
+        from agentcore.workspace.limits import is_file_too_large_detail
+
+        if self._external_needs_channel(path):
+            return await self._require_external_bridge().raster_for_vision(path)
+        target = self._safe(path)
+        if not target.exists():
+            raise PathNotFound(path)
+        if not target.is_file():
+            raise NotAFile(path)
+        try:
+            self._reject_oversized_file(target, ingest_cap=VISION_INGEST_DISK_MAX_BYTES)
+        except WorkspaceIOError as e:
+            if is_file_too_large_detail(str(e)):
+                return too_large_result(e)
+            raise
+        return await raster_image_file(target)
 
     async def write_bytes(self, path: str, data: bytes) -> int:
         if self._external_needs_channel(path):

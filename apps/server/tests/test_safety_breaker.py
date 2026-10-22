@@ -61,7 +61,9 @@ def test_scan_destructive_rm_root_hits(text: str):
     assert hit is not None
     assert hit.verdict is BreakerVerdict.FORCE_APPROVAL
     assert hit.rule_id == "destructive.rm_root"
-    assert "并非完整拦截" in hit.reason
+    assert "根目录" in hit.reason
+    assert "并非完整拦截" not in hit.reason
+    assert "需人工确认" not in hit.reason
 
 
 def test_scan_destructive_rm_workspace_paths_pass():
@@ -91,6 +93,8 @@ def test_scan_destructive_other_rules(text: str, rule_id: str):
     assert hit is not None
     assert hit.rule_id == rule_id
     assert hit.verdict is BreakerVerdict.FORCE_APPROVAL
+    assert "并非完整拦截" not in hit.reason
+    assert "需人工确认" not in hit.reason
 
 
 @pytest.mark.parametrize(
@@ -387,7 +391,11 @@ def test_evaluate_top_level_project_rmtree_forces():
     assert hit is not None
     assert hit.verdict is BreakerVerdict.FORCE_APPROVAL
     assert hit.rule_id == "destructive.workspace_top_tree"
-    assert "并非完整拦截" in hit.reason
+    assert "顶层整棵" in hit.reason
+    assert "非常规" in hit.reason
+    assert "并非完整拦截" not in hit.reason
+    assert "误伤面" not in hit.reason
+    assert "需人工确认" not in hit.reason
 
 
 def test_evaluate_nested_rmtree_not_top_tree():

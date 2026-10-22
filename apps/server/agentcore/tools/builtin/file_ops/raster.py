@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import base64
 import time
 from typing import Any
 
@@ -12,7 +11,7 @@ from agentcore.tools.builtin.file_ops.errors import (
 )
 from agentcore.tools.builtin.file_ops.observe import format_observe_envelope
 from agentcore.tools.protocol import ToolContext, ToolResult
-from agentcore.workspace.image_files import image_data_mime
+from agentcore.workspace.image_raster import jpeg_native_part, raster_fail_note
 from agentcore.workspace.protocol import (
     NotAFile,
     OutsideWorkspace,
@@ -68,7 +67,7 @@ async def read_raster_image(
             text="当前主模型不收图，本回合未把像素发给模型。勿把路径当作已读像素。",
         )
     try:
-        raw = await context.backend.read_bytes(rel_path)
+        result = await context.backend.raster_for_vision(rel_path)
     except OutsideWorkspace as e:
         return _outside_workspace_error(
             rel_path, start, location=context.backend.location, reason=str(e)
@@ -92,20 +91,18 @@ async def read_raster_image(
             error=str(e),
             duration_ms=int((time.monotonic() - start) * 1000),
         )
-    if not raw:
+    kind = "image"
+    if result.status == "too_large":
+        kind = "truncated"
+    if result.status != "ok" or not result.jpeg:
         return _observe(
-            kind="image",
+            kind=kind,
             path=display,
             start=start,
-            size=0,
-            text="工作区图片为空，没有像素可发。",
+            size=result.source_bytes,
+            text=raster_fail_note(result),
         )
-    mime = image_data_mime(display)
-    b64 = base64.b64encode(raw).decode("ascii")
-    part = {
-        "type": "image_url",
-        "image_url": {"url": f"data:{mime};base64,{b64}"},
-    }
+    part = jpeg_native_part(result.jpeg)
     return ToolResult(
         tool_call_id="",
         success=True,

@@ -28,6 +28,20 @@ vi.mock("@/lib/toast", () => ({
   notifyInfo: vi.fn(),
 }));
 
+vi.mock("@/lib/capabilities", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/capabilities")>();
+  return {
+    ...actual,
+    hasNativeMediaCapture: () => true,
+    isNativeRuntime: () => true,
+  };
+});
+
+vi.mock("@/hooks/useConversationFileSource", () => ({
+  useConversationFileSource: () => null,
+  useConversationFileSourceState: () => ({ source: null, pending: false }),
+}));
+
 const post = vi.mocked(api.post);
 const CID = "conv-bar-q";
 
@@ -270,6 +284,12 @@ describe("QueuedTurnsBar", () => {
     expect(screen.getByTestId("queued-turn-editor")).toBeTruthy();
     expect(screen.queryByTestId("queued-turn-to-captain")).toBeNull();
     expect(screen.queryByTestId("queued-turn-cancel")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "添加附件" }));
+    expect(screen.getByTestId("attach-source-menu")).toBeTruthy();
+    expect(screen.getByTestId("attach-source-camera")).toBeTruthy();
+    expect(screen.getByTestId("attach-source-gallery")).toBeTruthy();
+    expect(screen.getByTestId("attach-source-files")).toBeTruthy();
+    expect(screen.queryByTestId("attach-source-cite")).toBeNull();
     fireEvent.click(screen.getByText("放弃"));
     expect(screen.queryByTestId("queued-turn-editor")).toBeNull();
     expect(screen.getByTestId("queued-turn-row").textContent).toContain(

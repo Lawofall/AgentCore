@@ -27,6 +27,7 @@ const mocks = vi.hoisted(() => ({
   notifyInfo: vi.fn(),
   navigate: vi.fn(),
   folderRole: "owner" as "owner" | "editor" | "viewer",
+  folderName: "季度报告",
 }));
 
 vi.mock("@/components/files/FileTree", () => ({
@@ -55,7 +56,7 @@ vi.mock("@/hooks/useFolders", () => ({
   getFolders: () => [
     {
       id: "f1",
-      name: "季度报告",
+      name: mocks.folderName,
       mode: "cloud",
       localRootId: null,
       localSubpath: null,
@@ -93,6 +94,7 @@ vi.mock("@/lib/toast", () => ({
   notifyInfo: mocks.notifyInfo,
 }));
 
+import { useFoldersStore } from "@/stores/folders";
 import { WorkspaceSection } from "../WorkspaceSection";
 
 function source(): FileSource {
@@ -156,6 +158,13 @@ beforeEach(() => {
   mocks.notifyInfo.mockReset();
   mocks.navigate.mockReset();
   mocks.folderRole = "owner";
+  mocks.folderName = "季度报告";
+  useFoldersStore.setState({
+    pendingRevealFolderId: null,
+    pendingRenameFolderId: null,
+    pendingUntitledCreate: null,
+    untitledCreateBusy: false,
+  });
 });
 
 afterEach(cleanup);
@@ -206,7 +215,33 @@ describe("工作区轨删除", () => {
 
     fireEvent.contextMenu(screen.getByText("季度报告"));
     await screen.findByText("新建文件");
+    expect(screen.getByText("在此新建文件夹")).toBeTruthy();
     expect(screen.queryByText("删除文件夹…")).toBeNull();
+    expect(mocks.deleteFolder).not.toHaveBeenCalled();
+  });
+
+  it("第一次改名 Esc 且仍是占位名则软删空桌，不走确认框", async () => {
+    mocks.folderName = "未命名文件夹";
+    useFoldersStore.getState().revealCreatedFolder("f1", { rename: true });
+    renderSection({ name: "未命名文件夹" });
+
+    const input = await screen.findByDisplayValue("未命名文件夹");
+    fireEvent.keyDown(input, { key: "Escape" });
+
+    await waitFor(() => expect(mocks.deleteFolder).toHaveBeenCalledWith("f1"));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(mocks.notifyInfo).toHaveBeenCalledWith(
+      "已删除文件夹",
+      expect.objectContaining({ description: "未命名文件夹" }),
+    );
+  });
+
+  it("普通重命名 Esc 不删文件夹", async () => {
+    renderSection();
+    fireEvent.contextMenu(screen.getByText("季度报告"));
+    fireEvent.click(await screen.findByText("重命名"));
+    const input = await screen.findByDisplayValue("季度报告");
+    fireEvent.keyDown(input, { key: "Escape" });
     expect(mocks.deleteFolder).not.toHaveBeenCalled();
   });
 });

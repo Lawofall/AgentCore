@@ -779,7 +779,47 @@ async def test_file_read_raster_native_parts_when_model_accepts(tmp_path: Path):
     parts = (result.metadata or {}).get("native_image_parts")
     assert isinstance(parts, list) and len(parts) == 1
     url = parts[0]["image_url"]["url"]
-    assert url.startswith("data:image/png;base64,")
+    assert url.startswith("data:image/jpeg;base64,")
+
+
+async def test_file_read_raster_too_large_is_observe_envelope(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    monkeypatch.setattr(
+        "agentcore.workspace.server.VISION_INGEST_DISK_MAX_BYTES", 8
+    )
+    (tmp_path / "shot.png").write_bytes(_MIN_PNG)
+    ctx = replace(_ctx(tmp_path), accepts_images=True)
+    result = await FileReadTool().execute({"file_path": "shot.png"}, ctx)
+    assert result.success is True
+    out = result.output or ""
+    assert "[观察信封]" in out
+    assert "kind: truncated" in out
+    assert "识图摄入顶" in out
+    assert "OCR" not in out
+    assert "rapidocr" not in out.lower()
+    assert not (result.metadata or {}).get("native_image_parts")
+
+
+async def test_file_read_raster_bypasses_text_5mib_gate(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    from PIL import Image
+
+    monkeypatch.setattr(
+        "agentcore.workspace.limits.WORKSPACE_READ_MAX_BYTES", 64
+    )
+    buf = BytesIO()
+    Image.new("RGB", (40, 40), "white").save(buf, format="PNG")
+    payload = buf.getvalue()
+    assert len(payload) > 64
+    (tmp_path / "shot.png").write_bytes(payload)
+    ctx = replace(_ctx(tmp_path), accepts_images=True)
+    result = await FileReadTool().execute({"file_path": "shot.png"}, ctx)
+    assert result.success is True
+    parts = (result.metadata or {}).get("native_image_parts")
+    assert isinstance(parts, list) and parts
+    assert parts[0]["image_url"]["url"].startswith("data:image/jpeg;base64,")
 
 
 async def test_file_read_same_path_repeated_reads_return_disk_body(tmp_path: Path):
@@ -1070,6 +1110,7 @@ def test_file_read_schema_teaches_default_full_read():
     assert "web_fetch" not in path_desc
     assert "默认不抽" in path_desc
     assert "Office/PDF" in path_desc
+    assert "像素" in path_desc
     offset = schema.parameters["properties"]["offset"]
     assert "起始行号" in offset["description"]
     assert "已达安全顶" not in offset["description"]

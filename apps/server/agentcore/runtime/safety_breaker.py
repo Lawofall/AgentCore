@@ -54,6 +54,8 @@ class BreakerHit:
 #
 # Matched against shell/command/code text. Keep patterns specific so ordinary
 # ``rm -rf build/`` or ``git push`` to a feature branch do not trip the breaker.
+# FORCE card chrome already says the heuristic is incomplete. Reasons only
+# name what fired — do not repeat that disclaimer or 「需人工确认」.
 
 # Targets that are catastrophic when passed to recursive delete — not ordinary
 # workspace paths like ``/tmp/build`` or ``./dist``.
@@ -79,7 +81,7 @@ _DESTRUCTIVE_RULES: tuple[tuple[str, re.Pattern[str], str], ...] = (
             r"[^\n;|&]*?"
             + _RM_CATASTROPHIC_TARGET
         ),
-        "检测到疑似删除根目录/家目录的命令（启发式兜底，并非完整拦截）。需人工确认后才能执行。",
+        "疑似删除根目录或家目录。",
     ),
     (
         "destructive.format_device",
@@ -92,7 +94,7 @@ _DESTRUCTIVE_RULES: tuple[tuple[str, re.Pattern[str], str], ...] = (
             r"|\\\\\?\\PhysicalDrive"
             r"|\\\\\.\\PhysicalDrive)"
         ),
-        "检测到疑似格式化或写入块设备的命令（启发式兜底，并非完整拦截）。需人工确认后才能执行。",
+        "疑似格式化或写入块设备。",
     ),
     (
         "destructive.shutdown",
@@ -101,7 +103,7 @@ _DESTRUCTIVE_RULES: tuple[tuple[str, re.Pattern[str], str], ...] = (
             r"(?:shutdown\b|poweroff\b|reboot\b|halt\b"
             r"|Stop-Computer\b|Restart-Computer\b)"
         ),
-        "检测到疑似关机/重启主机的命令（启发式兜底，并非完整拦截）。需人工确认后才能执行。",
+        "疑似关机或重启主机。",
     ),
 )
 
@@ -338,14 +340,11 @@ def _basename_sensitive_class(name: str) -> SensitivePathClass:
 
 
 _TOP_TREE_REASON = (
-    "检测到疑似删除工作区顶层整项目目录的命令（启发式兜底，并非完整拦截）。"
-    "误伤面：非常规顶层目录名的合法清理也会弹确认。"
-    "需人工确认后才能执行；白名单清理目录（node_modules/.venv 等）不拦截。"
+    "疑似删除工作区顶层整棵目录。非常规顶层目录名的合法清理也会弹这张卡。"
 )
 
 _NO_BASELINE_REASON = (
-    "检测到破坏性删除形，且本回合尚无可用的 Local zip 基线（启发式兜底，并非完整拦截）。"
-    "无法保证可回滚，需人工确认后才能执行；或先确保回合基线已落盘。"
+    "破坏性删除，且本回合尚无可用的 Local zip 基线，无法保证可回滚。"
 )
 
 

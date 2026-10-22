@@ -39,7 +39,7 @@ import { EmptyHint, InlineError } from "@/components/files/parts";
 import { PendingFolderInvites } from "@/components/folders/PendingFolderInvites";
 import { NarrowBackHeader } from "@/components/layout/NarrowBackHeader";
 import { NarrowMenuButton } from "@/components/layout/NarrowMenuButton";
-import { SearchField } from "@/components/ui";
+import { Button, SearchField } from "@/components/ui";
 import { WorkspaceTrashSection } from "@/components/workspace/TrashSection";
 import { useConversations } from "@/hooks/useConversations";
 import { useCreateFolder, useFolders } from "@/hooks/useFolders";
@@ -370,7 +370,7 @@ export function FileWorkbench({
     return () => window.clearTimeout(t);
   }, [pendingRevealFolderId, folders, expandWs, clearPendingReveal]);
 
-  // store 仍可 requestUntitledCloudFolder：立刻落地「未命名文件夹」，行上改名。
+  // 区头 / 空态 / 行上 / 命令面板 requestUntitledCloudFolder：立刻落地「未命名文件夹」，行上改名。
   useEffect(() => {
     if (!pendingUntitledCreate) return;
     const parentId = pendingUntitledCreate.parentId;
@@ -589,8 +589,8 @@ export function FileWorkbench({
           narrowDetail && "hidden",
         )}
       >
-        {/* Rail header: name + in-tree path filter（新建走区头「+」与空态主按钮；
-            段级 CRUD 在各 WorkspaceSection 右键菜单). */}
+        {/* Rail header: 筛选 + 排序。新建云桌走「我的文件」区头「+」与空态主按钮；
+            嵌套桌走行上「在此新建文件夹」；桌内 mkdir 是「新建子文件夹」。 */}
         <div
           className={cn(
             "flex h-12 shrink-0 items-center gap-1 border-b border-border px-2",
@@ -644,7 +644,7 @@ export function FileWorkbench({
             ) : (
               <>
                 {(cloudFolderNodes.length > 0 || !filter.trim()) && (
-                  <MyFilesRailHeader />
+                  <MyFilesRailHeader offline={offline} />
                 )}
                 {cloudFolderNodes.length === 0 && !filter.trim() ? (
                   <EmptyHint
@@ -656,6 +656,21 @@ export function FileWorkbench({
                       />
                     }
                     title="还没有文件夹"
+                    action={
+                      offline ? undefined : (
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          onClick={() =>
+                            useFoldersStore
+                              .getState()
+                              .requestUntitledCloudFolder()
+                          }
+                        >
+                          新建文件夹
+                        </Button>
+                      )
+                    }
                   />
                 ) : (
                   <FolderRailNodes nodes={cloudFolderNodes} host={railHost} />

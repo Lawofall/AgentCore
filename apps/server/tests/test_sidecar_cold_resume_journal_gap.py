@@ -104,9 +104,10 @@ async def _seal_pause(outbox: OutboxStore, hang: list[dict[str, Any]]) -> None:
 
 
 def test_resume_rewrite_explicitly_replaces_via_record() -> None:
-    """Resume / outbox writeback must request wholesale ``record()``; salvage must not.
+    """Resume / merged-outbox writeback must request wholesale ``record()``; salvage must not.
 
     Pins caller intent (the ``replace`` flag), not a whole-function ban on ``append``.
+    Complete 封盘 merge-appends in the outbox *before* this hop.
     """
     persist_src = inspect.getsource(persist_turn_journal)
     assert "replace: bool = False" in persist_src

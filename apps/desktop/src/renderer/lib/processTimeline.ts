@@ -303,12 +303,9 @@ function hasMarker(
  * Promote CEO prose from the message content scalar into `process[]` when the
  * timeline has no `content` step yet (协作图时间线落点).
  *
- * Live / hydrate can leave narration on `message.content` while `process` already
- * carries `team` / markers (rAF edge, mid-run reload, stream_segments overlay).
- * Without this, ProcessTimeline's fallback renders the reply AFTER the graph —
- * the local-vs-cloud timing bug in the screenshot. Inserts before the first
- * `team` so the graph stays below the CEO lead-in. No-op when
- * a content step already exists (same ref).
+ * Inserts before the first `team` so the graph stays below the CEO lead-in.
+ * No-op when a content step already exists (same ref). Remainder of a longer
+ * deliverable / in-flight channel → {@link completeProcessTranscript}.
  */
 export function promoteScalarContentIntoProcess(
   process: ProcessStep[] | undefined,
@@ -325,6 +322,64 @@ export function promoteScalarContentIntoProcess(
     }
   }
   return [...steps, marker];
+}
+
+/**
+ * Fold leftover user-visible prose into the display block list (GET / hydrate).
+ *
+ * Journalled `content` steps are consumed as a prefix of `extraText`. Remainder
+ * extends a trailing open content step, or appends after tools. Mirrors
+ * `complete_process_transcript` on the server — bubble SoT is `process[]`.
+ */
+export function completeProcessTranscript(
+  process: ProcessStep[] | undefined,
+  extraText: string,
+): ProcessStep[] {
+  const text = extraText || "";
+  if (!text) return process ?? [];
+  const steps = process ?? [];
+  if (steps.some((s) => s.kind === "content" && s.text === text)) {
+    return steps;
+  }
+  let remaining = text;
+  let lastWasConsumed = false;
+  for (let i = 0; i < steps.length; i++) {
+    const step = steps[i];
+    if (step.kind !== "content" || !step.text) continue;
+    if (!remaining.startsWith(step.text)) continue;
+    remaining = remaining.slice(step.text.length);
+    if (remaining.startsWith("\n\n")) remaining = remaining.slice(2);
+    else if (remaining.startsWith("\n")) remaining = remaining.slice(1);
+    if (i === steps.length - 1) lastWasConsumed = true;
+    if (!remaining) return steps;
+  }
+  if (!remaining) return steps;
+  if (lastWasConsumed) {
+    const last = steps[steps.length - 1];
+    if (last?.kind === "content") {
+      return [...steps.slice(0, -1), { ...last, text: last.text + remaining }];
+    }
+  }
+  if (!steps.some((s) => s.kind === "content")) {
+    return promoteScalarContentIntoProcess(steps, remaining);
+  }
+  return [...steps, { kind: "content", text: remaining }];
+}
+
+/** Re-fold leftover `content` into `process` on a cached / overlaid assistant row. */
+export function stitchAssistantProcess<
+  T extends {
+    role: string;
+    content?: string;
+    process?: ProcessStep[];
+  },
+>(message: T): T {
+  if (message.role !== "assistant") return message;
+  const text = message.content ?? "";
+  if (!text) return message;
+  const process = completeProcessTranscript(message.process, text);
+  if (process === message.process) return message;
+  return { ...message, process };
 }
 
 /** Drop a `team` marker (collaboration graph slot) at the turn's FIRST `run_plan`

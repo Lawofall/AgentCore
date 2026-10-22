@@ -1,14 +1,15 @@
 import { IconButton } from "@/components/ui";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { pickAndOpenLocalFolder } from "@/lib/openLocalFolder";
-import { HardDrive } from "lucide-react";
+import { useFoldersStore } from "@/stores/folders";
+import { FolderPlus, HardDrive } from "lucide-react";
 import type { ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 
 /**
- * A rail zone title (我的文件 / 本机文件夹 / 与我共享) plus, for 本机文件夹,
- * the one disk action that still belongs on the header. Cloud product folders
- * are created from Composer, not from this rail.
+ * A rail zone title (我的文件 / 本机文件夹 / 与我共享) plus the one header
+ * action that belongs on that zone. Cloud desks are created here (untitled then
+ * rename); Composer still names a desk when you are about to chat.
  */
 export function RailSectionHeader({
   label,
@@ -27,9 +28,27 @@ export function RailSectionHeader({
   );
 }
 
-/** 我的文件 — the cloud folder tree. Create goes through Composer. */
-export function MyFilesRailHeader() {
-  return <RailSectionHeader label="我的文件" />;
+/** 我的文件 — the cloud folder tree. Header 「+」 creates a top-level cloud desk. */
+export function MyFilesRailHeader({ offline = false }: { offline?: boolean }) {
+  return (
+    <RailSectionHeader
+      label="我的文件"
+      action={
+        offline ? undefined : (
+          <SimpleTooltip label="新建文件夹">
+            <IconButton
+              aria-label="新建文件夹"
+              onClick={() =>
+                useFoldersStore.getState().requestUntitledCloudFolder()
+              }
+            >
+              <FolderPlus size={13} />
+            </IconButton>
+          </SimpleTooltip>
+        )
+      }
+    />
+  );
 }
 
 /** 本机文件夹 — disk folders opened before, newest activity first (VS Code 语义). */

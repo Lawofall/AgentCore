@@ -17316,7 +17316,7 @@
   "info": {
     "description": "Multi-Agent AI Workspace API",
     "title": "AgentCore",
-    "version": "1.0.2"
+    "version": "1.0.3"
   },
   "openapi": "3.1.0",
   "paths": {

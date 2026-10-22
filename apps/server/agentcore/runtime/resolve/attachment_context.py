@@ -17,6 +17,7 @@ from agentcore.runtime.resolve.attachment_conversation import (
 from agentcore.runtime.resolve.attachment_images import (
     _IMAGE_NATIVE_INDEX,
     _build_native_image_part,
+    _image_turn_cap_block,
     _image_unsupported_block,
     _is_image_attachment,
 )
@@ -31,6 +32,7 @@ from agentcore.workspace.attachment_parse import (
     truncate_for_prompt,
 )
 from agentcore.workspace.file_kind import name_looks_like_archive
+from agentcore.workspace.limits import VISION_MAX_ATTACHMENTS_PER_TURN
 
 if TYPE_CHECKING:
     from agentcore.workspace.protocol import WorkspaceBackend
@@ -304,9 +306,10 @@ async def _build_attachment_prompt(
                     and native_image_parts is not None
                     and backend is not None
                 ):
-                    part = await _build_native_image_part(
-                        att=att,
-                        name=name,
+                    if len(native_image_parts) >= VISION_MAX_ATTACHMENTS_PER_TURN:
+                        add_block(_image_turn_cap_block(name=name, path=path))
+                        continue
+                    part, note = await _build_native_image_part(
                         ws_path=ws_str,
                         backend=backend,
                     )
@@ -314,12 +317,12 @@ async def _build_attachment_prompt(
                         native_image_parts.append(part)
                         add_block(
                             f"--- File: {name} ({path}) [image / multimodal] ---\n"
-                            f"{_IMAGE_NATIVE_INDEX}"
+                            f"{note or _IMAGE_NATIVE_INDEX}"
                         )
                     else:
                         add_block(
                             f"--- File: {name} ({path}) [image / multimodal failed] ---\n"
-                            "无法读取驻留图片字节，本回合未把该图发给主模型。"
+                            f"{note}"
                         )
                     continue
                 add_block(_image_unsupported_block(name=name, path=path))

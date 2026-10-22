@@ -3,6 +3,7 @@ import {
   type TimelineNode,
   appendContentStep,
   appendUserInterjectionStep,
+  completeProcessTranscript,
   dropTrailingContentSteps,
   groupToolRuns,
   hasClosedBlockWithText,
@@ -11,6 +12,7 @@ import {
   processTurnLane,
   promoteScalarContentIntoProcess,
   replaceTrailingContentStep,
+  stitchAssistantProcess,
   timelineNodeKeys,
 } from "@/lib/processTimeline";
 import type { ProcessStep } from "@/types/events";
@@ -304,6 +306,59 @@ describe("promoteScalarContentIntoProcess", () => {
       reasoning("想"),
       content("导语"),
     ]);
+  });
+});
+
+describe("completeProcessTranscript", () => {
+  it("appends deliverable remainder after tools when process already has narration", () => {
+    expect(
+      completeProcessTranscript(
+        [
+          content("三份核查都已交回。现在我核对条文原文。"),
+          tool("t1", "web_search"),
+        ],
+        "三份核查都已交回。现在我核对条文原文。\n\n正式备忘录已写好。",
+      ),
+    ).toEqual([
+      content("三份核查都已交回。现在我核对条文原文。"),
+      tool("t1", "web_search"),
+      content("正式备忘录已写好。"),
+    ]);
+  });
+
+  it("no-ops when extra text already equals a content step", () => {
+    const process = [content("终稿")];
+    expect(completeProcessTranscript(process, "终稿")).toBe(process);
+  });
+
+  it("extends a trailing open content step", () => {
+    expect(
+      completeProcessTranscript([content("现在落")], "现在落正式备忘录。"),
+    ).toEqual([content("现在落正式备忘录。")]);
+  });
+});
+
+describe("stitchAssistantProcess", () => {
+  it("folds leftover content onto a cached assistant row", () => {
+    expect(
+      stitchAssistantProcess({
+        role: "assistant" as const,
+        content: "三份核查都已交回。现在我核对条文原文。\n\n正式备忘录已写好。",
+        process: [
+          content("三份核查都已交回。现在我核对条文原文。"),
+          tool("t1", "web_search"),
+        ],
+      }).process,
+    ).toEqual([
+      content("三份核查都已交回。现在我核对条文原文。"),
+      tool("t1", "web_search"),
+      content("正式备忘录已写好。"),
+    ]);
+  });
+
+  it("no-ops user rows", () => {
+    const row = { role: "user" as const, content: "hi", process: undefined };
+    expect(stitchAssistantProcess(row)).toBe(row);
   });
 });
 

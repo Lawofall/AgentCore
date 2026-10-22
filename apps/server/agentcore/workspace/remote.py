@@ -31,8 +31,10 @@ from agentcore.workspace.file_kind import decode_stored_text, encode_stored_text
 from agentcore.workspace.limits import (
     FILE_TOO_LARGE_DETAIL,
     OFFICE_EXTRACT_DISK_MAX_BYTES,
+    VISION_INGEST_DISK_MAX_BYTES,
     effective_read_bytes_cap,
     effective_read_head_cap,
+    is_file_too_large_detail,
     replace_max_bytes,
 )
 from agentcore.workspace.protocol import (
@@ -248,6 +250,17 @@ class RemoteCloudWorkspace:
         finally:
             with contextlib.suppress(OSError):
                 os.unlink(tmp)
+
+    async def raster_for_vision(self, path: str):
+        from agentcore.workspace.image_raster import raster_image_bytes, too_large_result
+
+        try:
+            data = await self.read_bytes(path, max_bytes=VISION_INGEST_DISK_MAX_BYTES)
+        except WorkspaceIOError as e:
+            if is_file_too_large_detail(str(e)):
+                return too_large_result(e)
+            raise
+        return await raster_image_bytes(data)
 
     async def write_bytes(self, path: str, data: bytes) -> int:
         resp = await self._request(

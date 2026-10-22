@@ -20,6 +20,7 @@ when live keys appear on both sides of overflow, else live-then-overflow.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Any
 
@@ -81,7 +82,7 @@ def stamp_missing_ords(journal: dict[str, Any]) -> None:
     """Assign ``ord`` in current iteration order to entries that lack it.
 
     Callers must first arrange the dict in emission order (``replace_prefix_map``,
-    append-at-end). Existing ``ord`` is never rewritten.
+    ``merge_append_map``, append-at-end). Existing ``ord`` is never rewritten.
     """
     present = [_entry_ord(value) for value in journal.values()]
     known = [item for item in present if item is not None]
@@ -223,6 +224,59 @@ def replace_prefix_map(
     for key, value in other:
         out[key] = value
     _copy_existing_ords(out, existing)
+    stamp_missing_ords(out)
+    return out
+
+
+def _payload_blob(payload: Any) -> str:
+    try:
+        return json.dumps(payload, sort_keys=True, default=str, ensure_ascii=False)
+    except TypeError:
+        return str(payload)
+
+
+def _entry_fingerprint(entry: Any) -> tuple[str, str] | None:
+    if not isinstance(entry, dict):
+        return None
+    return str(entry.get("kind") or ""), _payload_blob(entry.get("payload"))
+
+
+def merge_append_map(
+    snapshot: Sequence[Any],
+    existing: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    """Keep occupancy; append snapshot facts the map does not already hold.
+
+    Complete / error / cancel 封盘. Occupied live seqs stay (progressive
+    append-on-emit owns them). Snapshot entries whose ``(kind, payload)`` are
+    already in the map are skipped; new facts land at :func:`next_live_seq`.
+    Overflow keys are untouched. Empty snapshot is a no-op — it does not
+    clear the live band.
+    """
+    out: dict[str, Any] = dict(existing) if existing else {}
+    seen: set[tuple[str, str]] = set()
+    for value in out.values():
+        fingerprint = _entry_fingerprint(value)
+        if fingerprint is not None:
+            seen.add(fingerprint)
+    for entry in snapshot:
+        if not isinstance(entry, dict):
+            continue
+        fingerprint = _entry_fingerprint(entry)
+        if fingerprint is None or fingerprint in seen:
+            continue
+        seq = next_live_seq(seqs_from_map(out))
+        if seq >= JOURNAL_OVERFLOW_SEQ_START:
+            logger.warning("journal.merge_append_live_band_full", seq=seq)
+            break
+        copied = {
+            key: value
+            for key, value in entry.items()
+            if key != JOURNAL_ENTRY_ORD_KEY
+        }
+        out[str(seq)] = copied
+        seen.add(fingerprint)
+    _copy_existing_ords(out, existing or {})
     stamp_missing_ords(out)
     return out
 

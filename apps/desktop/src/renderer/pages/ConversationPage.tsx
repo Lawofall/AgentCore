@@ -19,6 +19,7 @@ import {
 } from "@/lib/conversationSplit";
 import { logEvent } from "@/lib/log";
 import { useNarrowLayoutState } from "@/lib/narrowLayout";
+import { stitchAssistantProcess } from "@/lib/processTimeline";
 import {
   decideWarmOpenAction,
   fetchMessageWindow,
@@ -73,7 +74,7 @@ function adoptMessageWindow(
   if (s.currentConversationId !== id) return false;
   const rt = getRuntime(id);
   if (hasLocalConversationStream(id) || rt.messages.length > 0) return false;
-  s.setMessageWindow(messages, flags, id);
+  s.setMessageWindow(messages.map(stitchAssistantProcess), flags, id);
   s.setMemoryUpdates(memoryUpdates, id);
   clearLastEventId(id);
   if (shouldSetGeneratingOnHydrate(messages)) {

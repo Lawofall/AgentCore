@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { useFoldersStore } from "@/stores/folders";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildPaletteCommands, commandMatches } from "../paletteCommands";
 
 vi.mock("@/services/demoTape", () => ({
@@ -115,6 +116,33 @@ describe("paletteCommands demo tape gate", () => {
   });
 });
 
+describe("paletteCommands · 新建文件夹", () => {
+  beforeEach(() => {
+    useFoldersStore.setState({
+      pendingUntitledCreate: null,
+      untitledCreateBusy: false,
+    });
+    baseCtx.navigate.mockClear();
+  });
+
+  afterEach(() => {
+    useFoldersStore.getState().clearUntitledCreateRequest();
+    useFoldersStore.getState().finishUntitledCreate();
+    baseCtx.navigate.mockClear();
+  });
+
+  it("goes to /files and requests an untitled cloud desk", () => {
+    const cmds = buildPaletteCommands(baseCtx);
+    const cmd = cmds.find((c) => c.id === "new-folder");
+    expect(cmd?.title).toBe("新建文件夹");
+    cmd?.run();
+    expect(baseCtx.navigate).toHaveBeenCalledWith("/files");
+    expect(useFoldersStore.getState().pendingUntitledCreate).toEqual({
+      parentId: null,
+    });
+  });
+});
+
 describe("paletteCommands · 前往发现性", () => {
   it("excludes 白板 / 文档 / 多维表格 /explore placeholder", () => {
     const cmds = buildPaletteCommands(baseCtx);
@@ -123,7 +151,6 @@ describe("paletteCommands · 前往发现性", () => {
 
     expect(cmds.find((c) => c.id === "nav-docs")).toBeUndefined();
     expect(cmds.find((c) => c.id === "nav-tables")).toBeUndefined();
-    expect(cmds.find((c) => c.id === "new-folder")).toBeUndefined();
     expect(cmds.some((c) => c.title === "文档")).toBe(false);
     expect(cmds.some((c) => c.title === "多维表格")).toBe(false);
 

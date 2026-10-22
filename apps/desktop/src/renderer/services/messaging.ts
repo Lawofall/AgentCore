@@ -329,6 +329,18 @@ export function isImageAttachment(name: string): boolean {
   return IMAGE_EXTENSIONS.has(name.slice(dot + 1).toLowerCase());
 }
 
+/**
+ * Pasted / attached image files are thumbs, not filename chips.
+ * Directories, conversation cites, and prompt documents stay chips.
+ */
+export function isVisualImageAttachment(att: {
+  name: string;
+  kind?: string | null;
+}): boolean {
+  if (att.kind && att.kind !== "file") return false;
+  return isImageAttachment(att.name);
+}
+
 /** Advance this user's read cursor (drives unread counts). */
 export async function markRead(
   chatId: string,

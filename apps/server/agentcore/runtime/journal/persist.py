@@ -125,11 +125,13 @@ async def persist_turn_journal(
     Two write semantics — callers must pick explicitly; there is no length /
     count heuristic (a shorter snapshot is not "less complete"):
 
-    * ``replace=True``: caller holds the authoritative *prefix* (sidecar resume
-      rewrite / outbox writeback). :meth:`TurnJournalRepository.record` deletes
-      only the live-band occupancy ``[0, n)`` this snapshot occupies so a resume
-      reusing ``turn_id`` overwrites the pause prefix. Overflow-band rows stay;
-      they are not copied back by kind.
+    * ``replace=True``: caller holds the authoritative *prefix* (pause 封盘 /
+      sidecar resume rewrite / outbox writeback of the already-merged journal).
+      :meth:`TurnJournalRepository.record` deletes only the live-band occupancy
+      ``[0, n)`` this snapshot occupies so a resume reusing ``turn_id``
+      overwrites the pause prefix. Overflow-band rows stay; they are not
+      copied back by kind. Complete / error / cancel 封盘 merge-appends in
+      the outbox **before** this hop, so the payload is not a shorter dump.
     * ``replace=False`` (default): merge via seq ``append`` (insert-if-absent)
       **inside the live band already occupied**. Salvage / sparse display views
       may fill holes; occupied seqs stay because append-on-emit already owns

@@ -1,11 +1,14 @@
+import { ImageThumbStrip } from "@/components/files/ImageThumbStrip";
 import { IconButton } from "@/components/ui";
 import { handlePlainPaste } from "@/lib/clipboardPlain";
+import type { FileSource } from "@/lib/fileSource";
 import {
   type InlineSpan,
   dropInlineIndex,
   parseInlineBody,
   serializeInlineBody,
 } from "@/lib/inlineBody";
+import { isVisualImageAttachment } from "@/services/messaging";
 import type {
   AgentMentionMeta,
   MessageAttachmentMeta,
@@ -18,6 +21,7 @@ import {
   useEffect,
   useImperativeHandle,
   useRef,
+  useState,
 } from "react";
 import { AgentMentionChip } from "./AgentMentionChip";
 import { AttachmentChip } from "./AttachmentChip";
@@ -53,7 +57,8 @@ export function UserChipTray({
   attachments: readonly MessageAttachmentMeta[];
   mentions: readonly AgentMentionMeta[];
 }) {
-  if (attachments.length === 0 && mentions.length === 0) return null;
+  const files = attachments.filter((a) => !isVisualImageAttachment(a));
+  if (files.length === 0 && mentions.length === 0) return null;
   return (
     <div
       data-testid="user-chip-tray"
@@ -62,10 +67,33 @@ export function UserChipTray({
       {mentions.map((a) => (
         <AgentMentionChip key={a.agentId} role={a.role} />
       ))}
-      {attachments.map((a) => (
+      {files.map((a) => (
         <AttachmentChip key={a.id} att={a} interactive />
       ))}
     </div>
+  );
+}
+
+export function UserImageStrip({
+  attachments,
+  source = null,
+  sourcePending = false,
+  onRemove,
+}: {
+  attachments: readonly MessageAttachmentMeta[];
+  source?: FileSource | null;
+  sourcePending?: boolean;
+  onRemove?: (id: string) => void;
+}) {
+  return (
+    <ImageThumbStrip
+      attachments={attachments}
+      source={source}
+      sourcePending={sourcePending}
+      onRemove={onRemove}
+      align="end"
+      className="max-w-[80%]"
+    />
   );
 }
 
@@ -91,7 +119,7 @@ export function UserInlineBody({
         }
         if (span.kind === "attachment") {
           const att = attachments[span.index];
-          if (!att) return null;
+          if (!att || isVisualImageAttachment(att)) return null;
           return (
             <span key={key} className="mx-0.5 inline-flex align-middle">
               <AttachmentChip att={att} interactive />
@@ -130,16 +158,32 @@ export const UserInlineDraft = forwardRef<
     value: string;
     attachments: readonly MessageAttachmentMeta[];
     mentions: readonly AgentMentionMeta[];
+    source?: FileSource | null;
+    sourcePending?: boolean;
     onChange: (next: string) => void;
+    onAttachmentsChange?: (next: readonly MessageAttachmentMeta[]) => void;
     onKeyDown: (e: ReactKeyboardEvent<HTMLDivElement>) => void;
   }
 >(function UserInlineDraft(
-  { value, attachments, mentions, onChange, onKeyDown },
+  {
+    value,
+    attachments,
+    mentions,
+    source = null,
+    sourcePending = false,
+    onChange,
+    onAttachmentsChange,
+    onKeyDown,
+  },
   ref,
 ) {
   const rootRef = useRef<HTMLDivElement>(null);
-  const attsRef = useRef(attachments);
-  const mentsRef = useRef(mentions);
+  const [draftAtts, setDraftAtts] = useState(attachments);
+  const [draftMents, setDraftMents] = useState(mentions);
+  const attsRef = useRef(draftAtts);
+  const mentsRef = useRef(draftMents);
+  attsRef.current = draftAtts;
+  mentsRef.current = draftMents;
   const valueRef = useRef(value);
   valueRef.current = value;
 
@@ -170,6 +214,10 @@ export const UserInlineDraft = forwardRef<
   }));
 
   useEffect(() => {
+    onAttachmentsChange?.(draftAtts);
+  }, [draftAtts, onAttachmentsChange]);
+
+  useEffect(() => {
     const el = rootRef.current?.querySelector<HTMLElement>("[data-text-span]");
     if (!el) return;
     el.focus();
@@ -186,9 +234,9 @@ export const UserInlineDraft = forwardRef<
     const flushed = flushFromDom();
     const next = dropInlineIndex(flushed, kind, index);
     if (kind === "attachment") {
-      attsRef.current = attsRef.current.filter((_, i) => i !== index);
+      setDraftAtts((prev) => prev.filter((_, i) => i !== index));
     } else {
-      mentsRef.current = mentsRef.current.filter((_, i) => i !== index);
+      setDraftMents((prev) => prev.filter((_, i) => i !== index));
     }
     valueRef.current = next;
     onChange(next);
@@ -197,71 +245,82 @@ export const UserInlineDraft = forwardRef<
   const spans = withEditGaps(parseInlineBody(value));
 
   return (
-    <div
-      ref={rootRef}
-      data-testid="user-inline-draft"
-      className="max-h-[240px] overflow-y-auto whitespace-pre-wrap break-words bg-transparent px-2 py-1 text-sm text-foreground"
-      onKeyDown={onKeyDown}
-      onPaste={(e) => {
-        handlePlainPaste(e);
-      }}
-    >
-      {spans.map((span, i) => {
-        const key = `${span.kind}-${i}`;
-        if (span.kind === "text") {
-          return (
-            <span
-              key={key}
-              data-text-span={i}
-              contentEditable
-              suppressContentEditableWarning
-              className="inline outline-none"
-            >
-              {stripObject(span.text)}
-            </span>
-          );
-        }
-        if (span.kind === "attachment") {
-          const att = attsRef.current[span.index];
-          if (!att) return null;
+    <div className="flex flex-col items-end gap-2">
+      <UserImageStrip
+        attachments={draftAtts}
+        source={source}
+        sourcePending={sourcePending}
+        onRemove={(id) => {
+          const index = attsRef.current.findIndex((att) => att.id === id);
+          if (index >= 0) drop("attachment", index);
+        }}
+      />
+      <div
+        ref={rootRef}
+        data-testid="user-inline-draft"
+        className="max-h-[240px] w-full overflow-y-auto whitespace-pre-wrap break-words bg-transparent px-2 py-1 text-sm text-foreground"
+        onKeyDown={onKeyDown}
+        onPaste={(e) => {
+          handlePlainPaste(e);
+        }}
+      >
+        {spans.map((span, i) => {
+          const key = `${span.kind}-${i}`;
+          if (span.kind === "text") {
+            return (
+              <span
+                key={key}
+                data-text-span={i}
+                contentEditable
+                suppressContentEditableWarning
+                className="inline outline-none"
+              >
+                {stripObject(span.text)}
+              </span>
+            );
+          }
+          if (span.kind === "attachment") {
+            const att = draftAtts[span.index];
+            if (!att || isVisualImageAttachment(att)) return null;
+            return (
+              <span
+                key={key}
+                className="mx-0.5 inline-flex align-middle items-center"
+                contentEditable={false}
+              >
+                <AttachmentChip att={att} />
+                <IconButton
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => drop("attachment", span.index)}
+                  aria-label="移除附件"
+                  className="size-5 shrink-0"
+                >
+                  <X size={12} />
+                </IconButton>
+              </span>
+            );
+          }
+          const mention = draftMents[span.index];
+          if (!mention) return null;
           return (
             <span
               key={key}
               className="mx-0.5 inline-flex align-middle items-center"
               contentEditable={false}
             >
-              <AttachmentChip att={att} />
+              <AgentMentionChip role={mention.role} />
               <IconButton
                 onMouseDown={(e) => e.preventDefault()}
-                onClick={() => drop("attachment", span.index)}
-                aria-label="移除附件"
+                onClick={() => drop("mention", span.index)}
+                aria-label="移除角色点名"
                 className="size-5 shrink-0"
               >
                 <X size={12} />
               </IconButton>
             </span>
           );
-        }
-        const mention = mentsRef.current[span.index];
-        if (!mention) return null;
-        return (
-          <span
-            key={key}
-            className="mx-0.5 inline-flex align-middle items-center"
-            contentEditable={false}
-          >
-            <AgentMentionChip role={mention.role} />
-            <IconButton
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => drop("mention", span.index)}
-              aria-label="移除角色点名"
-              className="size-5 shrink-0"
-            >
-              <X size={12} />
-            </IconButton>
-          </span>
-        );
-      })}
+        })}
+      </div>
     </div>
   );
 });

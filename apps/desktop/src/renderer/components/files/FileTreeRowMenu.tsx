@@ -22,6 +22,7 @@ import {
   FilePlus,
   FileText,
   FileType,
+  FolderPlus,
   FolderSearch,
   Pencil,
   Scissors,
@@ -137,7 +138,7 @@ export function FileTreeRowMenu({
 
   // Groups separated systematically (a leading separator only when both sides are
   // non-empty) so no group ever yields a double rule. The primary group (dir →
-  // 新建文件; file → 下载/打开) is always present when transfer or mutate is on,
+  // 新建文件 / 新建子文件夹; file → 下载/打开) is always present when transfer or mutate is on,
   // so 系统集成 / 编辑 just prefix a rule. `caps.edit === false` (e.g. shared-space
   // viewer) hides mutate actions; single-file download still rides on `caps.transfer`.
   const canMutate = source.caps.edit;
@@ -164,12 +165,20 @@ export function FileTreeRowMenu({
           <>
             {downloadItem}
             {canMutate ? (
-              <ContextMenuItem
-                onSelect={() => onContextCreate(node.path, "file")}
-              >
-                <FilePlus size={14} className="shrink-0" />
-                <span className="flex-1 truncate">新建文件</span>
-              </ContextMenuItem>
+              <>
+                <ContextMenuItem
+                  onSelect={() => onContextCreate(node.path, "file")}
+                >
+                  <FilePlus size={14} className="shrink-0" />
+                  <span className="flex-1 truncate">新建文件</span>
+                </ContextMenuItem>
+                <ContextMenuItem
+                  onSelect={() => onContextCreate(node.path, "dir")}
+                >
+                  <FolderPlus size={14} className="shrink-0" />
+                  <span className="flex-1 truncate">新建子文件夹</span>
+                </ContextMenuItem>
+              </>
             ) : null}
           </>
         ) : (

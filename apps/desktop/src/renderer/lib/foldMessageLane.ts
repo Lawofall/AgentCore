@@ -27,10 +27,10 @@ import {
   appendTeamStep,
   appendToolStep,
   appendUserInterjectionStep,
+  completeProcessTranscript,
   dropTrailingContentSteps,
   hasClosedBlockWithText,
   openBlockText,
-  promoteScalarContentIntoProcess,
   replaceTrailingContentStep,
   replaceTrailingReasoningStep,
   resolveToolStep,
@@ -173,10 +173,7 @@ export function foldTeamMarker(
   state: MessageLaneState,
   executionId: string,
 ): MessageLaneState {
-  const promoted = promoteScalarContentIntoProcess(
-    state.process,
-    state.content,
-  );
+  const promoted = completeProcessTranscript(state.process, state.content);
   const process = appendTeamStep(promoted, executionId);
   if (process === state.process && promoted === state.process) return state;
   return { ...state, process };

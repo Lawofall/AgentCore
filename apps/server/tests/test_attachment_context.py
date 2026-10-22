@@ -12,6 +12,7 @@ Conversation attachments (跨会话对话日志访问定案 P1): server deep-rea
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from io import BytesIO
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -572,6 +573,14 @@ class _StubBackend:
             raise FileNotFoundError(path)
         return self.blobs[path]
 
+    async def raster_for_vision(self, path: str):
+        from agentcore.workspace.image_raster import raster_image_payload
+        from agentcore.workspace.protocol import PathNotFound
+
+        if path not in self.blobs:
+            raise PathNotFound(path)
+        return raster_image_payload(self.blobs[path])
+
 
 @pytest.mark.asyncio
 async def test_image_without_native_vision_honest_unconfigured():
@@ -766,7 +775,11 @@ async def test_svg_mime_excluded_from_vision_path():
 @pytest.mark.asyncio
 async def test_main_native_vision_builds_image_parts_skips_reader():
     """Main catalog vision → multimodal parts on the current model."""
-    backend = _StubBackend({"attachments/pic.jpg": b"\xff\xd8\xffjpeg"})
+    from PIL import Image
+
+    buf = BytesIO()
+    Image.new("RGB", (8, 8), "white").save(buf, format="JPEG")
+    backend = _StubBackend({"attachments/pic.jpg": buf.getvalue()})
     parts: list[dict] = []
 
     out = await _build_attachment_context(
@@ -790,6 +803,74 @@ async def test_main_native_vision_builds_image_parts_skips_reader():
     assert parts[0]["type"] == "image_url"
     url = parts[0]["image_url"]["url"]
     assert url.startswith("data:image/jpeg;base64,")
+
+
+@pytest.mark.asyncio
+async def test_main_native_vision_unreadable_is_honest():
+    backend = _StubBackend({"attachments/pic.jpg": b"not-an-image"})
+    parts: list[dict] = []
+    out = await _build_attachment_context(
+        [
+            {
+                "name": "pic.jpg",
+                "path": "attachments/pic.jpg",
+                "text": "",
+                "binary": True,
+                "workspace_path": "attachments/pic.jpg",
+            }
+        ],
+        backend=backend,  # type: ignore[arg-type]
+        main_native_vision=True,
+        native_image_parts=parts,
+    )
+    assert out is not None
+    assert "[image / multimodal failed]" in out
+    assert "无法解码为图片" in out
+    assert "OCR" not in out
+    assert parts == []
+
+
+@pytest.mark.asyncio
+async def test_main_native_vision_turn_cap_skips_extra(monkeypatch):
+    from PIL import Image
+
+    monkeypatch.setattr(
+        "agentcore.runtime.resolve.attachment_context.VISION_MAX_ATTACHMENTS_PER_TURN",
+        1,
+    )
+    buf = BytesIO()
+    Image.new("RGB", (8, 8), "white").save(buf, format="JPEG")
+    jpeg = buf.getvalue()
+    backend = _StubBackend(
+        {
+            "attachments/a.jpg": jpeg,
+            "attachments/b.jpg": jpeg,
+        }
+    )
+    parts: list[dict] = []
+    out = await _build_attachment_context(
+        [
+            {
+                "name": "a.jpg",
+                "text": "",
+                "binary": True,
+                "workspace_path": "attachments/a.jpg",
+            },
+            {
+                "name": "b.jpg",
+                "text": "",
+                "binary": True,
+                "workspace_path": "attachments/b.jpg",
+            },
+        ],
+        backend=backend,  # type: ignore[arg-type]
+        main_native_vision=True,
+        native_image_parts=parts,
+    )
+    assert out is not None
+    assert len(parts) == 1
+    assert "[image / multimodal skipped]" in out
+    assert "识图张数顶" in out
 
 
 def test_build_multimodal_user_content_and_llm_content_text():

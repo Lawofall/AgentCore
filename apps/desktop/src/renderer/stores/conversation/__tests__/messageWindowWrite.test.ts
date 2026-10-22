@@ -213,7 +213,54 @@ describe("adoptLatestWindowMessages", () => {
     expect(applied[1]?.content).toBe("new body");
     expect(applied[1]?.runs?.events).toHaveLength(2);
     expect(applied[1]?.runs?.eventsComplete).not.toBe(false);
-    expect(applied[1]?.process).toHaveLength(1);
+    expect(applied[1]?.process).toEqual([
+      { kind: "content", text: "new body" },
+      { kind: "team", execution_id: "e1" },
+    ]);
+  });
+
+  it("folds leftover content onto a torn complete cache timeline", () => {
+    const complete = {
+      events: [{ type: "run_plan" } as never],
+      finishReason: "stop" as const,
+      eventsComplete: true as const,
+    };
+    const existing = [
+      msg("m2", "assistant", "三份核查都已交回。现在我核对条文原文。", {
+        executionId: "e1",
+        runs: complete,
+        process: [
+          { kind: "content", text: "三份核查都已交回。现在我核对条文原文。" },
+          { kind: "team", execution_id: "e1" } as never,
+        ],
+      }),
+    ];
+    const incoming = [
+      msg(
+        "m2",
+        "assistant",
+        "三份核查都已交回。现在我核对条文原文。\n\n正式备忘录已写好。",
+        {
+          executionId: "e1",
+          runs: {
+            events: [{ type: "run_plan" } as never],
+            finishReason: "stop",
+            eventsComplete: false,
+          },
+          process: [
+            { kind: "content", text: "三份核查都已交回。现在我核对条文原文。" },
+            { kind: "content", text: "正式备忘录已写好。" },
+          ],
+        },
+      ),
+    ];
+    const applied = adoptLatestWindowMessages(incoming, existing);
+    expect(applied[0]?.runs?.eventsComplete).not.toBe(false);
+    expect(applied[0]?.process).toEqual([
+      { kind: "content", text: "三份核查都已交回。现在我核对条文原文。" },
+      { kind: "team", execution_id: "e1" },
+      { kind: "content", text: "正式备忘录已写好。" },
+    ]);
   });
 
   it("lets a complete server journal replace a complete local one", () => {

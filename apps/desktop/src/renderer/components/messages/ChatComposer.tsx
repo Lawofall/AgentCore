@@ -3,6 +3,7 @@ import {
   AttachSourceInputs,
   AttachSourcePopover,
 } from "@/components/chat/message-input/AttachSourceInputs";
+import { ImageLightbox } from "@/components/files/ImageLightbox";
 import { IconButton } from "@/components/ui";
 import { noticeChipNeutral } from "@/components/ui/tone-presets";
 import { hasNativeMediaCapture } from "@/lib/capabilities";
@@ -104,6 +105,7 @@ export function ChatComposer({
   const [localError, setLocalError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [dragging, setDragging] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [pendingMentions, setPendingMentions] = useState<ChatMention[]>([]);
   const [mentionOpen, setMentionOpen] = useState(false);
   const [mentionQuery, setMentionQuery] = useState("");
@@ -116,6 +118,9 @@ export function ChatComposer({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const attachSourceRef = useRef<AttachSourceHandle>(null);
   const nativeCapture = hasNativeMediaCapture();
+  const pendingImages = pending.flatMap((p) =>
+    p.previewUrl ? [{ src: p.previewUrl, name: p.file.name }] : [],
+  );
   const sendError = useMessagingStore((s) => s.sendError);
   const clearSendError = useMessagingStore((s) => s.clearSendError);
   const loadMembers = useMessagingStore((s) => s.loadMembers);
@@ -589,11 +594,22 @@ export function ChatComposer({
                 className="group/att relative flex items-center gap-2 rounded-lg border border-border bg-background py-1.5 pl-1.5 pr-2"
               >
                 {p.previewUrl ? (
-                  <img
-                    src={p.previewUrl}
-                    alt={p.file.name}
-                    className="size-9 rounded-lg object-cover"
-                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const images = pending.filter((x) => x.previewUrl);
+                      const index = images.findIndex((x) => x.id === p.id);
+                      if (index >= 0) setLightboxIndex(index);
+                    }}
+                    aria-label={`查看 ${p.file.name}`}
+                    className="size-9 shrink-0 cursor-zoom-in overflow-hidden rounded-lg p-0"
+                  >
+                    <img
+                      src={p.previewUrl}
+                      alt={p.file.name}
+                      className="size-9 rounded-lg object-cover"
+                    />
+                  </button>
                 ) : (
                   <span className="flex size-9 items-center justify-center rounded-lg bg-muted">
                     <FileText size={16} className="text-muted-foreground" />
@@ -701,6 +717,16 @@ export function ChatComposer({
           </IconButton>
         </div>
       </div>
+      {lightboxIndex != null && pendingImages[lightboxIndex] && (
+        <ImageLightbox
+          images={pendingImages}
+          index={lightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+          onIndexChange={
+            pendingImages.length > 1 ? setLightboxIndex : undefined
+          }
+        />
+      )}
     </div>
   );
 }

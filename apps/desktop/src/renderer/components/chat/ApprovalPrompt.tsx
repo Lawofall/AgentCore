@@ -742,7 +742,7 @@ export function ApprovalCard({
             )}
             {forceOneShot && (
               <p className="mt-1 text-xs text-muted-foreground">
-                安全熔断升格审批（启发式兜底，并非完整拦截）
+                安全熔断（启发式，非完整拦截）
                 {escalationHint ? `：${escalationHint}` : ""}
               </p>
             )}

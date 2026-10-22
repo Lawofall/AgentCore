@@ -38,6 +38,11 @@ vi.mock("@/stores/sidePanel", () => ({
     sel({ showFile }),
 }));
 
+vi.mock("@/hooks/useConversationFileSource", () => ({
+  useConversationFileSource: () => null,
+  useConversationFileSourceState: () => ({ source: null, pending: false }),
+}));
+
 vi.mock("@/stores/conversation", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/stores/conversation")>();
   const storeApi = {
@@ -140,6 +145,25 @@ describe("UserMessage agent mention chips", () => {
         attachments: [
           {
             id: "att-1",
+            name: "notes.md",
+            path: "attachments/notes.md",
+            truncated: false,
+            kind: "file",
+            workspacePath: "attachments/notes.md",
+          },
+        ],
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "打开 notes.md" }));
+    expect(showFile).toHaveBeenCalledWith("attachments/notes.md", "notes.md");
+  });
+
+  it("history image is a thumb strip, not a File tab chip", () => {
+    renderUser(
+      userMsg({
+        attachments: [
+          {
+            id: "att-1",
             name: "shot.png",
             path: "attachments/shot.png",
             truncated: false,
@@ -149,8 +173,31 @@ describe("UserMessage agent mention chips", () => {
         ],
       }),
     );
-    fireEvent.click(screen.getByRole("button", { name: "打开 shot.png" }));
-    expect(showFile).toHaveBeenCalledWith("attachments/shot.png", "shot.png");
+    expect(screen.getByTestId("image-thumb-strip")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "打开 shot.png" })).toBeNull();
+    expect(showFile).not.toHaveBeenCalled();
+  });
+
+  it("image-only edit keeps the thumb strip and send until the last image is removed", () => {
+    const png = {
+      id: "att-1",
+      name: "shot.png",
+      path: "attachments/shot.png",
+      truncated: false,
+      kind: "file" as const,
+      workspacePath: "attachments/shot.png",
+    };
+    renderUser(userMsg({ content: "", attachments: [png] }));
+    fireEvent.click(screen.getByRole("button", { name: "编辑" }));
+    expect(screen.getByTestId("user-inline-draft")).toBeTruthy();
+    expect(screen.getByTestId("image-thumb-strip")).toBeTruthy();
+    const send = screen.getByRole("button", {
+      name: "发送",
+    }) as HTMLButtonElement;
+    expect(send.disabled).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "移除附件" }));
+    expect(send.disabled).toBe(true);
+    expect(runRegenerate).not.toHaveBeenCalled();
   });
 
   it("edit draft file chip is not a preview control", () => {

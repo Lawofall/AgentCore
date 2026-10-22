@@ -161,7 +161,8 @@ async def test_durable_emit_stamps_sse_id_from_barrier(monkeypatch):
     durable = [f for f in frames if "tool_use_start" in f]
     assert len(durable) == 1
     # 回合身份就在 id 里：客户端原样存、原样回传，服务端下次才分得清是不是本回合的游标。
-    assert "\nid: m1:1\n" in durable[0]
+    # tool_use_start 会先落一条 status=running 的 process_tool（seq 1），本帧是 seq 2.
+    assert "\nid: m1:2\n" in durable[0]
 
 
 async def test_ephemeral_delta_has_no_id_line():

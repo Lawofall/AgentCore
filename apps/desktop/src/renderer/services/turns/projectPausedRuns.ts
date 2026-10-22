@@ -7,7 +7,7 @@
  * helper fills the collab-graph journal without attach-replaying a live turn.
  */
 import { ensureTimelineMarkersFromJournal } from "@/lib/foldMessageLane";
-import { promoteScalarContentIntoProcess } from "@/lib/processTimeline";
+import { completeProcessTranscript } from "@/lib/processTimeline";
 import {
   assistantProjectionId,
   getRuntime,
@@ -87,7 +87,7 @@ export function projectPausedRuns(
     const marked = ensureTimelineMarkersFromJournal(baseProcess, events);
     const process =
       msg.content && msg.content.length > 0
-        ? promoteScalarContentIntoProcess(marked, msg.content)
+        ? completeProcessTranscript(marked, msg.content)
         : marked;
 
     // Conversation bubble lookup is still by client `msg.id`; slot keys above
