@@ -108,7 +108,7 @@
     "ignore": "^7.0.5",
     "jsdom": "^29.1.1",
     "jszip": "^3.10.1",
-    "katex": "^0.17.0",
+    "katex": "^0.18.2",
     "lucide-react": "^0.400.0",
     "markmap-lib": "^0.18.12",
     "markmap-view": "^0.18.12",
