@@ -10,8 +10,8 @@ import {
   WorkspaceModeTrigger,
   useWorkspaceModeState,
 } from "@/components/workspace/WorkspaceModeControl";
-import { useExternalGrants } from "@/hooks/useExternalGrants";
 import { useGroupedConversations } from "@/hooks/useConversations";
+import { useExternalGrants } from "@/hooks/useExternalGrants";
 import { useSharedWithMeFolders } from "@/hooks/useFolderSharing";
 import {
   notifyLocalPickerFailure,

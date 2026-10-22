@@ -4,6 +4,7 @@ import { IconButton } from "@/components/ui";
 import { useConversations } from "@/hooks/useConversations";
 import { useFolders } from "@/hooks/useFolders";
 import { assemblyIsChatOnly } from "@/lib/assemblyLock";
+import { hasLocalFiles } from "@/lib/capabilities";
 import { useChatPaneId, useChatPaneSliceKey } from "@/lib/chatPane";
 import {
   COMPOSER_CONTINUE_PLACEHOLDER,
@@ -16,10 +17,8 @@ import {
 } from "@/lib/composerDelivery";
 import { useComposerActiveProfile } from "@/lib/composerModelProfile";
 import { isComposerSubmitKey, occupiedQueueHint } from "@/lib/composerSendKey";
-import { hasLocalFiles } from "@/lib/capabilities";
 import { connectivityEscalationSuffix } from "@/lib/errors";
 import { pickAndGrantConversationFolder } from "@/lib/grantOrganizeFolder";
-import { notifyError } from "@/lib/toast";
 import {
   dropInlineIndex,
   insertInlineToken,
@@ -27,6 +26,7 @@ import {
   plainText,
 } from "@/lib/inlineBody";
 import { useNarrowLayoutState } from "@/lib/narrowLayout";
+import { notifyError } from "@/lib/toast";
 import {
   assistantHasTeamStrip,
   turnOutcomeForAssistant,
