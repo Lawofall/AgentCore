@@ -131,7 +131,14 @@ export function UserMessage({ message }: MessageBubbleProps) {
               source={fileSource}
               sourcePending={fileSourcePending}
               onChange={setDraft}
-              onAttachmentsChange={(next) => setEditAtts([...next])}
+              onAttachmentsChange={(next) =>
+                setEditAtts((prev) =>
+                  prev.length === next.length &&
+                  prev.every((att, i) => att.id === next[i]?.id)
+                    ? prev
+                    : [...next],
+                )
+              }
               onKeyDown={onEditKeyDown}
             />
           ) : (

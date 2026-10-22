@@ -214,10 +214,6 @@ export const UserInlineDraft = forwardRef<
   }));
 
   useEffect(() => {
-    onAttachmentsChange?.(draftAtts);
-  }, [draftAtts, onAttachmentsChange]);
-
-  useEffect(() => {
     const el = rootRef.current?.querySelector<HTMLElement>("[data-text-span]");
     if (!el) return;
     el.focus();
@@ -234,7 +230,9 @@ export const UserInlineDraft = forwardRef<
     const flushed = flushFromDom();
     const next = dropInlineIndex(flushed, kind, index);
     if (kind === "attachment") {
-      setDraftAtts((prev) => prev.filter((_, i) => i !== index));
+      const filtered = attsRef.current.filter((_, i) => i !== index);
+      setDraftAtts(filtered);
+      onAttachmentsChange?.(filtered);
     } else {
       setDraftMents((prev) => prev.filter((_, i) => i !== index));
     }
