@@ -31,9 +31,7 @@ _PRIMARY_PREFIXES = (
     ".agentcore/",
 )
 
-HOST_GRANT_ABS_MSG = (
-    "干活根和已授权文件夹里的文件用 read / run，不要用 host 拼盘符或 cd 进去。"
-)
+HOST_GRANT_ABS_MSG = "干活根和已授权文件夹里的文件用 read / run。"
 
 
 def working_mount(mounts: dict[str, ExternalMount] | None) -> ExternalMount | None:

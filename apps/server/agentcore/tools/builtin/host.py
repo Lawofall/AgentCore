@@ -31,6 +31,7 @@ from agentcore.tools.registration import (
     ToolRegistration,
     ToolSurface,
 )
+from agentcore.workspace.working_root import HOST_GRANT_ABS_MSG
 
 logger = get_logger(__name__)
 
@@ -87,7 +88,7 @@ _ACTION_ENUM = sorted(GUI_ACTIONS | {"shell"})
 HOST_TOOL_DESCRIPTION = (
     "这台电脑上的短命令（Windows：PowerShell 5.1；macOS/Linux：登录壳）；"
     "或附着一扇窗后读控件并按 ref 点按/键入。"
-    "干活根和已授权文件夹里的文件用 read / run，不要用 host 拼盘符或 cd 进去。"
+    f"{HOST_GRANT_ABS_MSG}"
 )
 
 HOST_TOOL_PARAMETERS: dict[str, Any] = {
@@ -105,7 +106,7 @@ HOST_TOOL_PARAMETERS: dict[str, Any] = {
             "type": "string",
             "description": (
                 "省略 action 时必填的本机短命令。"
-                "干活根文件用 read / run，不要 cd 或拼已授权盘符。"
+                "干活根文件用 read / run。"
             ),
         },
         "ref": {
@@ -358,10 +359,7 @@ async def _execute_shell(
             "用 action=read|list 确认进程仍在跑。"
         )
     timeout_seconds, slack = _shell_budget(command)
-    from agentcore.workspace.working_root import (
-        HOST_GRANT_ABS_MSG,
-        host_command_hits_grant_abs,
-    )
+    from agentcore.workspace.working_root import host_command_hits_grant_abs
 
     mounts = getattr(context.backend, "_mounts", None) or {}
     if host_command_hits_grant_abs(command, mounts):
