@@ -3,10 +3,7 @@ export type OnboardingPreviewScene = {
   title: string;
   intent: string;
   /** Draft empty-state or composer generating variant. */
-  kind:
-    | "empty-draft"
-    | "composer-generating-bar"
-    | "composer-generating-card";
+  kind: "empty-draft" | "composer-generating-bar" | "composer-generating-card";
 };
 
 export const ONBOARDING_PREVIEW_SCENES: readonly OnboardingPreviewScene[] = [

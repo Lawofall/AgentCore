@@ -589,8 +589,7 @@ export function registerFsIpc(): void {
         "alias",
       ]);
       if (!args) return false;
-      const workingRoot =
-        isRecord(p) && p.workingRoot === true;
+      const workingRoot = isRecord(p) && p.workingRoot === true;
       const ok = await adoptSessionRootAlias(
         args.conversationId,
         args.rootId,
