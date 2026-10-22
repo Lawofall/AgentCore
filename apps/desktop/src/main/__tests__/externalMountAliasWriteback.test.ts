@@ -60,6 +60,7 @@ describe("adoptSessionRootAlias", () => {
         label: "报告",
         absPath: "C:\\Users\\me\\报告",
         mode: "readonly",
+        workingRoot: false,
       },
     ]);
   });

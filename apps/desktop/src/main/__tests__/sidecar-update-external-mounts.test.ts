@@ -136,6 +136,7 @@ describe("SidecarManager.pushLiveExternalMounts", () => {
           label: "桌面",
           absPath: "C:\\Users\\me\\Desktop",
           mode: "organize",
+          workingRoot: false,
         },
       ],
     });
