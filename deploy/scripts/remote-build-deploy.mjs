@@ -94,7 +94,7 @@ fi
 export DOCKER_BUILDKIT=1
 # docker-container driver does not inherit dockerd registry-mirrors; syntax
 # frontend (docker/dockerfile) and unprefixed FROM resolve docker.io here.
-MIRROR="\$(grep -E '^DOCKERHUB_MIRROR=' "\$ENVF" | head -1 | cut -d= -f2-)"
+MIRROR="\$(grep -E '^DOCKERHUB_MIRROR=' "\$ENVF" | head -1 | cut -d= -f2- || true)"
 MIRROR="\${MIRROR:-https://docker.m.daocloud.io}"
 CFG="\$HOME_DIR/buildkitd.toml"
 umask 077

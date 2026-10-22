@@ -70,6 +70,7 @@ describe("prepare script", () => {
     assert.match(script, /docker buildx create --name agentcore-cache --driver docker-container/);
     assert.match(script, /--config "\$CFG"/);
     assert.match(script, /DOCKERHUB_MIRROR/);
+    assert.match(script, /cut -d= -f2- \|\| true/);
     assert.match(script, /\[registry\."docker\.io"\]/);
     assert.match(script, /sha256sum Dockerfile\.guest build-pins\.env/);
     assert.match(script, /guest-base:\$\{GUEST_ID\}/);
