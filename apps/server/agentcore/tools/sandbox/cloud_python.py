@@ -1,8 +1,8 @@
 """Cloud gVisor sandbox preinstalled Python packages (single source of truth).
 
-The sibling ``cloud_python.txt`` is requirements-style and unpinned. Dockerfile
-``pip install -r`` and ``code_execute`` descriptions both read it — do not
-hand-copy the names into comments, docs, or skill bodies.
+The sibling ``cloud_python.txt`` is requirements-style and unpinned.
+Dockerfile.guest ``pip install -r`` and ``code_execute`` descriptions both
+read it — do not hand-copy the names into comments, docs, or skill bodies.
 """
 
 from __future__ import annotations

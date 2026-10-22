@@ -593,7 +593,8 @@ async def test_image_without_native_vision_honest_unconfigured():
     assert "当前主模型不收图" in out
     assert "未配置识图兜底" not in out
     assert "勿把工作区路径当作已读图" in out
-    assert "勿索要重发" in out
+    assert "勿索要重发" not in out
+    assert "run 打开" not in out
     assert "vision 槽" not in out
     assert "VISION_*" not in out
     assert "[binary]" not in out

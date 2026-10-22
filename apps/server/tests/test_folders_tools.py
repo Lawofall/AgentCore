@@ -30,7 +30,7 @@ from agentcore.tools.sandbox.subprocess import SubprocessSandbox
 from agentcore.workspace.server import ServerWorkspace
 
 _FOLDER_HOW_CONSULT = "HOW→consult(desks)"
-# schema 短触发；禁猜最近 / 过闸催建在回执；百科不进按钮。
+# schema 短触发；禁猜最近在回执；百科不进按钮、也不进空名册回执。
 # 换桌对照句在 delegate target_folder_id。
 _SCHEMA_ENCYCLOPEDIA_FORBIDDEN = (
     "先建后派",
@@ -334,14 +334,10 @@ async def test_list_folders_empty(monkeypatch: pytest.MonkeyPatch):
     assert result.success
     assert result.display == {"count": 0}
     assert "还没有文件夹" in result.output
-    assert "我的文件" in result.output
     assert "create_folder" not in result.output
-    # Empty roster: create is human-side; auto-desk covers write, not a tool.
-    assert "自动建云文件夹" in result.output
-    assert "过写盘闸" in result.output or "勿" in result.output
+    assert "ask_user" not in result.output
     # Empty roster must not default-nudge a model open-folder action.
     assert "open_local_project" not in result.output
-    assert "云上做完再写入" in result.output
     assert _FOLDER_HOW_CONSULT not in result.output
     assert "开发双仓" not in result.output
 
@@ -360,8 +356,8 @@ async def test_resolve_unique(monkeypatch: pytest.MonkeyPatch):
     assert result.display["folder_id"] == "only"
     assert result.display["rel_path"] == "Solo"
     assert "唯一命中" in result.output
-    # Tip encourages early ask on empty/near-empty; not a hard ask_user gate.
-    assert "file_list" in result.output
+    assert "ask_user" not in result.output
+    assert "file_list" not in result.output
     assert _FOLDER_HOW_CONSULT not in result.output
     assert "开发双仓" not in result.output
 
@@ -386,17 +382,14 @@ async def test_resolve_zero(monkeypatch: pytest.MonkeyPatch):
     result = await FoldersTool().execute({"action": "resolve","path": "Missing"}, _ctx())
     assert result.success
     assert result.display["status"] == "not_found"
-    assert "ask_user" in result.output or "folders" in result.output
+    assert "零命中" in result.output
     assert "create_folder" not in result.output
-    assert "我的文件" in result.output
-    assert "自动建云文件夹" in result.output
+    assert "ask_user" not in result.output
     assert "禁止静默猜" in result.output
     # Nested rosters: tell the model to check the level before giving up.
     assert "层级" in result.output
     # Must not default-urge a model open-folder action as the create path.
     assert "open_local_project" not in result.output
-    assert "云上做完再写入" in result.output
-    assert "本机 scratch" in result.output or "云上做完再写入" in result.output
 
 
 async def test_resolve_ambiguous(monkeypatch: pytest.MonkeyPatch):
@@ -416,11 +409,8 @@ async def test_resolve_ambiguous(monkeypatch: pytest.MonkeyPatch):
     assert result.success
     assert result.display["status"] == "ambiguous"
     assert result.display["match_count"] == 2
-    assert "ask_user" in result.output
-    assert "options" in result.output
+    assert "ask_user" not in result.output
     assert "禁止静默猜" in result.output
-    # Ambiguity is only actionable when the候选 carry their full path.
-    assert "完整路径" in result.output
     payload = json.loads(result.output.split("\n", 1)[1])
     modes = {m["id"]: m["mode"] for m in payload["matches"]}
     assert modes == {"c": "cloud", "l": "local"}

@@ -81,12 +81,11 @@ def test_collect_worker_gaps_emits_reason_codes():
     }
 
     block = format_worker_gaps_block(gaps)
-    assert "部分交付" in block
-    assert "综述强制" not in block
-    assert "完整" in block or "全部完成" in block
-    assert "不必逐条复述" in block
-    assert REASON_TOKEN_BUDGET in block
+    assert "未对齐" in block
+    assert TOKEN_BUDGET_WARNING in block
     assert DEGRADED_HANDOFF_WARNING in block
+    assert "部分交付" not in block
+    assert "不必逐条复述" not in block
 
 
 @pytest.mark.asyncio

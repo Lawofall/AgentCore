@@ -1,24 +1,18 @@
 name: Build Backend Image
 
 # 后端 api 镜像构建推 ACR（发布与门禁.md §1.5 选择性构建 / §1.1 版本钉定）。
-# push master → 构建 api 镜像（钉 GIT_SHA/BUILT_AT）→ 推 ACR，打 <short-sha> + latest 双标签。
-# 这里只「构建推仓」，不部署——部署是 prod-* tag 触发的 deploy-backend.yml（发布与门禁.md §1.2 发布点）。
-#
-# 为何每次 master 都构建 api（不按路径过滤）：§1.5「api 例外，始终真实构建」——其 /version 是
-# 版本可观测唯一出口；且保证「每个 master SHA 都有 api 镜像」，prod-* tag 才能钉任意 SHA 部署。
-# （多服务时其余服务可 retag latest→sha 省构建，当前仅 api 单服务，暂不需要。）
+# guest-base:<content-id> 与 api:<sha> 分开：Chromium/cloud_python 未变则只编 API。
+# 日常不走本 workflow（2026-06 弃用 push 触发）；仅 workflow_dispatch 紧急备用。
+# 本备用路径仍打 sha+latest 双标签。权威 → docs/05-平台与运维/发布与门禁.md
 #
 # ⚠️ 端点：ACR_REGISTRY 填构建机可达的【公网】仓库端点；服务器 production.env 的
-#    IMAGE_REGISTRY 可另用内网/VPC 端点拉同一命名空间（镜像 repo 均为 <ns>/api）。
+#    IMAGE_REGISTRY 可另用内网/VPC 端点拉同一命名空间（镜像 repo 为 <ns>/api
+#    与 <ns>/guest-base）。
 #
 # 需配 secrets（源码仓 Settings → Secrets and variables → Actions）：
 #   ACR_REGISTRY   镜像仓库公网端点 + 命名空间，如 registry.example.com/your-namespace
 #   ACR_USERNAME   登录用户名
 #   ACR_PASSWORD   登录密码（凭据）
-
-# ⚠️ 已弃用 push 自动触发（2026-06）— 日常：本地 `pnpm deploy:backend <sha>` 预构建（不推 latest），空闲后 `:switch`。
-#   见 docs/05-平台与运维/发布与门禁.md、.cursor/rules/cursor-deploy.mdc
-# 仅保留 workflow_dispatch 作紧急备用（需 Actions 配额可用）。本备用路径仍打 sha+latest 双标签。
 
 on:
   workflow_dispatch:
@@ -29,13 +23,12 @@ concurrency:
 
 jobs:
   build-push:
-    name: Build & push api image
+    name: Build & push guest-base + api
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
 
-      # 解析镜像 ref：host（登录用，去命名空间）/ image（repo 全名）/ short-sha / 构建时间。
       - name: Compute image refs
         id: img
         shell: bash
@@ -43,9 +36,28 @@ jobs:
           reg="${{ secrets.ACR_REGISTRY }}"
           if [[ -z "$reg" ]]; then echo "::error::secret ACR_REGISTRY 未配置"; exit 1; fi
           echo "host=${reg%%/*}" >> "$GITHUB_OUTPUT"
+          echo "ns=${reg}" >> "$GITHUB_OUTPUT"
           echo "image=${reg}/api" >> "$GITHUB_OUTPUT"
+          echo "guest=${reg}/guest-base" >> "$GITHUB_OUTPUT"
           echo "sha=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
           echo "built_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
+      - name: Load build pins and guest-base id
+        id: pins
+        working-directory: apps/server
+        shell: bash
+        run: |
+          set -a
+          # shellcheck disable=SC1091
+          source build-pins.env
+          set +a
+          guest_id=$(sha256sum Dockerfile.guest build-pins.env agentcore/tools/sandbox/cloud_python.txt \
+            | sha256sum | cut -c1-16)
+          {
+            echo "python_image=${PYTHON_IMAGE}"
+            echo "playwright_version=${PLAYWRIGHT_VERSION}"
+            echo "guest_id=${guest_id}"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Set up Buildx
         uses: docker/setup-buildx-action@v3
@@ -57,24 +69,63 @@ jobs:
           username: ${{ secrets.ACR_USERNAME }}
           password: ${{ secrets.ACR_PASSWORD }}
 
-      # GIT_SHA/BUILT_AT 构建期钉入镜像 ENV（运行时经 GET /version 暴露，发布与门禁.md §1.1）。
-      # GitHub Actions 网络直连 Docker Hub/ghcr，无需国内镜像。gha 缓存复用层。
-      - name: Build & push (<short-sha> + latest)
-        uses: docker/build-push-action@v6
+      - name: Pull guest-base (content id)
+        id: guest
+        continue-on-error: true
+        shell: bash
+        run: |
+          img="${{ steps.img.outputs.guest }}:${{ steps.pins.outputs.guest_id }}"
+          if docker pull "$img"; then
+            echo "hit=1" >> "$GITHUB_OUTPUT"
+          else
+            echo "hit=0" >> "$GITHUB_OUTPUT"
+          fi
+
+      # GHA 走官方 PyPI / Debian / Playwright CDN（境外 IP；清华源常 403）。
+      - name: Bake guest-base
+        if: steps.guest.outputs.hit != '1'
+        uses: docker/bake-action@v6
         with:
-          context: apps/server
+          workdir: apps/server
+          files: docker-bake.hcl
+          targets: guest
           push: true
-          tags: |
-            ${{ steps.img.outputs.image }}:${{ steps.img.outputs.sha }}
-            ${{ steps.img.outputs.image }}:latest
-          build-args: |
+          provenance: false
+          sbom: false
+          set: |
+            *.cache-from=type=gha,scope=guest-base
+            *.cache-to=type=gha,mode=max,scope=guest-base
+            PYTHON_IMAGE=${{ steps.pins.outputs.python_image }}
+            PLAYWRIGHT_VERSION=${{ steps.pins.outputs.playwright_version }}
+            PLAYWRIGHT_DOWNLOAD_HOST=
+            PYPI_INDEX=https://pypi.org/simple/
+            APT_MIRROR=
+            GUEST_TAGS=${{ steps.img.outputs.guest }}:${{ steps.pins.outputs.guest_id }}
+
+      - name: Bake api
+        uses: docker/bake-action@v6
+        with:
+          workdir: apps/server
+          files: docker-bake.hcl
+          targets: api
+          push: true
+          provenance: false
+          sbom: false
+          set: |
+            *.cache-from=type=gha,scope=api
+            *.cache-to=type=gha,mode=max,scope=api
+            PYTHON_IMAGE=${{ steps.pins.outputs.python_image }}
+            PYPI_INDEX=https://pypi.org/simple/
+            APT_MIRROR=
             GIT_SHA=${{ steps.img.outputs.sha }}
             BUILT_AT=${{ steps.img.outputs.built_at }}
-            PYPI_INDEX=https://pypi.org/simple/
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+            GUEST_BASE=docker-image://${{ steps.img.outputs.guest }}:${{ steps.pins.outputs.guest_id }}
+            API_TAGS=${{ steps.img.outputs.image }}:${{ steps.img.outputs.sha }},${{ steps.img.outputs.image }}:latest
 
       - name: Summary
         shell: bash
         run: |
-          echo "pushed: ${{ steps.img.outputs.image }}:${{ steps.img.outputs.sha }} (+latest)" >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "pushed: ${{ steps.img.outputs.image }}:${{ steps.img.outputs.sha }} (+latest)"
+            echo "guest-base: ${{ steps.img.outputs.guest }}:${{ steps.pins.outputs.guest_id }} (hit=${{ steps.guest.outputs.hit }})"
+          } >> "$GITHUB_STEP_SUMMARY"

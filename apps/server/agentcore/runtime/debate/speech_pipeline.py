@@ -79,7 +79,6 @@ def build_draft_user(
         f"{text}"
         "请根据发言任务与证据笔记，直接输出【正式发言】全文（自由 markdown）。"
         "证据笔记只作素材，勿整段粘贴笔记标题或复述案件简介；禁止过程叙述与收工汇报。"
-        "【已核实·#rN】只能沿用证据笔记中出现过的 id。"
     )
     steer = (guard_steer or "").strip()
     if steer:

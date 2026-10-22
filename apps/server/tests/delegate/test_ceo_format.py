@@ -38,7 +38,7 @@ def test_format_for_ceo_surfaces_file_manifest():
     assert "`dashboard.html`" in out
     assert "`assets/styles.css`" in out
     assert "另有" not in out
-    assert "地面真相" in out
+    assert "队员终态名册" in out
 
 
 def test_format_for_ceo_elides_long_accepted_file_list():
@@ -205,6 +205,7 @@ def test_format_for_ceo_omits_manifest_when_worker_touched_no_files():
     results = {"w1": RunState(phase=RunPhase.COMPLETED, content="一段研究综述")}
     out = format_for_ceo(t, plan, results)
     assert "> 文件产出" not in out
+    assert "没有写成文件。" in out
 
 
 def test_format_for_ceo_footer_guards_against_claiming_unwritten_files():
@@ -212,41 +213,10 @@ def test_format_for_ceo_footer_guards_against_claiming_unwritten_files():
     plan = RunPlan(nodes=[RunSpec(run_id="w1", task="建文件", role="工程师")])
     results = {"w1": RunState(phase=RunPhase.COMPLETED, content="我已创建 app.py 并写入代码")}
     out = format_for_ceo(t, plan, results)
-    assert "防幻觉" in out
-    assert "未真正落盘" in out
-    assert "未达成" in out
-    assert "属正常" in out
-
-
-def test_format_for_ceo_includes_goal_verification_and_completion_judgment():
-    # 合·验证 4a：收尾仍提示对照用户请求做完工核验（瘦 footer 后保留关键词）。
-    t = tool(Provider([]))
-    plan = RunPlan(nodes=[RunSpec(run_id="w1", task="建登录接口", role="后端")])
-    results = {"w1": RunState(phase=RunPhase.COMPLETED, content="登录接口已完成")}
-    out = format_for_ceo(t, plan, results)
-    assert "完工核验" in out
-    assert "未达成" in out or "已达成" in out
-
-
-def test_format_for_ceo_includes_semantic_boundary_reconciliation():
-    # 合·验证 4b：瘦 footer 仍保留语义边界对账（冲突/缺口/重复），且排在完工核验前。
-    t = tool(Provider([]))
-    plan = RunPlan(
-        nodes=[
-            RunSpec(run_id="w1", task="建登录接口", role="后端"),
-            RunSpec(run_id="w2", task="建登录页面", role="前端", depends_on=["w1"]),
-        ]
-    )
-    results = {
-        "w1": RunState(phase=RunPhase.COMPLETED, content="接口已完成"),
-        "w2": RunState(phase=RunPhase.COMPLETED, content="页面已完成"),
-    }
-    out = format_for_ceo(t, plan, results)
-    assert "语义边界对账" in out
-    assert "冲突" in out and "缺口" in out and "重复" in out
-    assert out.index("语义边界对账") < out.index("完工核验")
-    assert "队员过程中广播的【当前有效】" not in out
-    assert "便签" not in out
+    assert "没有写成文件。" in out
+    assert "> 文件产出" not in out
+    assert "防幻觉" not in out
+    assert "【终稿纪律】" not in out
 
 
 def test_format_for_ceo_surfaces_escalations_blockers_first():
@@ -279,7 +249,8 @@ def test_format_for_ceo_surfaces_escalations_blockers_first():
     assert "其暂用假设：暂用 PG" in out
     assert "【等拍板】" in out
     assert out.index("Postgres") < out.index("目标受众")
-    assert "ask_user" in out and "continue_from_run_id" in out
+    assert "ask_user" not in out
+    assert "continue_from_run_id" not in out
     assert "已升级 1 项待决问题" in out
 
 
@@ -327,7 +298,8 @@ def test_format_for_ceo_bounds_wide_fanout_keeping_all_workers_and_closing():
     out = format_for_ceo(t, plan, results)
     for i in range(8):
         assert f"run_id: `w{i}`" in out
-    assert "防幻觉" in out and "简短概览" in out
+    assert "简短概览" in out
+    assert "队员终态名册" in out
     assert len(out) < DELEGATE_OUTPUT_LIMIT
     assert "系统视图截断" in out
     assert "中间省略" not in out
@@ -416,22 +388,15 @@ def test_format_for_ceo_no_next_steps_section_when_none():
 
 
 def test_format_for_ceo_includes_final_synthesis_discipline():
-    # 终稿纪律：路径已核图例 + 失败须写入；不写过程简述 / 粘名册 / replan HOW。
     t = tool(Provider([]))
     plan = RunPlan(nodes=[RunSpec(run_id="w1", task="做课件", role="课件工程师")])
     results = {"w1": RunState(phase=RunPhase.COMPLETED, content="脚本已写好")}
     out = format_for_ceo(t, plan, results)
-    assert "【终稿纪律】" in out
-    assert "交付物在前" not in out
-    assert "过程简述从简" not in out
-    assert "至多一段" not in out
     assert "队员终态名册" in out
-    assert "禁止整段粘进终稿" not in out
+    assert "【终稿纪律】" not in out
+    assert "禁止编造" not in out
     assert "replan(add=" not in out
-    assert "禁止编造" in out and "全部交付" in out
-    assert "禁止写「PPT 已落盘」" not in out
-    # 无命题卡时不塞开辩死文案
-    assert "建议开辩" not in out.split("以上为团队产出", 1)[-1]
+    assert "建议开辩" not in out
 
 
 def test_worker_products_failed_with_body_surfaces_error_not_pass_through():
@@ -504,26 +469,17 @@ def test_worker_products_empty_body_with_files_and_debrief_is_pointer():
 
 
 def test_format_for_ceo_footer_is_lean_but_keeps_iron_laws():
-    """B: 无条件瘦 footer — 防幻觉/文件产出/名册铁律仍在，自然长度下降。"""
+    """收工回执不再附终稿课；名册与「没有写成文件」仍在。"""
     t = tool(Provider([]))
     plan = RunPlan(nodes=[RunSpec(run_id="w1", task="写摘要", role="调研员")])
     results = {"w1": RunState(phase=RunPhase.COMPLETED, content="短综述")}
     out = format_for_ceo(t, plan, results)
-    footer = out.split("以上为团队产出", 1)[-1]
-    assert "防幻觉" in footer
-    assert "文件产出（路径已核）" in footer
-    assert "文件产出（已验收）" not in footer
-    assert "脚本已跑通" in footer
-    assert "未真正落盘" in footer or "未达成" in footer
-    assert "队员终态名册" in footer or "全部交付" in footer
-    assert "失败" in footer or "接替" in footer or "禁止编造" in footer
-    assert "过程简述从简" not in footer
-    assert "禁止整段粘进终稿" not in footer
-    assert "replan(add=" not in footer
-    # Old footer was ~900+ chars of packaging; lean target stays well under that.
-    assert len(footer) < 550
-    assert "工作日志" not in footer
-    assert "上方若有【建议开辩】" not in footer
+    assert "队员终态名册" in out
+    assert "没有写成文件。" in out
+    assert "以上为团队产出" not in out
+    assert "防幻觉" not in out
+    assert "【终稿纪律】" not in out
+    assert "replan(add=" not in out
 
 
 def test_format_for_ceo_roster_forbids_all_delivered_when_partial_failure():
@@ -547,9 +503,9 @@ def test_format_for_ceo_roster_forbids_all_delivered_when_partial_failure():
     assert "队员终态名册" in out
     assert "失败" in out and "w_ms" in out
     assert "接替" in out and "replaces_run_id" in out
-    assert "禁止编造" in out or "全部交付" in out
     assert "【接替】" in out
-    assert "有队员失败/被跳过/被接替" in out
+    assert "禁止编造" not in out
+    assert "有队员失败/被跳过/被接替" not in out
 
 
 def test_format_for_ceo_roster_budget_skipped_continue_hint():
@@ -578,11 +534,11 @@ def test_format_for_ceo_roster_budget_skipped_continue_hint():
         ),
     }
     out = format_for_ceo(t, plan, results)
-    assert "因额度跳过" in out
+    assert "因额度未跑" in out
     assert "整合" in out
-    assert "下一回合" in out
-    assert "续" in out
-    assert "假装" in out or "禁止" in out
+    assert "假装" not in out
+    assert "禁止" not in out
+    assert "replan" not in out
 
 
 def test_harvest_synthesis_gaps_point_at_delegate_not_replan():
@@ -600,14 +556,16 @@ def test_harvest_synthesis_gaps_point_at_delegate_not_replan():
         )
     }
     out = build_ceo_synthesis(t, plan, results).text
-    assert "契约缺口" in out
-    assert "replan" not in out
-    assert "再调 delegate" in out
-    assert "continue_from_run_id" in out
+    assert "没有写成文件。" in out
+    assert "未对齐" in out
+    assert "声明了走查记录但未落盘" in out
+    assert "契约缺口" not in out
+    assert "再调 delegate" not in out
+    assert "continue_from_run_id" not in out
 
 
 def test_supervised_synthesis_gaps_still_name_replan():
-    """计划还开着：合成包缺口段仍可点名 replan(add)。"""
+    """计划还开着：没写成文件只报事实，不教 replan。"""
     t = tool(Provider([]))
     t._supervised = object()
     plan = RunPlan(nodes=[RunSpec(run_id="w1", task="落盘走查", role="验收")])
@@ -619,7 +577,10 @@ def test_supervised_synthesis_gaps_still_name_replan():
         )
     }
     out = build_ceo_synthesis(t, plan, results).text
-    assert "`replan(add)`" in out
+    assert "没有写成文件。" in out
+    assert "未对齐" in out
+    assert "缺一份走查记录" in out
+    assert "`replan(add)`" not in out
     assert "再调 delegate" not in out
 
 

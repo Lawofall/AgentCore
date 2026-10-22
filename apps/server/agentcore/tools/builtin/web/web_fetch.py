@@ -79,7 +79,6 @@ _POLICY_FAILURE = "policy_failure"
 _STOP_READ_HINT = (
     "——请停止对该来源换 URL / 同策略重试；基于已有材料收口写作，"
     "不要再空转外网深读。"
-    "收口 ≠ 可伪精确逐步菜单：无现行可核证据时，后台点击路径须标「易变/待实测」+ 查找关键词"
 )
 # 401/403/429/451：同拒绝类失败的可执行约束（对齐 retire steer 语气；不拦换公开源）。
 _ANTI_CRAWL_SAME_REJECT_HINT = (
@@ -91,9 +90,7 @@ _ANTI_CRAWL_SAME_REJECT_HINT = (
 _LOOPBACK_REROUTE_HINT = (
     "。web_fetch 在服务端进程内发起请求，够不到用户本机上的服务："
     "换 URL、重试、改 UA 都读不到，这既不是出网受限，也不是放弃本次验收的理由。"
-    "改道（二选一）：① 用 browser 工具打开该地址（浏览器跑在用户机器上）；"
-    "② 用 terminal 在用户本机跑 `curl -sS <url>` 取内容。"
-    "两者都不可用时，请用户把页面内容贴过来。"
+    "请用 browser 打开该地址（浏览器跑在用户机器上）。"
 )
 # 工作区路径 / file:// / 盘符误喂 web_fetch：同构 loopback——工具没坏，换 read
 # 就能做。贴收口话术会让模型放弃一次本可完成的读文件；补 https:// 会去抓公网
@@ -163,16 +160,13 @@ def _failure_face(e: BaseException) -> tuple[str, str]:
     if isinstance(e, httpx.HTTPStatusError):
         status = e.response.status_code
         if status in (401, 403, 429, 451):
-            # Anti-crawl / auth wall: keep stop-read + no URL thrash, then name the
-            # next workable moves (public source / summary close, or hand-brain paste
-            # from the user). Never imply a logged-in scrape. Same-reject-class:
-            # forbid same URL / same strategy; allow new public hosts.
+            # Anti-crawl / auth wall: stop-read + no URL thrash. Never imply a
+            # logged-in scrape. Same-reject-class forbids same URL / same strategy;
+            # new public hosts remain available (stated on the same-reject hint).
             return (
                 "。该站点反爬 / 拒绝访问，换 URL 或同策略重试都读不到"
                 f"{_STOP_READ_HINT}"
                 f"{_ANTI_CRAWL_SAME_REJECT_HINT}"
-                "下一招：改查公开可抓来源，或直接基于已有摘要/材料收口；"
-                "若必须站内数据，请用户自行打开页面后贴关键数字/截图（手脑），"
                 "勿假装已登录抓取。",
                 "site_access_denied",
             )

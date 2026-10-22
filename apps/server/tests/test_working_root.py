@@ -8,7 +8,6 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from agentcore.desktop.channel import ExternalMountError
-from agentcore.tools.builtin.file_ops.observe import pdf_next
 from agentcore.tools.builtin.file_ops.prepare_path import prepare_tool_path
 from agentcore.tools.builtin.host import HOST_TOOL_DESCRIPTION, HostTool
 from agentcore.tools.protocol import ToolContext
@@ -107,11 +106,6 @@ def test_grant_error_does_not_say_mount():
     )
     assert "无法挂载" not in text
     assert "找不到" in text
-
-
-def test_pdf_next_points_at_run():
-    assert "run" in pdf_next(code_execute_assembled=True)
-    assert "手抄" in pdf_next(code_execute_assembled=True)
 
 
 @pytest.mark.asyncio

@@ -1,0 +1,78 @@
+# syntax=docker/dockerfile:1.7
+# Packed gVisor guest userland. Production tags this as guest-base:<id>
+# (content hash of this file + build-pins.env + cloud_python.txt). api:<sha>
+# COPY --from the image; changing Python routes must not re-download Chromium.
+#
+# Build: docker buildx bake guest  (pins via --set / build-pins.env)
+# Authority → docs/05-平台与运维/部署拓扑与环境.md · 云端执行
+
+ARG PYTHON_IMAGE
+FROM ${PYTHON_IMAGE}
+
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright \
+    PYTHONDONTWRITEBYTECODE=1
+
+# ① 中文字体：文档/图表产物（pptx、matplotlib）没有 CJK 会全是豆腐块。
+# ② nodejs + npm：code_execute 声明支持 javascript；npm 供外环验绿 / Vite build。
+#    随基础镜像 Debian 版本，当前 trixie ≈ node 20。
+# ⑥ git：guest 内 `run` 与脚本用的系统 git（AI 结构化 git 工具走 API 进程，runtime 另装）。
+# ⑦ curl：公网 HTTP 与 web_fetch 同政策后，bash / 脚本需要 HTTP 客户端。不装 wget。
+# ⑧ gcc / make：网页/手机克隆 native 仓要能编 C。用 build-essential（gcc、g++、make、
+#    libc 头文件）；不装 cmake / go / rust。只进 guest 阶，禁止装进 runtime /usr。
+# ⑨ unzip：zip 走系统 unzip。rar/7z 走官方 7zz（sevenzip 阶拷进 guest /usr/bin）。
+ARG APT_MIRROR=mirrors.aliyun.com
+ARG PYPI_INDEX=https://pypi.tuna.tsinghua.edu.cn/simple/
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    set -eux; \
+    if [ -n "$APT_MIRROR" ]; then \
+      if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
+        sed -i "s|deb.debian.org|${APT_MIRROR}|g; s|security.debian.org|${APT_MIRROR}|g" \
+          /etc/apt/sources.list.d/debian.sources; \
+      elif [ -f /etc/apt/sources.list ]; then \
+        sed -i "s|deb.debian.org|${APT_MIRROR}|g; s|security.debian.org|${APT_MIRROR}|g" \
+          /etc/apt/sources.list; \
+      fi; \
+    fi; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends fonts-noto-cjk fontconfig nodejs npm git curl build-essential unzip
+
+# ③ 文档/数据常用库装进【系统 site-packages】（guest python3 可见）。
+#    清单单一事实源：agentcore/tools/sandbox/cloud_python.txt（勿在此手写包名）。
+COPY agentcore/tools/sandbox/cloud_python.txt /tmp/cloud_python.txt
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install -i "${PYPI_INDEX}" -r /tmp/cloud_python.txt
+
+# ⑤ Chromium：Playwright 进 guest site-packages；bundle 落 guest /opt/ms-playwright。
+#    INSTALL_BROWSER=0 可跳过省 ~1.3GB（不装则 GVISOR 浏览器工具不可用，仿 runsc）。
+#    PLAYWRIGHT_DOWNLOAD_HOST 空 = 官方 CDN；生产机默认 npmmirror（build-pins.env）。
+ARG INSTALL_BROWSER=1
+ARG PLAYWRIGHT_VERSION
+ARG PLAYWRIGHT_DOWNLOAD_HOST=""
+RUN --mount=type=cache,target=/root/.cache/pip \
+    --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    set -eux; \
+    if [ "$INSTALL_BROWSER" = "1" ]; then \
+      if [ -n "$PLAYWRIGHT_DOWNLOAD_HOST" ]; then \
+        export PLAYWRIGHT_DOWNLOAD_HOST; \
+      fi; \
+      pip install -i "${PYPI_INDEX}" "playwright==${PLAYWRIGHT_VERSION}"; \
+      playwright install --with-deps chromium; \
+    fi
+
+# usrmerge：/bin /lib /sbin 是指向 usr 的符号链接。打成一份可作 OCI root 的树。
+RUN set -eux; \
+    mkdir -p /guest-root; \
+    cp -a /usr /guest-root/usr; \
+    cp -a /etc /guest-root/etc; \
+    if [ -d /opt ]; then cp -a /opt /guest-root/opt; else mkdir -p /guest-root/opt; fi; \
+    ln -s usr/bin /guest-root/bin; \
+    ln -s usr/lib /guest-root/lib; \
+    ln -s usr/sbin /guest-root/sbin; \
+    if [ -d /guest-root/usr/lib64 ]; then ln -s usr/lib64 /guest-root/lib64; fi; \
+    mkdir -p /guest-root/tmp /guest-root/proc /guest-root/sys /guest-root/dev \
+             /guest-root/run /guest-root/workspace /guest-root/scratch \
+             /guest-root/var /guest-root/home /guest-root/root; \
+    chmod 1777 /guest-root/tmp; \
+    printf 'agentcore-guest-rootfs\n' > /guest-root/.agentcore-guest-rootfs

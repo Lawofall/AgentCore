@@ -625,7 +625,7 @@ async def test_web_fetch_rejects_private_without_network():
     "url", ["http://127.0.0.1:9999/", "http://localhost:5173/health", "http://0.0.0.0:8080/"]
 )
 async def test_web_fetch_loopback_reroutes_instead_of_closing(url: str):
-    """本机地址：给可执行改道（browser / terminal curl），不给「停止深读、收口写作」。"""
+    """本机地址：通道用错点名 browser，不给 curl 菜谱，不给「停止深读、收口写作」。"""
     result = await WebFetchTool().execute({"url": url}, _ctx())
     err = result.error or ""
 
@@ -635,9 +635,9 @@ async def test_web_fetch_loopback_reroutes_instead_of_closing(url: str):
     assert result.metadata.get("policy_failure") is True
     # 那条为公网空转设计的收口话术不能出现在本机地址上。
     assert "不要再空转外网深读" not in err
-    # 改道指引必须点名两个真跑在用户机器上的工具。
     assert "browser" in err
-    assert "terminal" in err and "curl" in err
+    assert "terminal" not in err
+    assert "curl" not in err
 
 
 async def test_web_fetch_loopback_refusal_survives_dns_rebinding(monkeypatch):
@@ -662,7 +662,9 @@ async def test_web_fetch_loopback_refusal_survives_dns_rebinding(monkeypatch):
     assert result.metadata.get("code") == "loopback_host"
     assert result.metadata.get("policy_failure") is True
     assert "不要再空转外网深读" not in err
-    assert "browser" in err and "terminal" in err
+    assert "browser" in err
+    assert "terminal" not in err
+    assert "curl" not in err
 
 
 @pytest.mark.parametrize(
@@ -866,12 +868,10 @@ async def test_web_fetch_403_steers_stop_read(monkeypatch):
     err = result.error or ""
     assert "403" in err
     assert "收口" in err or "停止" in err
-    # Actionable next moves (not just stop-URL): public/summary or hand-brain paste.
-    assert "下一招" in err
-    assert "公开" in err or "摘要" in err
-    assert "手脑" in err or "截图" in err
+    assert "下一招" not in err
+    assert "手脑" not in err
     assert "勿假装已登录" in err or "已登录抓取" in err
-    # Same-reject-class: actionable — no same URL / same strategy; public sources OK.
+    # Same-reject-class: no same URL / same strategy; public sources OK.
     assert "同拒绝类" in err or "本 URL" in err
     assert "再调 web_fetch" in err or "勿对" in err
     assert result.metadata.get("policy_failure") is not True
@@ -897,8 +897,8 @@ async def test_web_fetch_anti_crawl_steers_next_move(monkeypatch, code):
     err = result.error or ""
     assert str(code) in err
     assert "停止" in err or "换 URL" in err
-    assert "下一招" in err
-    assert "手脑" in err or "截图" in err
+    assert "下一招" not in err
+    assert "手脑" not in err
     assert "同拒绝类" in err or "本 URL" in err
     assert result.metadata.get("policy_failure") is not True
 
@@ -2218,11 +2218,12 @@ async def test_web_search_empty_short_query_does_not_flag_verbose(monkeypatch):
     assert "未返回任何结果" in note
     assert "查询词明显过多" not in note
     assert "2–3 个核心词" not in note
-    assert "更通用" in note or "同义" in note
+    assert "更通用" not in note
+    assert "同义" not in note
 
 
 async def test_web_search_empty_long_query_suggests_trim_to_core_words(monkeypatch):
-    """Long empty query (>4 tokens): explicitly tip 拆分到 2–3 core words at the miss site."""
+    """Long empty query: honest miss only; split recipe lives on the query contract, not the empty receipt."""
 
     class _Backend:
         async def search(self, query, max_results=5, on_phase=None, *, language=None):
@@ -2235,9 +2236,10 @@ async def test_web_search_empty_long_query_suggests_trim_to_core_words(monkeypat
     assert result.success is True
     note = json.loads(result.output)["note"]
     assert "未返回任何结果" in note
-    assert "查询词明显过多" in note
-    assert "拆分" in note
-    assert "2–3 个核心词" in note
+    assert "查询词明显过多" not in note
+    assert "拆分" not in note
+    assert "2–3 个核心词" not in note
+    assert "web_fetch" not in note
 
 
 async def test_web_search_hit_receipt_has_no_search_how(monkeypatch):
@@ -3280,14 +3282,15 @@ def test_url_cache_registry_reaps_idle_conversation(monkeypatch: pytest.MonkeyPa
 
 
 def test_stop_read_hint_aligns_closing_with_howto_path_honesty():
-    """howto A′：读失败收口 ≠ 可伪精确逐步菜单（与基座 delivery_honesty / 读失败回执对齐）。"""
+    """读失败收口：停对该来源重试；不点名下一把工具，不写现行信息课。"""
     from agentcore.tools.builtin.web.web_fetch import _STOP_READ_HINT
 
     assert "收口" in _STOP_READ_HINT
-    assert "伪精确" in _STOP_READ_HINT or "逐步菜单" in _STOP_READ_HINT
-    assert "易变" in _STOP_READ_HINT or "待实测" in _STOP_READ_HINT
-    # C2: per-failure trailer must not name web_search as the default next move.
     assert "web_search" not in _STOP_READ_HINT
+    assert "伪精确" not in _STOP_READ_HINT
+    assert "逐步菜单" not in _STOP_READ_HINT
+    assert "易变" not in _STOP_READ_HINT
+    assert "待实测" not in _STOP_READ_HINT
 
 
 def test_web_fetch_retire_steer_closes_web_search_thrash():
@@ -3320,6 +3323,9 @@ def test_search_notes_skip_web_fetch_nudge_when_retired():
     weak = _strategy_change_note(empty_streak=2, web_fetch_retired=True)
     assert "先 web_fetch" not in weak
     assert "勿再催 web_fetch" in weak
+    live = _strategy_change_note(empty_streak=2, web_fetch_retired=False)
+    assert "先 web_fetch" not in live
+    assert "须改写关键词" in live
 
     hint = consume_post_read_retire_search_hint(run_id)
     assert hint == POST_READ_RETIRE_SEARCH_HINT

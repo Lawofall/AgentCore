@@ -77,14 +77,7 @@ def escalation_block(tool: DelegateTool, plan: RunPlan, results: dict) -> str:
     if pending:
         pending.sort(key=lambda it: not it[0])
         out += (
-            "\n### ⚠️ 队员升级了待决问题（请先处理再收尾）\n"
-            "以下是队员无法独自拍板、需要你定夺的关键岔路 / 缺失信息。"
-            "【等拍板】的人还停着（或未能挂起、已按假设做完）；"
-            "【请看后面】的人自己这份在做完，后面的安排请你改。"
-            "能自己答的就在概览里给出并据此判断相关产物是否需返工；"
-            "确需用户拍板的就用 ask_user 问；"
-            "后面的安排用 replan 的 tell 给还没开始的人补一句，或 add 加人；"
-            "需要原作者重做的就用 delegate 设 continue_from_run_id 带现场续派。\n"
+            "\n### 队员升级了待决问题\n"
             + "\n".join(line for _, line in pending)
         )
     if answered:
@@ -259,10 +252,7 @@ def worker_products(tool: DelegateTool, plan: RunPlan, results: dict) -> list[di
             warns = "；".join(state.warnings)
             body += f"\n\n> 质检提醒（未完全达标，请判断是否需要返工）：{warns}"
         if state and state.escalations:
-            body += (
-                f"\n\n> 已升级 {len(state.escalations)} 项待决问题（见顶部「队员升级了"
-                "待决问题」，请先处理再据此判断本产物是否需返工）"
-            )
+            body += f"\n\n> 已升级 {len(state.escalations)} 项待决问题"
         files = []
         rejected_files: list[tuple[str, str]] = []
         # 与 delivery_status 同源：COMPLETED 只认 file_acceptance 戳；FAILED 未盖戳但已落盘
@@ -282,6 +272,8 @@ def worker_products(tool: DelegateTool, plan: RunPlan, results: dict) -> list[di
         body += _inline_path_manifest(
             files, rejected_files, cap=CEO_SYNTHESIS_FILE_LIST_MAX
         )
+        if status == "completed" and not files:
+            body += "\n\n没有写成文件。"
         tool_failures = (
             [dict(row) for row in state.tool_failures if isinstance(row, dict)]
             if state and state.tool_failures
@@ -331,11 +323,10 @@ def _compact_worker_body(
 def _roster_facts(
     plan: RunPlan, results: dict, products: list[dict[str, Any]]
 ) -> dict[str, Any]:
-    """Deterministic per-run roster counters so CEO synthesis cannot invent「全部交付」.
+    """Deterministic per-run roster counters.
 
     Ground truth, not prose. Kept structured so the harvest path can render it
-    *after* worker prose is truncated — a roster that lost a truncation race is
-    worse than useless: the closing discipline still tells the CEO to check it.
+    *after* worker prose is truncated.
     """
     from agentcore.runtime.runs.types import RunPhase
 
@@ -376,21 +367,16 @@ def _roster_facts(
                         break
             if budget_skip:
                 budget_skip_lines.append(
-                    f"- {label}（`{node.run_id}`）因回合/子团队额度未跑；"
-                    "下一回合请 append 同图或 replan/点名续派该角色，"
-                    "禁止本回合假装已全部完成"
+                    f"- {label}（`{node.run_id}`）因额度未跑"
                 )
-            # Cancel / hard-absence skips under strict extra-key fan-in, or
-            # lenient zero-success: tip CEO to replace, not to fill a join knob.
+            # Cancel-cascade skips are listed separately from budget skips.
             upstream_cancel = any(
                 (results.get(d) is not None and results[d].phase is RunPhase.CANCELLED)
                 for d in (node.depends_on or [])
             )
             if upstream_cancel and not budget_skip:
                 cancel_cascade_lines.append(
-                    f"- {label}（`{node.run_id}`）因上游取消未跑；"
-                    "其它上游已交付时下游默认可继续；"
-                    "零上游成功仍要补人：用 replaces_run_id 重派"
+                    f"- {label}（`{node.run_id}`）因上游取消未跑"
                 )
         elif phase is RunPhase.CANCELLED:
             # Cold handoff originals that a replaces_run_id took over stay cancelled —
@@ -440,7 +426,7 @@ def render_roster_block(facts: dict[str, Any]) -> str:
     replaced_lines = list(facts.get("replaced_lines") or [])
 
     lines = [
-        "\n### 队员终态名册（地面真相——写终稿必须对照，禁止编造「全部交付」）\n"
+        "\n### 队员终态名册\n"
         f"计划节点：完成 {completed} · 失败 {failed} · 跳过 {skipped} · 取消 {cancelled}"
         + (f" · 其他 {other}" if other else "")
         + f"；综述可见产物 {products_n} 条"
@@ -451,25 +437,11 @@ def render_roster_block(facts: dict[str, Any]) -> str:
     if failed_lines:
         lines.append("失败节点：\n" + "\n".join(failed_lines))
     if budget_skip_lines:
-        lines.append("因额度跳过、从未开跑（下一回合可续）：\n" + "\n".join(budget_skip_lines))
+        lines.append("因额度未跑：\n" + "\n".join(budget_skip_lines))
     if cancel_cascade_lines:
-        lines.append(
-            "上游取消导致下游未跑（其它路都没交上时）：\n"
-            + "\n".join(cancel_cascade_lines)
-        )
+        lines.append("因上游取消未跑：\n" + "\n".join(cancel_cascade_lines))
     if replaced_lines:
         lines.append("接替关系（replaces_run_id）：\n" + "\n".join(replaced_lines))
-    if failed or skipped or product_failed or replaced_lines or cancel_cascade_lines:
-        lines.append(
-            "【叙事铁律】终稿必须如实写清部分失败与接替：点名失败角色/run、是否已被谁接替、"
-            "用户可见影响；禁止「N 位队员全部交付 / 全部完成 / 全员成功」类措辞——"
-            "协作图上的失败节点与此名册不一致时，以名册为准。"
-            + (
-                "额度跳过节点须写明「未跑、可下一回合续」，禁止装成已交付。"
-                if budget_skip_lines
-                else ""
-            )
-        )
     return "\n".join(lines)
 
 
@@ -483,9 +455,9 @@ class CeoSynthesis:
 
     ``text`` is the CEO's in-turn ToolResult read (unchanged). ``prose`` is the
     lossy part alone: the harvest path trims that and re-attaches ``roster_text``
-    / ``closing_text`` afterwards, so ground truth never loses a budget race
-    against worker prose — the closing discipline orders the CEO to check the
-    roster, and a silently elided roster turns that check into a rubber stamp.
+    afterwards, so roster facts never lose a budget race against worker prose.
+    ``closing_text`` stays on the dataclass for compose / peel of historical
+    blobs; harvest no longer emits a footer.
     """
 
     text: str
@@ -535,26 +507,7 @@ def build_ceo_synthesis(
         lines.append(
             f"\n### {wp['role']}（{wp['status']}） · run_id: `{wp['run_id']}`\n{wp['body']}"
         )
-    # Lean footer: product-format facts the model cannot invent. HOW
-    # (过程简述 / 粘名册) lives on wait description；收口后补缺口 HOW 在缺口段
-    # （plan_open 才提 replan，否则只指路 delegate 点名）。
-    closing_text = (
-        "\n---\n以上为团队产出。「文件产出（路径已核）」= 落盘且路径核对通过的地面真相。\n"
-        "⚠️ 防幻觉铁律：是否真交付文件只看「文件产出（路径已核）」行——"
-        "正文声称写了却无此行 = 未真正落盘【未达成】；"
-        "「路径未核」不得当已交付；纯文本无文件属正常。"
-        "路径已核 ≠ 脚本已跑通 / 内容已校验。\n"
-        "相互依赖时【语义边界对账】（冲突/缺口/重复）；"
-        "【完工核验】对照用户请求：未达成就补，已达成则短概览收口。\n"
-        "【终稿纪律】对照【队员终态名册】："
-        "失败/跳过/接替必须写入，禁止编造「全部交付」。"
-    )
-    if any(wp["status"] != "completed" for wp in products) or any(
-        n.replaces_run_id for n in plan.nodes
-    ):
-        closing_text += (
-            "\n---\n**有队员失败/被跳过/被接替。** 终稿须点名说明，不得写成全员成功。"
-        )
+    closing_text = ""
     prose = "\n".join([*head_lines, *lines])
     from agentcore.runtime.delegate.terminal_output import compose_all_completed_output
 

@@ -4,10 +4,7 @@ from __future__ import annotations
 
 from agentcore.runtime.events import EventSink
 from agentcore.tools.builtin.ask_user.tool import AskUserTool
-from agentcore.tools.builtin.browser import (
-    _MUTATION_VERIFY_TAIL,
-    BrowserTool,
-)
+from agentcore.tools.builtin.browser import BrowserTool
 from agentcore.tools.builtin.debate.schema import (
     DEBATE_DESCRIPTION,
     DEBATE_PARAMETERS,
@@ -47,10 +44,8 @@ def test_delegate_top_level_parameter_keys():
     }
 
 
-def test_shared_mutation_tail_does_not_repeat_per_tool_receipts():
-    """共用尾巴不点名 typed / clicked；回执字段在结果里，不进 action 参数。"""
-    assert "typed.matched" not in _MUTATION_VERIFY_TAIL
-    assert "clicked.was_disabled" not in _MUTATION_VERIFY_TAIL
+def test_action_description_does_not_repeat_receipt_fields():
+    """回执字段在结果里，不进 action 参数。"""
     action_desc = BrowserTool().schema.parameters["properties"]["action"]["description"]
     assert "typed.matched" not in action_desc
     assert "clicked.was_disabled" not in action_desc
@@ -226,3 +221,11 @@ def test_on_demand_faces_point_how_to_consult():
         names = sorted(action["enum"])
         assert " / ".join(names) not in desc
         assert "|".join(names) not in desc
+
+
+def test_browser_description_splits_adjacent_web_tools():
+    desc = BrowserTool().schema.description
+    assert "web_search" in desc
+    assert "web_fetch" in desc
+    ref_desc = BrowserTool().schema.parameters["properties"]["ref"]["description"]
+    assert "snapshot" not in ref_desc.lower()

@@ -328,7 +328,6 @@ _RUNTIME_OVERSIZE_EXEMPT: frozenset[str] = frozenset(
         "debate/models.py",
         "debate/rounds.py",
         "debate/types.py",
-        "delegate/completion.py",
         "delegate/delivery_status.py",
         "engine/loop.py",
         "engine/tool_exec_call.py",

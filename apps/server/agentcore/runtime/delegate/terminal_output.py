@@ -23,7 +23,9 @@ _WORKER_HEAD = re.compile(
 _FAILURE_HEADS = (
     "### tool_failures",
     "### ⚠️ 契约缺口",
+    "### 未对齐",
     "### ⚠️ 队员升级了",
+    "### 队员升级了待决问题",
     "### ✅ 已当场答复的升级",
 )
 _FAIL_STATUSES = frozenset({"failed", "skipped", "cancelled"})

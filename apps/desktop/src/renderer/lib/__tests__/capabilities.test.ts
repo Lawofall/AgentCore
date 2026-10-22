@@ -1,9 +1,24 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { hasHostOps, hasLocalMcp } from "../capabilities";
+import {
+  hasHostOps,
+  hasLocalMcp,
+  hasNativeMediaCapture,
+} from "../capabilities";
 
 afterEach(() => {
   vi.unstubAllGlobals();
+});
+
+describe("hasNativeMediaCapture", () => {
+  it("is on only for the Capacitor shell", () => {
+    vi.stubGlobal("window", { __NATIVE__: true, __WEB__: true });
+    expect(hasNativeMediaCapture()).toBe(true);
+    vi.stubGlobal("window", { __WEB__: true });
+    expect(hasNativeMediaCapture()).toBe(false);
+    vi.stubGlobal("window", {});
+    expect(hasNativeMediaCapture()).toBe(false);
+  });
 });
 
 describe("hasHostOps / hasLocalMcp", () => {

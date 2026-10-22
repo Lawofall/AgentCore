@@ -45,10 +45,12 @@ def test_chat_recipe_id_stays_bound():
 def test_standard_whitelist_turns_off_infrequent_switches():
     surface = surface_from_recipe(capability_recipe_for_key(STANDARD))  # type: ignore[arg-type]
     assert set(surface.disabled_tools) == set(all_switch_ids()) - STANDARD_TOOLS
+    assert "browser" in surface.disabled_tools
     assert "debate" in surface.disabled_tools
     assert "folders" in surface.disabled_tools
     assert "chats" in surface.disabled_tools
     assert "files" not in surface.disabled_tools
+    assert "web" not in surface.disabled_tools
     assert "delegate" not in surface.disabled_tools
     assert surface.omitted_projections == ()
     assert surface.omit_factory_catalog is False
@@ -154,7 +156,7 @@ async def test_arm_virtual_standard_turns_off_infrequent_only():
     token = await arm_conversation_assembly(_Session(None), conv)
     try:
         assert current_disabled_tools() == frozenset(
-            {"debate", "folders", "chats"}
+            {"browser", "debate", "folders", "chats"}
         )
         assert current_omit_factory_catalog() is False
         assert current_omit_desk_rules() is False
@@ -170,7 +172,7 @@ def test_standard_off_tool_miss_asks_to_switch_to_full():
         reset_disabled_tool_groups,
     )
 
-    token = bind_disabled_tool_groups(["debate", "folders", "chats"])
+    token = bind_disabled_tool_groups(["browser", "debate", "folders", "chats"])
     try:
         msg, status, policy = _missing_tool_feedback(
             "debate", raw_name=None, registry=ToolRegistry()
@@ -184,5 +186,10 @@ def test_standard_off_tool_miss_asks_to_switch_to_full():
         )
         assert "完整" in msg2
         assert "@" in msg2
+        msg3, _, _ = _missing_tool_feedback(
+            "browser", raw_name=None, registry=ToolRegistry()
+        )
+        assert "完整" in msg3
+        assert "浏览器" in msg3
     finally:
         reset_disabled_tool_groups(token)

@@ -8,7 +8,7 @@
 
 | 类 | 例子 |
 |----|------|
-| 后端部署 | `remote-build-deploy.mjs`、`finish-server.sh`、`deploy-server.sh`、`resume-finish.mjs`（镜像已在机上时续跑 finish） |
+| 后端部署 | `remote-build-deploy.mjs`、`guest-base-id.mjs`、`finish-server.sh`、`deploy-server.sh`、`resume-finish.mjs`（镜像已在机上时续跑 finish） |
 | 备份 / 探活 | `backup.sh`、`restore.sh`、`healthcheck.sh`、`check-prod-version.mjs`、`check-remote-build.mjs` |
 | 安装包 CDN | `sync-release-cdn.mjs`、`prune-release-cdn.mjs`、`probe-updater-cdn.mjs`、`downloads-remote-install.sh` |
 | 管理后台机上 Nginx | `admin-remote-install.sh` |

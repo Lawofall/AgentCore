@@ -107,15 +107,8 @@ def test_format_worker_gaps_block_empty():
     assert format_worker_gaps_block([]) == ""
 
 
-_HARD_CLOSING = (
-    "**【终稿诚实性·部分交付】**上方契约缺口非空：终稿必须使用「部分交付 / 尚未齐备」"
-    "类措辞，点明未闭合缺口与建议下一步；"
-    "【禁止】写「完整交付 / 全部完成 / 可运行无缺 / 无需审计 / 团队已交付完毕」等完成度断言。"
-)
-
-
 def test_format_soft_only_unverified_note_bans_completeness_not_partial():
-    """仅软缺口：禁完成度断言，不强制「部分交付 / 尚未齐备」。"""
+    """仅软缺口：列出事实，不附完成度禁令。"""
     gaps = [
         (
             "数据处理员",
@@ -131,14 +124,12 @@ def test_format_soft_only_unverified_note_bans_completeness_not_partial():
         )
     ]
     block = format_worker_gaps_block(gaps)
-    assert "【禁止】" in block
-    assert "完整交付" in block
-    assert "全部完成" in block
-    assert "可运行无缺" in block
+    assert "虚构演示账单" in block
+    assert "未对齐" in block
+    assert "【禁止】" not in block
+    assert "完整交付" not in block
     assert "部分交付" not in block
     assert "尚未齐备" not in block
-    assert "终稿必须使用" not in block
-    assert _HARD_CLOSING not in block
 
 
 def test_format_soft_only_dogfood_601863c9_unverified_note_shape():
@@ -159,9 +150,10 @@ def test_format_soft_only_dogfood_601863c9_unverified_note_shape():
         )
     ]
     block = format_worker_gaps_block(gaps)
+    assert "虚构演示账单" in block
     assert "部分交付" not in block
     assert "尚未齐备" not in block
-    assert "完整交付" in block
+    assert "完整交付" not in block
 
 
 def test_format_soft_only_dogfood_9628a2f7_unverified_note_shape():
@@ -181,14 +173,15 @@ def test_format_soft_only_dogfood_9628a2f7_unverified_note_shape():
         )
     ]
     block = format_worker_gaps_block(gaps)
+    assert "示例行" in block
     assert "部分交付" not in block
     assert "尚未齐备" not in block
-    assert "【禁止】" in block
-    assert "完整交付" in block
+    assert "【禁止】" not in block
+    assert "完整交付" not in block
 
 
-def test_format_closed_gaps_block_points_at_delegate_not_replan():
-    """批次已收口：缺口段只指路 delegate 点名，不再写优先 replan。"""
+def test_format_closed_gaps_block_lists_zero_file_fact():
+    """没写成文件进保护段当事实，不教下一把工具。"""
     gaps = [
         (
             "验收工程师",
@@ -196,15 +189,14 @@ def test_format_closed_gaps_block_points_at_delegate_not_replan():
         )
     ]
     block = format_worker_gaps_block(gaps, plan_open=False)
+    assert "未对齐" in block
+    assert "声明了走查记录但未落盘" in block
+    assert "delegate" not in block
     assert "replan" not in block
-    assert "再调 delegate" in block
-    assert "continue_from_run_id" in block
-    assert "replaces_run_id" in block
-    assert "别假装收工" in block
 
 
-def test_format_open_gaps_block_still_names_replan():
-    """波边界 / 部分失败计划还开着：缺口段仍可点名 replan(add)。"""
+def test_format_open_gaps_block_lists_zero_file_fact():
+    """计划还开着：同样只报事实。"""
     gaps = [
         (
             "验收工程师",
@@ -212,13 +204,13 @@ def test_format_open_gaps_block_still_names_replan():
         )
     ]
     block = format_worker_gaps_block(gaps, plan_open=True)
-    assert "`replan(add)`" in block
-    assert "continue_from_run_id" in block
-    assert "再调 delegate" not in block
+    assert "未对齐" in block
+    assert "缺一份走查记录" in block
+    assert "replan" not in block
 
 
 def test_format_hard_gap_keeps_partial_delivery_wording():
-    """有硬缺口：收口指令与原先逐字一致。"""
+    """硬缺口只列事实，不附终稿课。"""
     gaps = [
         (
             "研究员",
@@ -231,8 +223,10 @@ def test_format_hard_gap_keeps_partial_delivery_wording():
         )
     ]
     block = format_worker_gaps_block(gaps)
-    assert _HARD_CLOSING in block
-    assert "不必逐条复述" in block
+    assert "token 预算触顶" in block
+    assert "未对齐" in block
+    assert "终稿诚实性" not in block
+    assert "不必逐条复述" not in block
 
 
 def test_collect_worker_gaps_empty_when_clean():

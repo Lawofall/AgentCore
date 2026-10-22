@@ -693,7 +693,7 @@ async def test_files_form_soft_completes_without_forcing_write():
     assert state.phase is RunPhase.COMPLETED
     assert fw.calls == 0
     assert state.files_touched == []
-    assert any("未把产物写入工作区" in w for w in (state.warnings or []))
+    assert any("没有写成文件" in w for w in (state.warnings or []))
 
 
 async def test_files_form_soft_completes_without_write_pass():
@@ -708,7 +708,7 @@ async def test_files_form_soft_completes_without_write_pass():
     state = res["t_1"]
     assert state.phase is RunPhase.COMPLETED
     assert state.files_touched == []
-    assert any("未把产物写入工作区" in w for w in (state.warnings or []))
+    assert any("没有写成文件" in w for w in (state.warnings or []))
 
 
 async def test_files_form_strict_soft_completes_when_never_written():
@@ -729,7 +729,7 @@ async def test_files_form_strict_soft_completes_when_never_written():
     sink.close()
     state = res["t_1"]
     assert state.phase is RunPhase.COMPLETED
-    assert any("未把产物写入工作区" in w for w in (state.warnings or []))
+    assert any("没有写成文件" in w for w in (state.warnings or []))
     types = [e.type async for e in sink]
     assert EventType.RUN_FAILED not in types
 
@@ -745,6 +745,7 @@ async def test_requires_files_alone_does_not_expect_landing():
     state = res["t_1"]
     assert state.phase is RunPhase.COMPLETED
     assert not any("未把产物写入工作区" in w for w in (state.warnings or []))
+    assert not any("没有写成文件" in w for w in (state.warnings or []))
 
 
 async def test_worker_grantable_tool_gated_when_gate_denies():

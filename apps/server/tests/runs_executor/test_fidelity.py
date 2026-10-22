@@ -30,11 +30,9 @@ def test_allocate_empty_is_empty():
 def test_pointer_body_tells_downstream_to_read_listed_paths():
     body = pointer_body("短交接", ["工作稿/a.md", "工作稿/b.md"])
     assert "工作稿/a.md" in body
-    assert "先 read" in body
     assert "磁盘真实路径" in body
-    assert "子目录" in body
-    assert "全仓" in body
-    assert "不要凭空臆测" in body
+    assert "先 read" not in body
+    assert "全仓" not in body
 
 
 def test_truncate_head_tail_keeps_both_ends():

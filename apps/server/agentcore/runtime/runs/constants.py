@@ -89,7 +89,7 @@ DEP_POINTER_MAX_FILES = 20
 CONTEXT_INJECT_CHARS = 2400
 
 # CEO 综述：工人正文共享 ``CEO_SYNTHESIS_BUDGET``（落盘工人走指针，不占池）。
-# 名册 / 缺口 / 终稿纪律不进这笔预算。拼好后只经 ``compose_all_completed_output``
+# 名册不进这笔预算。拼好后只经 ``compose_all_completed_output``
 # 一次，病态安全阀 = ``DELEGATE_OUTPUT_LIMIT``（与 ToolResult 同一数字）。
 # 回合内回执与收工注入看同一份，禁止再整包头尾切一遍。
 CEO_SYNTHESIS_BUDGET = 3600

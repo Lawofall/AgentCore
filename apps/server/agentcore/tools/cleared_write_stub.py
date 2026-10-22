@@ -77,25 +77,16 @@ def cleared_write_stub_rejection(arguments: dict[str, Any]) -> str | None:
     path = arguments.get("file_path")
     path_s = path.strip().replace("\\", "/") if isinstance(path, str) else ""
     path_bit = f"`{path_s}`" if path_s else "该文件"
-    read_hint = (
-        f'read(file_path="{path_s}")' if path_s else "read(该 file_path)"
-    )
     if LANDED_SUMMARY_KEY in arguments or LEGACY_CLEARED_KEY in arguments:
         return (
             f"拒绝：参数是上下文窗口里的只读「已落盘摘要」/清理占位，{REJECTION_MARKER}。"
-            f"下一步（针对 {path_bit}）：① {read_hint} 取盘上真文；"
-            "② 再 edit（优先）或 write，按真文填完整 "
-            "content / old_string / new_string。"
-            "禁止把 `_landed_summary`、清理条或摘要原样当写盘参数重发。"
+            f"{path_bit} 的摘要不能当写参。禁止原样重发。"
         )
     if arguments.get("status") == "landed":
         return (
             "拒绝：参数是请求窗里的只读「已落盘」压缩状态，不是可提交写参，"
             f"{REJECTION_MARKER}。"
-            f"下一步（针对 {path_bit}）：① {read_hint} 取盘上真文；"
-            "② 再 edit（优先）或 write，按真文填完整 "
-            "content / old_string / new_string。"
-            "禁止把 landed 状态原样当写盘参数重发。"
+            f"{path_bit} 的摘要不能当写参。禁止原样重发。"
         )
     for key in (
         "content",
@@ -110,8 +101,7 @@ def cleared_write_stub_rejection(arguments: dict[str, Any]) -> str | None:
             return (
                 "拒绝：正文参数仍是清理占位"
                 f"（{val.strip()}），{REJECTION_MARKER}。"
-                f"下一步（针对 {path_bit}）：① {read_hint} 取盘上真文；"
-                "② 再 edit（优先）或按真文重填后再写。禁止原样重发 stub。"
+                f"{path_bit} 的占位不能当写参。禁止原样重发。"
             )
     return None
 
@@ -135,5 +125,5 @@ def landed_status_name_rejection(tool_name: str) -> str | None:
         return None
     return (
         "拒绝：`_write_landed` 是请求窗里的「已落盘」压缩状态，不是可调用工具。"
-        "勿仿调该名称。改稿：先 read 取盘上真文，再 edit（优先）或 write。"
+        "勿仿调该名称。"
     )

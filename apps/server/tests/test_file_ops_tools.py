@@ -368,18 +368,10 @@ async def test_file_read_zip_archive_points_to_extracted_folder(tmp_path: Path):
     assert "run" not in out.lower()
     assert "python" not in out.lower()
     assert "unrar" not in out.lower()
-    assert "本机菜单" in out or "unzip" in out.lower()
-
-
-def test_archive_next_follows_location():
-    from agentcore.tools.builtin.file_ops.observe import archive_next
-
-    cloud = archive_next(location="server")
-    assert "云桌菜单" in cloud
-    assert "file_list" in cloud
-    local = archive_next(location="local")
-    assert "本机菜单" in local
-    assert "本机菜单" in archive_next(location=None)
+    assert "unzip" not in out.lower()
+    assert "本机菜单" not in out
+    assert "云桌菜单" not in out
+    assert "next:" not in out
 
 
 async def test_file_list_zip_path_lists_members(tmp_path: Path):
@@ -396,6 +388,8 @@ async def test_file_list_zip_path_lists_members(tmp_path: Path):
     assert "docs/a.md" in out
     assert "pack.zip/notes.txt" not in out
     assert "不是工作区路径" in out
+    assert "unzip" not in out.lower()
+    assert "要读正文" not in out
 
 
 def test_extract_failed_text_hides_library_tokens():
@@ -421,6 +415,9 @@ async def test_file_read_pdf_transparent_extract(tmp_path: Path):
     assert result.success is True
     assert "This paper studies agents" in (result.output or "")
     assert not (tmp_path / "paper.pdf.md").exists()
+    assert "next:" not in (result.output or "")
+    assert "手抄" not in (result.output or "")
+    assert "run" not in (result.output or "").lower()
 
 
 async def test_file_read_pdf_leftover_start_page_rejected(tmp_path: Path):
@@ -523,7 +520,12 @@ async def test_file_read_xlsx_does_not_extract(tmp_path: Path):
         result = await FileReadTool().execute({"file_path": "report.xlsx"}, _ctx(tmp_path))
     assert result.success is True
     out = result.output or ""
-    assert "用 run" in out
+    assert "用 run" not in out
+    assert "openpyxl" not in out
+    assert "pandas" not in out
+    assert "手抄" not in out
+    assert "next:" not in out
+    assert "不抽表格全文" in out
     assert "[观察信封]" in out
     assert "kind: table" in out
     assert not (tmp_path / "report.xlsx.md").exists()
@@ -543,11 +545,13 @@ async def test_file_read_table_without_code_execute_omits_tool_name(tmp_path: Pa
     assert xlsx.success is True
     assert csv.success is True
     assert "请用 run" not in (xlsx.output or "")
-    assert "手抄" in (xlsx.output or "")
-    assert "结构报告" in (xlsx.output or "")
-    assert "列名" in (xlsx.output or "")
+    assert "手抄" not in (xlsx.output or "")
+    assert "结构报告" not in (xlsx.output or "")
+    assert "待跑" not in (xlsx.output or "")
+    assert "next:" not in (xlsx.output or "")
+    assert "不抽表格全文" in (xlsx.output or "")
+    assert "没有按单元格解析" in (xlsx.output or "")
     assert "结构面" not in (xlsx.output or "")
-    assert "待跑" in (xlsx.output or "")
     assert "无法可靠处理" not in (xlsx.output or "")
 
 
@@ -743,7 +747,8 @@ async def test_file_read_office_extract_failure_soft(tmp_path: Path):
     assert "抽文本失败" in out
     assert "convert:" not in out
     assert "markitdown" not in out.lower()
-    assert "按文件名归类" in out
+    assert "按文件名归类" not in out
+    assert "next:" not in out
     assert "请用户" not in out
 
 
@@ -1055,7 +1060,7 @@ def test_file_read_schema_teaches_default_full_read():
     limit = schema.parameters["properties"]["limit"]
     assert limit["maximum"] == FILE_READ_SAFETY_LINE_CAP
     assert "省略则整读至安全顶" in limit["description"]
-    assert "仅当页脚要开窗时再填" in limit["description"]
+    assert "仅当页脚要开窗时再填" not in limit["description"]
     desc = schema.description
     assert desc == "读取工作区文件。"
     assert "web_fetch" not in desc
@@ -1067,7 +1072,7 @@ def test_file_read_schema_teaches_default_full_read():
     assert "Office/PDF" in path_desc
     offset = schema.parameters["properties"]["offset"]
     assert "起始行号" in offset["description"]
-    assert "已达安全顶" in offset["description"]
+    assert "已达安全顶" not in offset["description"]
     assert "start_page" not in schema.parameters["properties"]
     pages = schema.parameters["properties"]["pages"]
     assert pages["type"] == "string"
@@ -1265,8 +1270,7 @@ async def test_file_read_missing_does_not_trip_circuit_breaker(tmp_path: Path):
     assert c.tool_failure_count("read") == 0
 
 
-# --- write receipts ---
-    # write 回执 = artifact manifest；优先 manifest 验真（非身份硬闸）。
+async def test_write_receipt_is_artifact_manifest(tmp_path: Path):
     result = await FileWriteTool().execute(
         {"file_path": "report.md", "content": "# Hi\n\n## A\n"}, _ctx(tmp_path)
     )
@@ -1274,7 +1278,10 @@ async def test_file_read_missing_does_not_trip_circuit_breaker(tmp_path: Path):
     assert "artifact manifest" in result.output
     assert "content_sha256:" in result.output
     assert "title_tree:" in result.output
-    assert "优先用 manifest 验真" in result.output
+    assert "end_preview:" in result.output
+    assert "优先用 manifest 验真" not in result.output
+    assert "勿为空转反复 read" not in result.output
+    assert "【验真】" not in result.output
     assert "kind: skeleton" in result.output
 
 
@@ -1481,6 +1488,10 @@ def test_write_schema_does_not_teach_completeness_gates():
     assert "上级目录" not in write_desc
     assert set(write_schema.parameters["properties"]) == {"file_path", "content"}
     assert write_schema.parameters["required"] == ["file_path", "content"]
+    path_desc = write_schema.parameters["properties"]["file_path"]["description"]
+    assert "site/" not in path_desc
+    assert "app/" not in path_desc
+    assert "第一层" not in path_desc
     content_desc = write_schema.parameters["properties"]["content"]["description"]
     assert "完整正文" in content_desc
     replace_desc = StrReplaceTool().schema.description
@@ -2143,7 +2154,7 @@ async def test_glob_miss_hint_does_not_claim_empty(tmp_path: Path):
 
 
 async def test_file_read_missing_with_parent_gives_landmark(tmp_path: Path):
-    """父目录存在时：同层样本 + 更宽查找建议（按名走 glob）。"""
+    """父目录存在时：同层样本 + 勿反复重试。"""
     app = tmp_path / "apps" / "desktop"
     app.mkdir(parents=True)
     (app / "README.md").write_text("# desk", encoding="utf-8")
@@ -2162,10 +2173,10 @@ async def test_file_read_missing_with_parent_gives_landmark(tmp_path: Path):
     assert "apps/desktop/" in result.error
     assert "可见同层示例" in result.error
     assert "README.md" in result.error or "src" in result.error
-    assert "glob" in result.error
+    assert "glob" not in result.error
+    assert "grep" not in result.error
     assert "file_list(pattern)" not in result.error
-    assert "更宽查找" in result.error
-    assert "已知路径" in result.error
+    assert "更宽查找" not in result.error
     assert "反复重试" in result.error
     assert "反复重试" not in (result.failure_message or "")
     assert "glob" not in (result.failure_message or "")
@@ -2193,7 +2204,7 @@ async def test_file_list_missing_with_parent_gives_landmark(tmp_path: Path):
 
 
 async def test_file_read_missing_parent_gives_root_tip(tmp_path: Path):
-    """路径与父目录都不在：不编造同层样本，但给根查找 / 勿反复重试提示。"""
+    """路径与父目录都不在：不编造同层样本，勿反复重试。"""
     (tmp_path / "apps").mkdir()
     result = await FileReadTool().execute(
         {"file_path": "apps/ghost/package.json"}, _ctx(tmp_path)
@@ -2206,7 +2217,8 @@ async def test_file_read_missing_parent_gives_root_tip(tmp_path: Path):
     assert "禁止凭通用目录名" not in result.error
     assert "反复重试" in result.error
     assert "可见同层示例" not in result.error
-    assert "glob" in result.error
+    assert "glob" not in result.error
+    assert "grep" not in result.error
     assert "file_list(pattern)" not in result.error
 
 
@@ -2260,7 +2272,8 @@ async def test_file_read_missing_top_level_uses_root_landmark(tmp_path: Path):
     assert "父目录 ./" in result.error
     assert "可见同层示例" in result.error
     assert "README.md" in result.error or "src" in result.error
-    assert "glob" in result.error
+    assert "glob" not in result.error
+    assert "grep" not in result.error
     assert "file_list(pattern)" not in result.error
 
 

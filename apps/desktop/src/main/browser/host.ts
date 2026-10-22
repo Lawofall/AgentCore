@@ -1158,8 +1158,7 @@ export async function bridgeDispatchLocalBrowser(
       }
       case "click": {
         const ref = String(args.ref ?? "").trim();
-        if (!ref)
-          return { ok: false, error: "缺少 ref（先调用 browser_snapshot）" };
+        if (!ref) return { ok: false, error: "缺少 ref" };
         const version = args.snapshot_version;
         if (
           version !== undefined &&
@@ -1168,7 +1167,7 @@ export async function bridgeDispatchLocalBrowser(
         ) {
           return {
             ok: false,
-            error: `ref 版本过期（快照 v${version} ≠ 当前 v${entry.snapshotVersion}）：页面已变化，请重新 browser_snapshot 获取最新 ref`,
+            error: `ref 版本过期（快照 v${version} ≠ 当前 v${entry.snapshotVersion}）：页面已变化`,
           };
         }
         const probe = (await wc.executeJavaScript(
@@ -1191,8 +1190,7 @@ export async function bridgeDispatchLocalBrowser(
       }
       case "type": {
         const ref = String(args.ref ?? "").trim();
-        if (!ref)
-          return { ok: false, error: "缺少 ref（先调用 browser_snapshot）" };
+        if (!ref) return { ok: false, error: "缺少 ref" };
         const version = args.snapshot_version;
         if (
           version !== undefined &&
@@ -1201,7 +1199,7 @@ export async function bridgeDispatchLocalBrowser(
         ) {
           return {
             ok: false,
-            error: `ref 版本过期（快照 v${version} ≠ 当前 v${entry.snapshotVersion}）：页面已变化，请重新 browser_snapshot 获取最新 ref`,
+            error: `ref 版本过期（快照 v${version} ≠ 当前 v${entry.snapshotVersion}）：页面已变化`,
           };
         }
         const isPw = await wc.executeJavaScript(

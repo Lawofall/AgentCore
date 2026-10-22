@@ -1,4 +1,4 @@
-"""主持人开场白 prompt 契约（零 LLM）：钉住语体 / 三拍 / 禁词，防回落「大众解说腔」。"""
+"""主持人开场白 prompt 契约（零 LLM）：钉住合同，不钉语体课。"""
 
 from __future__ import annotations
 
@@ -26,22 +26,13 @@ class _CaptureJson:
 
 
 def test_opening_spec_is_formal_moderator_register():
-    """开场白规格：赛制主持语域 + 三拍 + 长度带；旧唠嗑腔锚已拆除。"""
-    assert "真实辩论赛主持人" in _OPENING_SPEC
+    """开场白规格：面向全场、不站队；语体课 / 字数带已撤。"""
     assert "面向全场" in _OPENING_SPEC
-    assert "不对用户称「你」" in _OPENING_SPEC
-    assert "80–120" in _OPENING_SPEC
-    # 三拍要素
-    assert "宣题" in _OPENING_SPEC
-    assert "亮场" in _OPENING_SPEC
-    assert "定焦" in _OPENING_SPEC
-    # 产品热路只教正反亮场
-    assert "正方主张" in _OPENING_SPEC
-    assert "不剧透结论" in _OPENING_SPEC
     assert "不站队" in _OPENING_SPEC
-    assert "禁网络梗" in _OPENING_SPEC
-    assert "首轮焦点" in _OPENING_SPEC
-    # 旧大众解说腔 / 个案命题示范不得回潮
+    assert "不剧透结论" in _OPENING_SPEC
+    assert "80–120" not in _OPENING_SPEC
+    assert "真实辩论赛主持人" not in _OPENING_SPEC
+    assert "禁网络梗" not in _OPENING_SPEC
     for banned in (
         "普通观众",
         "大白话",
@@ -56,8 +47,9 @@ def test_opening_spec_is_formal_moderator_register():
 
 
 def test_frame_system_anchors_moderator_register():
-    """frame system 锚定开场白与专业辩论主持同语域。"""
-    assert "开场白与专业辩论主持同语域" in _FRAME_SYSTEM
+    """frame system 钉焦点合同，不钉主持语体课。"""
+    assert "小标题" in _FRAME_SYSTEM
+    assert "专业辩论主持同语域" not in _FRAME_SYSTEM
 
 
 def test_frame_round_injects_research_dossier_agenda_hint():

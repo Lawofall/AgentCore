@@ -61,25 +61,13 @@ from agentcore.tools.sandbox.browser.protocol import (
 
 logger = get_logger(__name__)
 
-# Shared by mutation receipts conceptually; schema no longer concatenates this
-# into action (receipt fields live on the result, not the button). Ratchet still
-# asserts the tail does not name per-tool receipt fields.
-_MUTATION_VERIFY_TAIL = (
-    "回执含抬升后的 snapshot_version 与 untrusted_web_content"
-    "（elements=可交互元素 ref 表 / visible_text=可见正文摘要）。"
-    "须凭回执与页面证据验收，勿仅凭「未抛错」宣称成功；"
-    "缺目标 ref、验收失败需重取结构或需更完整 ARIA 时再调 browser(action=snapshot)。"
-)
-
 # Match executor SNAPSHOT_JS TEXT_SUMMARY_MAX — hard cap at the tool boundary.
 _VISIBLE_TEXT_MAX = 1200
 
 # want_frame but driver returned no jpeg — honest note so the model does not invent pixels.
-_NO_FRAME_NOTE = "未截到画面：请勿描述像素/视觉细节；可用 browser(action=snapshot) 确认页面结构"
+_NO_FRAME_NOTE = "未截到画面：请勿描述像素/视觉细节。"
 
-_SCREENSHOT_NO_FRAME_MSG = (
-    "未截到画面，无法确认视觉内容；请勿描述像素细节。可用 browser(action=snapshot) 确认页面结构。"
-)
+_SCREENSHOT_NO_FRAME_MSG = "未截到画面，无法确认视觉内容；请勿描述像素细节。"
 
 _ACTION_NAVIGATE = "navigate"
 _ACTION_CLICK = "click"
@@ -130,6 +118,13 @@ _BROWSER_REGISTRATION = ToolRegistration(
     catalog_summary="真实浏览器。",
     blurb="在真实窗口里打开网页、点击、填写",
 )
+
+BROWSER_DESCRIPTION = (
+    "右坞真实窗口里打开页、点击、填写、看现场（回执是结构和短摘要，不是全文）。"
+    "检索资料、读一篇已有公网网址 ≠ 本工具（那是 web_search / web_fetch）。"
+)
+
+_MISSING_REF_MSG = "缺少必填参数：ref"
 
 
 def browser_action_name(arguments: dict[str, Any] | None) -> str:
@@ -295,9 +290,6 @@ def _postcondition_error(action: str, data: dict[str, Any]) -> str | None:
             f"（ref={ref}, requested_chars={req}, actual_chars={act}, "
             f"matched=false, method={method}）。"
             "这不是「动作根本没发生」——输入手势已发出，但控件值未变成所请求文本。"
-            "请根据回包中的 typed 与 untrusted_web_content.elements 的 value 改策略"
-            "（换 ref、先 click 聚焦、检查 disabled/受控组件），"
-            "勿仅凭「工具未抛错」宣称填写成功。"
         )
     if action == "click":
         clicked = data.get("clicked")
@@ -314,7 +306,6 @@ def _postcondition_error(action: str, data: dict[str, Any]) -> str | None:
             f"ref={ref} was_disabled=true（{label}）。"
             "这不是「动作根本没发生」——点击已对准该元素，但 disabled/aria-disabled "
             "使交互无效。"
-            "请先消除禁用条件或改点其它可用控件；勿宣称点击成功。"
         )
     if action == "navigate":
         status = data.get("http_status")
@@ -326,8 +317,7 @@ def _postcondition_error(action: str, data: dict[str, Any]) -> str | None:
         where = f"（{url}）" if url else ""
         return (
             f"browser(action=navigate) 主文档状态为 HTTP {status}{where}。"
-            "这一页没有成功打开。请核对工作区相对路径是否存在，"
-            "勿把错误页当成已打开的页面。"
+            "这一页没有成功打开。"
         )
     return None
 
@@ -639,7 +629,7 @@ BROWSER_TOOL_PARAMETERS: dict[str, Any] = {
         },
         "ref": {
             "type": "string",
-            "description": "click/type：browser(action=snapshot) 返回的元素 ref。",
+            "description": "click/type：当前页面回执里的元素 ref。",
         },
         "text": {
             "type": "string",
@@ -660,7 +650,7 @@ class BrowserTool(_BrowserToolBase):
     def schema(self) -> ToolSchema:
         return ToolSchema(
             name="browser",
-            description="真实浏览器。",
+            description=BROWSER_DESCRIPTION,
             parameters=BROWSER_TOOL_PARAMETERS,
             face=ToolFace.HOST_BROWSER,
             approval=ToolApproval.GRANTABLE,
@@ -754,10 +744,10 @@ class BrowserTool(_BrowserToolBase):
             arguments = prepared
         elif action == _ACTION_CLICK:
             if not str(arguments.get("ref") or "").strip():
-                return _error("缺少必填参数：ref（先调用 browser(action=snapshot)）", start)
+                return _error(_MISSING_REF_MSG, start)
         elif action == _ACTION_TYPE:
             if not str(arguments.get("ref") or "").strip():
-                return _error("缺少必填参数：ref（先调用 browser(action=snapshot)）", start)
+                return _error(_MISSING_REF_MSG, start)
             if "text" not in arguments:
                 return _error("缺少必填参数：text", start)
         return await super().execute(arguments, context)

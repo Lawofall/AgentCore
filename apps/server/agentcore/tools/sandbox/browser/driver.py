@@ -462,11 +462,10 @@ class Driver:
         ref = req.get("ref")
         version = req.get("snapshot_version")
         if not ref:
-            raise ValueError("缺少 ref（先调用 browser_snapshot 获取元素 ref）")
+            raise ValueError("缺少 ref")
         if version is not None and int(version) != self._snapshot_version:
             raise ValueError(
-                f"ref 版本过期（快照 v{version} ≠ 当前 v{self._snapshot_version}）：页面已变化，"
-                "请重新 browser_snapshot 获取最新 ref"
+                f"ref 版本过期（快照 v{version} ≠ 当前 v{self._snapshot_version}）：页面已变化"
             )
         return self._page.locator(f'[data-acref="{ref}"]')
 

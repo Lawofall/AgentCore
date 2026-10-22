@@ -257,18 +257,10 @@ def _is_access_permission_error(msg: str) -> bool:
 
 
 def _empty_result_note(*, pattern: str, rel_dir: str, glob: str) -> str:
-    """Actionable empty-success note (align with web_search: success + 促重拟).
-
-    Does not silently call another tool — feedback only.
-    """
+    """Honest empty-success note. Empty ≠ 不存在; do not teach the next tool."""
     scope = "" if rel_dir in ("", ".") else f"（在 '{rel_dir}' 下）"
     glob_note = f"（文件名匹配 '{glob}'）" if glob else ""
-    tips = (
-        "可执行下一步：① 不确定位置则省略 path 从根再搜，勿猜 src/@scope；"
-        "② 换更短/同义的 pattern，或开 case_insensitive；"
-        "③ 按文件名找用 glob。"
-    )
-    return f"本次 grep 未匹配 /{pattern}/{scope}{glob_note}。不要据此断定代码不存在。{tips}"
+    return f"本次 grep 未匹配 /{pattern}/{scope}{glob_note}。不要据此断定代码不存在。"
 
 
 def _render(

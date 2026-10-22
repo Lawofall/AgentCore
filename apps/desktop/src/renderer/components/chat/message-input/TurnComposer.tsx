@@ -4,7 +4,7 @@ import { IconButton } from "@/components/ui";
 import { useConversations } from "@/hooks/useConversations";
 import { useFolders } from "@/hooks/useFolders";
 import { assemblyIsChatOnly } from "@/lib/assemblyLock";
-import { hasLocalFiles } from "@/lib/capabilities";
+import { hasLocalFiles, hasNativeMediaCapture } from "@/lib/capabilities";
 import { useChatPaneId, useChatPaneSliceKey } from "@/lib/chatPane";
 import {
   COMPOSER_CONTINUE_PLACEHOLDER,
@@ -65,6 +65,12 @@ import { Loader2, Plus, Send, Square, X } from "lucide-react";
 import type { ChangeEvent, SetStateAction } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AssemblyPicker } from "./AssemblyPicker";
+import {
+  type AttachSourceHandle,
+  AttachSourceInputs,
+  AttachSourcePopover,
+  AttachSourceRows,
+} from "./AttachSourceInputs";
 import {
   ComposerBodyEditor,
   type ComposerBodyHandle,
@@ -401,7 +407,13 @@ export function TurnComposer({
   );
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const attachSourceRef = useRef<AttachSourceHandle>(null);
+  const nativeCapture = hasNativeMediaCapture();
   const onBrowserFilePick = useCallback(() => {
+    if (hasNativeMediaCapture()) {
+      attachSourceRef.current?.pickFiles();
+      return;
+    }
     fileInputRef.current?.click();
   }, []);
 
@@ -462,6 +474,14 @@ export function TurnComposer({
       if (files.length === 0) return;
       mention.clearActiveMention();
       await drop.attachFiles(files);
+    },
+    [drop.attachFiles, mention.clearActiveMention],
+  );
+
+  const onNativeFilesPicked = useCallback(
+    (files: File[]) => {
+      mention.clearActiveMention();
+      void drop.attachFiles(files);
     },
     [drop.attachFiles, mention.clearActiveMention],
   );
@@ -716,7 +736,24 @@ export function TurnComposer({
   );
   const assemblyChip = <AssemblyPicker disabled={deskOccupied} />;
   const permissionChip = <PermissionAxesBadge disabled={deskOccupied} />;
-  const attachButton = liveDebate ? null : (
+  const attachButton = liveDebate ? null : nativeCapture ? (
+    <AttachSourcePopover
+      trigger={
+        <IconButton
+          size="md"
+          aria-label="添加"
+          title="添加"
+          data-testid="composer-plus"
+        >
+          <Plus size={16} />
+        </IconButton>
+      }
+      onCamera={() => attachSourceRef.current?.pickCamera()}
+      onGallery={() => attachSourceRef.current?.pickGallery()}
+      onFiles={() => attachSourceRef.current?.pickFiles()}
+      onCite={mention.openBrowse}
+    />
+  ) : (
     <ComposerPlusButton onBrowse={mention.openBrowse} />
   );
   const addFolder = async () => {
@@ -729,7 +766,16 @@ export function TurnComposer({
   };
   const moreMenu = compactWorld ? (
     <ComposerPlusMenu>
-      {liveDebate ? null : <ComposerMoreAddRow onBrowse={mention.openBrowse} />}
+      {liveDebate ? null : nativeCapture ? (
+        <AttachSourceRows
+          onCamera={() => attachSourceRef.current?.pickCamera()}
+          onGallery={() => attachSourceRef.current?.pickGallery()}
+          onFiles={() => attachSourceRef.current?.pickFiles()}
+          onCite={mention.openBrowse}
+        />
+      ) : (
+        <ComposerMoreAddRow onBrowse={mention.openBrowse} />
+      )}
       {liveDebate || !hasLocalFiles() ? null : (
         <ComposerAddFolderRow onAddFolder={() => void addFolder()} />
       )}
@@ -896,15 +942,22 @@ export function TurnComposer({
             attachedBelowApproval ? "true" : undefined
           }
         >
-          <input
-            ref={fileInputRef}
-            type="file"
-            className="hidden"
-            multiple
-            tabIndex={-1}
-            aria-hidden
-            onChange={(e) => void onBrowserFilesSelected(e)}
-          />
+          {nativeCapture ? (
+            <AttachSourceInputs
+              ref={attachSourceRef}
+              onPicked={onNativeFilesPicked}
+            />
+          ) : (
+            <input
+              ref={fileInputRef}
+              type="file"
+              className="hidden"
+              multiple
+              tabIndex={-1}
+              aria-hidden
+              onChange={(e) => void onBrowserFilesSelected(e)}
+            />
+          )}
           {drop.dragOver && (
             <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-card/80 text-sm font-medium text-primary">
               拖放文件以添加为附件

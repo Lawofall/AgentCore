@@ -75,7 +75,7 @@ async def test_abort_after_file_write_completes_with_warning_and_degraded_debrie
     gaps = collect_worker_gaps(plan, {"t_1": state})
     assert gaps
     block = format_worker_gaps_block(gaps)
-    assert "契约缺口" in block
+    assert "未对齐" in block
     assert "实现" in block
     assert "收尾时中断" in block
     assert "交接说明不够完整" in block or "降级合成" in block

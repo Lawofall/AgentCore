@@ -86,9 +86,9 @@ def zero_files_gap_message(*, landing_failure_kind: str | None = None) -> str:
     """User/admin-facing zero-disk gap copy, attributed by real cause when known.
 
     Leads with ``本队员本波未交卷`` so CEO / ``delivery_status`` can attribute the
-    soft tip per worker (定案 B). Keeps the shared marker ``未把产物写入工作区``
-    so :func:`is_zero_files_gap` and delivery projection stay aligned. Does
-    **not** invent new gap reason codes — callers keep ``files_not_landed``.
+    soft tip per worker (定案 B). Default copy is the fact that no file landed.
+    Channel / write failures keep the cause. Does **not** invent new gap reason
+    codes — callers keep ``files_not_landed``.
     """
     head = f"{_MEMBER_WAVE_UNDELIVERED}："
     if landing_failure_kind == "channel_dead":
@@ -100,19 +100,16 @@ def zero_files_gap_message(*, landing_failure_kind: str | None = None) -> str:
             "请在 handoff 或正文交结论，禁止再尝试落盘；"
             "可请用户恢复工作区通道后重试"
         )
-    from agentcore.runtime.runs.serialize import format_file_landing_tools_slash
-
-    # 落盘工具清单一律由 serialize 的格式化函数生成——手写子集会漏笔。
-    tools = format_file_landing_tools_slash()
     if landing_failure_kind == "write_failed":
+        from agentcore.runtime.runs.serialize import format_file_landing_tools_slash
+
+        tools = format_file_landing_tools_slash()
         return (
             f"{head}未把产物写入工作区：已尝试写盘但未成功落盘（工具失败），"
             f"请用 {tools} 修复后重写——"
             "此缺口来自写盘失败，而非「粘在回复正文」"
         )
-    return (
-        f"{head}未把产物写入工作区：交付物须用 {tools} 落盘，而非粘在回复正文里"
-    )
+    return f"{head}没有写成文件"
 
 
 def check_contract(
@@ -464,9 +461,7 @@ def format_handoff_feedback() -> str:
     """
     return (
         "你有下游队员依赖本次交接，但尚未调用 handoff。"
-        "请在收尾轮正文写一句话结论（现在什么已成立），"
-        "并写清下一棒要接的路径/数字/决定，"
-        "再调用 handoff。调用即收尾。"
+        "请调用 handoff。调用即收尾。"
     )
 
 

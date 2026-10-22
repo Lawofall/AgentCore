@@ -67,9 +67,6 @@ _DEFAULT_MAX_RESULTS = 8
 # Structured JSON results stay readable up to ~12 hits; lift the default 4000
 # model-facing budget so a full result set is never truncated into invalid JSON.
 _OUTPUT_LIMIT = 8000
-# Empty-result honesty: queries with more than this many whitespace-separated
-# tokens get an explicit "split to 2–3 core words" tip (schema owns the word-count hint).
-_VERBOSE_QUERY_WORD_THRESHOLD = 4
 
 # A3 query contract (检索与交付约束前置提案): mechanical limits at the tool boundary.
 # Tunable constants — calibrated near log P95. Overflow: mechanical normalize (quote
@@ -489,16 +486,9 @@ def _is_debate_run(run_id: str) -> bool:
 
 
 def _empty_result_note(query: str) -> str:
-    """Honest miss note: empty SERP ≠ 信息不存在. Split tip only when the query is verbose."""
-    base = "本次搜索未返回任何结果。不要据此断定该信息不存在。"
-    if _query_word_count(query) > _VERBOSE_QUERY_WORD_THRESHOLD:
-        tip = (
-            "当前查询词明显过多——建议拆分：一次只搜 2–3 个核心词，"
-            "其余概念留到下一轮再搜。"
-        )
-    else:
-        tip = "建议换用更通用或同义的关键词重试。"
-    return f"{base}{tip}"
+    """Honest miss note: empty SERP ≠ 信息不存在. Do not teach the next query or tool."""
+    _ = query
+    return "本次搜索未返回任何结果。不要据此断定该信息不存在。"
 
 
 def _strategy_change_note(
@@ -522,11 +512,8 @@ def _strategy_change_note(
             return f"{head}；勿再催 web_fetch（已停用）。"
         return f"{head}。"
     if web_fetch_retired:
-        return (
-            f"{head}；基于已有材料收口，"
-            "勿再催 web_fetch（已停用）或把继续检索当默认出路。"
-        )
-    return f"{head}；须改写关键词或先 web_fetch 深读已有材料。"
+        return f"{head}；勿再催 web_fetch（已停用）。"
+    return f"{head}；须改写关键词。"
 
 
 class WebSearchTool:

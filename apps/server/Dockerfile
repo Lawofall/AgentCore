@@ -1,20 +1,29 @@
+# syntax=docker/dockerfile:1.7
 # AgentCore 后端镜像（部署拓扑与环境.md §三 / 发布与门禁.md §1.1）。
 # 多阶段：builder 用 uv 按 uv.lock 复现依赖到 venv；runtime 只带 venv + 源码，
-# 非 root 运行。GIT_SHA / BUILT_AT 构建期注入并经 GET /version 暴露。
+# 非 root 运行。Guest 用户态是独立镜像 guest-base:<id>（Dockerfile.guest）；
+# 本文件通过 named context ``guest_image`` COPY 进去。GIT_SHA / BUILT_AT
+# 构建期注入并经 GET /version 暴露。
 #
-# 构建示例：
-#   生产机（默认清华 PyPI + 阿里云 apt）：
-#     docker buildx build -t agentcore-api --build-arg GIT_SHA=... --build-arg BUILT_AT=... apps/server
-#   GHA / 境外 / 本地 Windows：
-#     docker buildx build ... --build-arg PYPI_INDEX=https://pypi.org/simple/ --build-arg APT_MIRROR= apps/server
+# 构建：
+#   生产：pnpm deploy:backend <sha>（guest-base 命中则只编 API）
+#   本地：docker buildx bake -f apps/server/docker-bake.hcl api
+#   GHA / 境外：PYPI_INDEX=https://pypi.org/simple/ APT_MIRROR=
+
+ARG PYTHON_IMAGE
+
+# Packed guest rootfs. Production passes docker-image://<registry>/guest-base:<id>.
+# Bake default is target:guest (Dockerfile.guest).
+FROM guest_image AS guest
 
 # ---- builder：按 uv.lock 解析依赖到 /app/.venv ----
-FROM python:3.12-slim AS builder
+FROM ${PYTHON_IMAGE} AS builder
 
 # PYPI_INDEX：生产机默认清华（大陆快）；GHA/境外传 https://pypi.org/simple/（清华对境外 IP 常 403）。
 # 原 ghcr.io/astral-sh/uv 二进制在大陆云拉取超时，故统一 pip 装 uv。
 ARG PYPI_INDEX=https://pypi.tuna.tsinghua.edu.cn/simple/
-RUN pip install --no-cache-dir -i "${PYPI_INDEX}" uv
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install -i "${PYPI_INDEX}" uv
 
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
@@ -42,7 +51,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # GVISOR_ENABLED=true 启动期健康探测失败不拒启——打 sandbox.cloud_health_failed
 # warning、执行类整类不装配、能力行如实显示未装配，fail-safe）。
 # 校验：默认取 ${RUNSC_URL}.sha512；镜像源无校验文件时 RUNSC_SHA512=skip 显式跳过。
-FROM python:3.12-slim AS runsc
+FROM ${PYTHON_IMAGE} AS runsc
 ARG INSTALL_RUNSC=1
 ARG RUNSC_URL=https://storage.googleapis.com/gvisor/releases/release/latest/x86_64/gvisor.tar.bz2
 ARG RUNSC_SHA512=""
@@ -56,7 +65,7 @@ RUN mkdir -p /out \
 
 # ---- ripgrep：产品 AI grep 内嵌二进制（不依赖 PATH；缺则工具显式失败）----
 # 默认 pin 14.1.1 musl 静态；大陆构建可用 RG_URL / RG_SHA256=skip 指镜像源。
-FROM python:3.12-slim AS ripgrep
+FROM ${PYTHON_IMAGE} AS ripgrep
 ARG INSTALL_RG=1
 ARG RG_VERSION=14.1.1
 ARG RG_TARGET=x86_64-unknown-linux-musl
@@ -74,7 +83,7 @@ RUN mkdir -p /out \
 
 # ---- 7-Zip：附件 rar/7z 入场 + guest 菜单。官方 7zz（与 sidecar 同 pin），不是 p7zip。
 # 默认 25.01 linux-x64；大陆构建可用 GitHub 镜像（脚本内置）或 SEVENZ_SHA256=skip。
-FROM python:3.12-slim AS sevenzip
+FROM ${PYTHON_IMAGE} AS sevenzip
 ARG INSTALL_7Z=1
 ARG SEVENZ_VERSION=25.01
 ARG SEVENZ_TARGET=linux-x64
@@ -88,71 +97,8 @@ RUN mkdir -p /out \
          python /fetch_7zip.py /out && chmod 0755 /out/7zz; \
        fi
 
-# ---- guest：云桌用户态（菜单）。guest 看见这份树，不是 sandboxd/API 活着的 /usr。
-# 解释器 = 系统 python3（/usr/local/bin，与 runtime venv 隔离）、node、bash、git、curl。
-# ① 中文字体：文档/图表产物（pptx、matplotlib）没有 CJK 会全是豆腐块。
-# ② nodejs + npm：code_execute 声明支持 javascript；npm 供外环验绿 / Vite build。
-#    随基础镜像 Debian 版本，当前 trixie ≈ node 20。
-# ⑥ git：guest 内 `run` 与脚本用的系统 git（AI 结构化 git 工具走 API 进程，runtime 另装）。
-# ⑦ curl：公网 HTTP 与 web_fetch 同政策后，bash / 脚本需要 HTTP 客户端。不装 wget。
-# ⑧ gcc / make：网页/手机克隆 native 仓要能编 C。用 build-essential（gcc、g++、make、
-#    libc 头文件）；不装 cmake / go / rust。只进 guest 阶，禁止装进 runtime /usr。
-# ⑨ unzip：zip 走系统 unzip。rar/7z 走官方 7zz（sevenzip 阶拷进 guest /usr/bin，
-#    与 API / sidecar 同 pin）。附件入场在 API 进程展开；菜单给回合中下载/生成的包。
-#    系统工具打进只读根，禁止模型 apt 现装。
-FROM python:3.12-slim AS guest
-
-ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright \
-    PYTHONDONTWRITEBYTECODE=1
-
-ARG APT_MIRROR=mirrors.aliyun.com
-ARG PYPI_INDEX=https://pypi.tuna.tsinghua.edu.cn/simple/
-RUN set -eux; \
-    if [ -n "$APT_MIRROR" ]; then \
-      if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
-        sed -i "s|deb.debian.org|${APT_MIRROR}|g; s|security.debian.org|${APT_MIRROR}|g" \
-          /etc/apt/sources.list.d/debian.sources; \
-      elif [ -f /etc/apt/sources.list ]; then \
-        sed -i "s|deb.debian.org|${APT_MIRROR}|g; s|security.debian.org|${APT_MIRROR}|g" \
-          /etc/apt/sources.list; \
-      fi; \
-    fi; \
-    apt-get update; \
-    apt-get install -y --no-install-recommends fonts-noto-cjk fontconfig nodejs npm git curl build-essential unzip; \
-    rm -rf /var/lib/apt/lists/*
-
-# ③ 文档/数据常用库装进【系统 site-packages】（guest python3 可见）。
-#    清单单一事实源：agentcore/tools/sandbox/cloud_python.txt（勿在此手写包名）。
-COPY agentcore/tools/sandbox/cloud_python.txt /tmp/cloud_python.txt
-RUN pip install --no-cache-dir -i "${PYPI_INDEX}" -r /tmp/cloud_python.txt
-
-# ⑤ Chromium：Playwright 进 guest site-packages；bundle 落 guest /opt/ms-playwright。
-#    INSTALL_BROWSER=0 可跳过省 ~1.3GB（不装则 GVISOR 浏览器工具不可用，仿 runsc）。
-ARG INSTALL_BROWSER=1
-RUN set -eux; \
-    if [ "$INSTALL_BROWSER" = "1" ]; then \
-      pip install --no-cache-dir -i "${PYPI_INDEX}" playwright; \
-      playwright install --with-deps chromium; \
-    fi
-
-# usrmerge：/bin /lib /sbin 是指向 usr 的符号链接。打成一份可作 OCI root 的树。
-RUN set -eux; \
-    mkdir -p /guest-root; \
-    cp -a /usr /guest-root/usr; \
-    cp -a /etc /guest-root/etc; \
-    if [ -d /opt ]; then cp -a /opt /guest-root/opt; else mkdir -p /guest-root/opt; fi; \
-    ln -s usr/bin /guest-root/bin; \
-    ln -s usr/lib /guest-root/lib; \
-    ln -s usr/sbin /guest-root/sbin; \
-    if [ -d /guest-root/usr/lib64 ]; then ln -s usr/lib64 /guest-root/lib64; fi; \
-    mkdir -p /guest-root/tmp /guest-root/proc /guest-root/sys /guest-root/dev \
-             /guest-root/run /guest-root/workspace /guest-root/scratch \
-             /guest-root/var /guest-root/home /guest-root/root; \
-    chmod 1777 /guest-root/tmp; \
-    printf 'agentcore-guest-rootfs\n' > /guest-root/.agentcore-guest-rootfs
-
 # ---- runtime：精简镜像，只带 venv + 源码 + 打包好的 guest 树 ----
-FROM python:3.12-slim AS runtime
+FROM ${PYTHON_IMAGE} AS runtime
 
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
@@ -165,7 +111,9 @@ ENV PATH="/app/.venv/bin:$PATH" \
 # node / curl / cloud_python / Chromium / unzip 只进 guest 树。
 # APT_MIRROR：生产机默认阿里云；GHA/境外传空字符串保留官方源。
 ARG APT_MIRROR=mirrors.aliyun.com
-RUN set -eux; \
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    set -eux; \
     if [ -n "$APT_MIRROR" ]; then \
       if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
         sed -i "s|deb.debian.org|${APT_MIRROR}|g; s|security.debian.org|${APT_MIRROR}|g" \
@@ -176,8 +124,7 @@ RUN set -eux; \
       fi; \
     fi; \
     apt-get update; \
-    apt-get install -y --no-install-recommends fonts-noto-cjk fontconfig git iproute2; \
-    rm -rf /var/lib/apt/lists/*
+    apt-get install -y --no-install-recommends fonts-noto-cjk fontconfig git iproute2
 
 # ④ runsc + gvisor-bin/（INSTALL_RUNSC=0 时该层只拷到一个空目录占位）。
 # gVisor 2026-07+ 运行时在 runsc 同目录找 gvisor-bin/；COPY 整棵 /out 才能带上。

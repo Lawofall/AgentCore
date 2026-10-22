@@ -80,7 +80,7 @@ _TOOL_NAME_UNRESOLVED = "这一步没能用上合适的工具，已跳过；我�
 # Copy rule: write a sentence only when the user must act, or a constraint still holds
 # for the rest of the turn. The agent's next move belongs on ``result`` only — never
 # 「我会换个方式」on this channel. Deny paths steer the model with imperatives
-# ("不要原样重试" / "请改用其他方案"); those stay on ``result``. A denial the user
+# ("不要原样重试"); those stay on ``result``. A denial the user
 # themselves issued must never come back as an order to them, and an unattended path
 # must never promise a confirmation UI that does not exist.
 # Engine concepts (run / 收口 / 台账 / handoff / 落盘 / 活性挂起 / 白名单 / 检索预算 /

@@ -62,18 +62,7 @@ from .listing import (
     map_listing_failure,
     visible_list_entries,
 )
-from .observe import (
-    archive_next,
-    binary_next,
-    extract_failed_next,
-    extract_failed_text,
-    format_observe_envelope,
-    ole_next,
-    pdf_next,
-    scan_next,
-    source_too_large_next,
-    table_next,
-)
+from .observe import extract_failed_text, format_observe_envelope, scan_note
 from .path_hints import enrich_missing_path_message
 from .prepare_path import TOOL_PATH_DESCRIPTION
 
@@ -165,17 +154,15 @@ def _is_run_landed_path(context: ToolContext, path_key: str) -> bool:
 
 
 def _spreadsheet_skip_error(path: str, *, code_execute_assembled: bool) -> str:
-    """Reject-table copy that follows the assembled tool table."""
+    """Fact: this read did not extract the grid. No next-tool recipe."""
+    base = f"`{path}` 是表格/分隔数据文件，read 不抽表格全文。"
     if code_execute_assembled:
-        return (
-            f"`{path}` 是表格/分隔数据文件，read 不自动抽文本；"
-            "请用 run（如 openpyxl / pandas）按工作区相对路径解析。"
-        )
-    return (
-        f"`{path}` 是表格/分隔数据文件，read 不自动抽文本。"
-        "本回合没有按单元格解析表格的执行工具；"
-        "请用已给的列名、类型和样例写原件结构报告并落盘待跑变换脚本，不要手抄数据冒充已整理的表。"
-    )
+        return base
+    return base + "本回合没有按单元格解析表格的执行工具。"
+
+
+def _observe_text(*parts: str) -> str:
+    return "\n".join(p.strip() for p in parts if (p or "").strip())
 
 
 def _effective_offset(offset: object) -> int:
@@ -368,7 +355,6 @@ def _observe_ok(
     kind: str,
     path: str,
     type_label: str,
-    next_actions: str,
     start: float,
     size: int | None = None,
     text: str = "",
@@ -379,7 +365,6 @@ def _observe_ok(
             kind=kind,
             path=path,
             type_label=type_label,
-            next_actions=next_actions,
             size=size,
             text=text,
         ),
@@ -546,18 +531,12 @@ class FileReadTool:
                     },
                     "offset": {
                         "type": "integer",
-                        "description": (
-                            "起始行号（1-based，含）。"
-                            "仅当上次页脚写已达安全顶或已有行号时再填。"
-                        ),
+                        "description": "起始行号（1-based，含）。",
                         "minimum": 1,
                     },
                     "limit": {
                         "type": "integer",
-                        "description": (
-                            "最多读取行数。省略则整读至安全顶。"
-                            "仅当页脚要开窗时再填。"
-                        ),
+                        "description": "最多读取行数。省略则整读至安全顶。",
                         "minimum": 1,
                         "maximum": FILE_READ_SAFETY_LINE_CAP,
                     },
@@ -627,7 +606,6 @@ class FileReadTool:
                 kind="table",
                 path=path_key or rel_path,
                 type_label=ext.lstrip(".") or "table",
-                next_actions=table_next(code_execute_assembled=assembled),
                 start=start,
                 text=_spreadsheet_skip_error(
                     path_key or rel_path, code_execute_assembled=assembled
@@ -753,7 +731,6 @@ class FileReadTool:
                 kind="extract",
                 path=display,
                 type_label=extension_of(display).lstrip(".") or "office",
-                next_actions=extract_failed_next(),
                 start=start,
                 size=size,
                 text=extract_failed_text(extracted.detail or ""),
@@ -763,7 +740,6 @@ class FileReadTool:
                 kind="extract",
                 path=display,
                 type_label=extension_of(display).lstrip(".") or "office",
-                next_actions=extract_failed_next(),
                 start=start,
                 size=size,
                 text=extract_failed_text(extracted.detail or ""),
@@ -773,7 +749,6 @@ class FileReadTool:
                 kind="scan",
                 path=display,
                 type_label="pdf-scan",
-                next_actions=scan_next(),
                 start=start,
                 size=size,
                 text=extracted.text or SCAN_NOTICE,
@@ -818,10 +793,9 @@ class FileReadTool:
                     kind="truncated",
                     path=path_key or rel_path,
                     type_label="office-source",
-                    next_actions=source_too_large_next(),
                     start=start,
                     size=parse_too_large_size(str(e)),
-                    text="源文件超过抽取摄入顶。",
+                    text="源文件超过抽取摄入顶，本工具不能整份吞入。",
                 )
             return _map_workspace_read_error(
                 e, path=path_key or rel_path, start=start
@@ -883,7 +857,6 @@ class FileReadTool:
                 kind="extract",
                 path=display,
                 type_label="pdf",
-                next_actions=extract_failed_next(),
                 start=start,
                 size=size,
                 text=extract_failed_text(extracted.detail or ""),
@@ -893,7 +866,6 @@ class FileReadTool:
                 kind="extract",
                 path=display,
                 type_label="pdf",
-                next_actions=extract_failed_next(),
                 start=start,
                 size=size,
                 text=extract_failed_text(extracted.detail or ""),
@@ -903,12 +875,14 @@ class FileReadTool:
                 kind="scan",
                 path=display,
                 type_label="pdf-scan",
-                next_actions=scan_next(
-                    accepts_images=accepts_images, images_sent=len(jpegs)
-                ),
                 start=start,
                 size=size,
-                text=extracted.text or SCAN_NOTICE,
+                text=_observe_text(
+                    extracted.text or SCAN_NOTICE,
+                    scan_note(
+                        accepts_images=accepts_images, images_sent=len(jpegs)
+                    ),
+                ),
                 metadata=image_meta,
             )
         if extracted.detail == "pdf_page_window_empty":
@@ -931,12 +905,10 @@ class FileReadTool:
             images_sent=len(jpegs),
             accepts_images=accepts_images,
         )
-        assembled = _code_execute_assembled(context)
         return _observe_ok(
             kind="pdf",
             path=display,
             type_label="pdf",
-            next_actions=pdf_next(code_execute_assembled=assembled),
             start=start,
             size=size,
             text=output,
@@ -977,7 +949,6 @@ class FileReadTool:
             kind="binary",
             path=display,
             type_label="ole-word",
-            next_actions=ole_next(),
             start=start,
             size=size,
             text="旧版 Word（OLE），本工具不能抽正文。",
@@ -1015,13 +986,11 @@ class FileReadTool:
                 kind="archive",
                 path=display,
                 type_label=kind,
-                next_actions=archive_next(location=context.backend.location),
                 start=start,
                 size=head.size_bytes,
                 text=(
-                    "这是压缩包。附件会在驻留时展开到同名目录；"
-                    "未展开时 file_list 这个路径，或用已声明的 unzip / 7z "
-                    "解到工作区相对路径。"
+                    "这是压缩包。附件会在驻留时展开到同名目录。"
+                    "包内成员名不是工作区路径。"
                 ),
             )
         if kind == "pdf":
@@ -1040,7 +1009,6 @@ class FileReadTool:
                 kind="binary",
                 path=display,
                 type_label="ole",
-                next_actions=ole_next(),
                 start=start,
                 size=head.size_bytes,
                 text="OLE 复合文档，本工具不能抽正文。",
@@ -1049,7 +1017,6 @@ class FileReadTool:
             kind="binary",
             path=display,
             type_label=kind,
-            next_actions=binary_next(),
             start=start,
             size=head.size_bytes,
             text="无法按文本解码。",

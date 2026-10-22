@@ -9,7 +9,7 @@ import { describe, expect, it } from "vitest";
 describe("assemblyLock", () => {
   it("极简只在输入框写说明，不进工具箱胶囊", () => {
     expect(assemblyPickerBlurb("standard")).toBe("能改文件、跑命令、上网。");
-    expect(assemblyPickerBlurb("full")).toBe("含辩论、搜旧对话。");
+    expect(assemblyPickerBlurb("full")).toBe("含浏览器、辩论、搜旧对话。");
     expect(assemblyPickerBlurb("chat")).toBe("这场只聊天。");
     expect(assemblyPickerBlurb(null)).toBeUndefined();
     expect(isToolboxCapsule({ kind: "system", recipe: "standard" })).toBe(true);

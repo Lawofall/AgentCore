@@ -147,11 +147,14 @@ vi.mock("@/hooks/useModels", () => ({
     refetch: vi.fn(),
   }),
 }));
+const capState = vi.hoisted(() => ({ native: false }));
 vi.mock("@/lib/capabilities", () => ({
   hasLocalFiles: () => false,
   hasLocalEngine: () => false,
   // Desktop Electron under test — keep the web-only「无本地文件夹」chip off.
   isWebRuntime: () => false,
+  hasNativeMediaCapture: () => capState.native,
+  isNativeRuntime: () => capState.native,
 }));
 vi.mock("@/hooks/useWorkspaces", () => ({
   useConversationWorkspace: () => null,
@@ -533,6 +536,7 @@ function seedOpenConversation(id: string) {
 }
 
 beforeEach(async () => {
+  capState.native = false;
   genMock.value = false;
   sendingMock.value = false;
   handleSendMock.mockClear();
@@ -1804,5 +1808,32 @@ describe("TurnComposer variants", () => {
       (screen.getByRole("button", { name: "发送" }) as HTMLButtonElement)
         .disabled,
     ).toBe(false);
+  });
+
+  it("原生壳空草稿＋先选来源，引用才打开目录", () => {
+    capState.native = true;
+    renderComposer();
+    fireEvent.click(screen.getByRole("button", { name: "添加" }));
+    expect(openBrowseMock).not.toHaveBeenCalled();
+    expect(screen.getByTestId("attach-source-menu")).toBeTruthy();
+    expect(
+      screen.getByTestId("attach-source-input-camera").getAttribute("capture"),
+    ).toBe("environment");
+    fireEvent.click(screen.getByTestId("attach-source-cite"));
+    expect(openBrowseMock).toHaveBeenCalled();
+  });
+
+  it("原生壳有会话：更多第一行是拍照/相册/文件/引用", () => {
+    capState.native = true;
+    seedOpenConversation("c-open");
+    renderComposer("bar");
+    fireEvent.click(screen.getByRole("button", { name: "更多" }));
+    const menu = screen.getByTestId("composer-plus-menu");
+    expect(within(menu).getByTestId("attach-source-camera")).toBeTruthy();
+    expect(within(menu).getByTestId("attach-source-gallery")).toBeTruthy();
+    expect(within(menu).getByTestId("attach-source-files")).toBeTruthy();
+    expect(within(menu).queryByTestId("composer-more-add")).toBeNull();
+    fireEvent.click(within(menu).getByTestId("attach-source-cite"));
+    expect(openBrowseMock).toHaveBeenCalled();
   });
 });

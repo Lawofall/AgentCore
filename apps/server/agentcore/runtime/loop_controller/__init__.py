@@ -532,7 +532,7 @@ class LoopController(
                     landed_echo = tool in LANDING_TOOLS and is_landed_echo_rejection(
                         attempt.error_summary
                     )
-                    # 摘要回灌：首次拒写即 path-stop（点名 read），少烧一轮空转；
+                    # 摘要回灌：首次拒写即 path-stop，少烧一轮空转；
                     # 其它 validation 仍按 validation_path_streak（默认 2）。
                     need = 1 if landed_echo else self._validation_path_streak
                     if streak >= need:

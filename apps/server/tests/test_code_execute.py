@@ -240,7 +240,7 @@ async def test_code_execute_blocks_source_dump_without_sandbox():
     err = result.error or ""
     assert "read" in err
     assert "code_execute" not in err
-    assert "run" in err
+    assert "仍用 run" not in err
     assert backend.requests == []
 
 
@@ -265,6 +265,7 @@ async def test_code_execute_blocks_source_grep_without_sandbox():
     err = result.error or ""
     assert "grep" in err
     assert "read" in err
+    assert "仍用 run" not in err
     assert backend.requests == []
 
 

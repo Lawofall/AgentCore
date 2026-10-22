@@ -9,12 +9,12 @@ from agentcore.runtime.delegate.terminal_output import (
 )
 
 ROSTER = (
-    "### 队员终态名册（地面真相——写终稿必须对照，禁止编造「全部交付」）\n"
+    "### 队员终态名册\n"
     "计划节点：完成 1 · 失败 1 · 跳过 0 · 取消 0；综述可见产物 2 条；"
     "路径核对：已核 0 · 未通过 0。\n"
     "失败节点：\n- 工程师（`w2`）失败：编译失败"
 )
-CLOSING = "---\n以上为团队产出。\n【终稿纪律】失败必须写入，禁止编造「全部交付」。"
+CLOSING = ""
 INTRO = "## 团队执行结果（据此写一段简短概览交给用户；完整详情用户自行查看）"
 FAILURES = (
     "### tool_failures\n"
@@ -32,7 +32,7 @@ def test_under_limit_is_unchanged():
     assert INTRO in out
     assert "短结论：甲。" in out
     assert "计划节点：完成 1 · 失败 1" in out
-    assert "【终稿纪律】" in out
+    assert "队员终态名册" in out
     assert "系统视图截断" not in out
 
 
@@ -47,7 +47,7 @@ def test_long_worker_shrinks_before_short_worker_and_roster():
     assert "短结论：甲。" in out
     assert "### 撰稿（completed）" in out
     assert "系统视图截断" in out or "已省略" in out or "…" in out
-    assert out.index("队员终态名册") < out.index("【终稿纪律】")
+    assert out.index("队员终态名册") < out.index("### 撰稿（completed）")
     # Long body is the one that paid; the short conclusion is still whole.
     assert out.count("长正文。") < 800
 
@@ -75,7 +75,7 @@ def test_cap_joined_blob_keeps_roster_instead_of_tail_chop():
     assert len(capped) <= ALL_COMPLETED_OUTPUT_LIMIT
     assert "计划节点：完成 1 · 失败 1" in capped
     assert "失败节点：" in capped
-    assert "【终稿纪律】" in capped
+    assert "队员终态名册" in capped
     assert "系统视图截断" in capped or "已省略" in capped or "…" in capped
 
 
@@ -87,4 +87,4 @@ def test_default_limit_is_the_pathological_valve():
     out = compose_all_completed_output(prose, ROSTER, CLOSING)
     assert len(out) <= ALL_COMPLETED_OUTPUT_LIMIT
     assert "系统视图截断" not in out
-    assert "【终稿纪律】" in out
+    assert "队员终态名册" in out

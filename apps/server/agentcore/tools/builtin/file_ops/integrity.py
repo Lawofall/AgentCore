@@ -185,11 +185,10 @@ def format_artifact_manifest(
     kind: str,
     action: str = "write",
 ) -> str:
-    """Success receipt = artifact manifest（作者以此验真，勿再 read 回读正文）。
+    """Success receipt = artifact manifest (counts, title tree, tail preview).
 
     规模按**字符**报（``WorkspaceBackend.write`` / ``append`` 返回的就是 chars）。
-    曾标成「字节」：中文正文字符数 ≈ UTF-8 字节数 / 3，作者据此判定「写少了」，
-    反而回读核对——正是本 manifest 要省掉的空转。
+    曾标成「字节」：中文正文字符数 ≈ UTF-8 字节数 / 3，作者据此判定「写少了」。
     """
     from agentcore.core.secrets import redact_secrets
 
@@ -211,9 +210,7 @@ def format_artifact_manifest(
         f"lines: {lines}\n"
         f"content_sha256: {content_sha256_short(content)}\n"
         f"title_tree:\n{tree_block}\n"
-        f"end_preview:\n{preview}\n"
-        "【验真】请以本 manifest 确认落盘；优先用 manifest 验真，"
-        "勿为空转反复 read。"
+        f"end_preview:\n{preview}"
     )
 
 
@@ -410,10 +407,7 @@ def _log_write_collision(
 
 def stale_overwrite_rejection(path: str) -> str:
     """User/model-facing refuse when whole-file write lost the race to another writer."""
-    return (
-        f"`{path}` 盘上已经不是你刚读到的版本（期间有人改过）。"
-        "请重新 read 后再 write，或改用 edit 按当前原文局部改。"
-    )
+    return f"`{path}` 盘上已经不是你刚读到的版本（期间有人改过）。"
 
 
 def _claim_write_path(

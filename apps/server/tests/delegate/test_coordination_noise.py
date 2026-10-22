@@ -370,7 +370,7 @@ def test_coordination_tool_schemas_are_short_triggers():
     assert "steers" not in _REPLAN_PARAMETERS["properties"]
     assert "via_user" not in str(_REPLAN_PARAMETERS)
     tell = _REPLAN_PARAMETERS["properties"]["tell"]
-    assert "ask_user" in tell["description"]
+    assert "ask_user" not in tell["description"]
     assert "停着等拍板" in tell["description"]
     assert "偏好" not in _REPLAN_DESCRIPTION
 

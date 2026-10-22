@@ -73,7 +73,7 @@ def test_zero_files_gap_and_write_pass_feedback():
     )
     assert v.ok
     assert any("本队员本波未交卷" in w for w in v.warnings)
-    assert any("未把产物写入工作区" in w for w in v.warnings)
+    assert any("没有写成文件" in w for w in v.warnings)
     assert not is_zero_files_gap(v)
     # 显式 prose → 不再产生零落盘 soft tip
     legacy_flag = check_contract(
@@ -152,10 +152,8 @@ def test_form_files_soft_when_none_written():
     v = check_contract("我把整份代码贴在这里", RunContract(artifacts=["out.md"]), files_written=0)
     assert v.ok
     assert not v.failures
-    assert any("工作区" in w for w in v.warnings)
-    assert any("粘在回复正文" in w for w in v.warnings)
     assert any("本队员本波未交卷" in w for w in v.warnings)
-    # Default attribution = paste framing (no landing_failure_kind).
+    assert any("没有写成文件" in w for w in v.warnings)
     assert zero_files_gap_message() in v.warnings
     assert not is_zero_files_gap(v)
 
@@ -197,8 +195,8 @@ def test_form_files_zero_disk_attributes_channel_dead_not_paste():
     assert tip in v.warnings
     assert any("写盘通道不可用" in w and "粘在回复正文" not in w for w in v.warnings)
     assert any("handoff 或正文交结论" in w for w in v.warnings)
-    # Default paste framing must remain for non-channel_dead zero-landing.
-    assert "粘在回复正文" in zero_files_gap_message()
+    assert "没有写成文件" in zero_files_gap_message()
+    assert "粘在回复正文" not in zero_files_gap_message()
 
 
 def test_form_files_zero_disk_attributes_write_failed_not_paste():
@@ -412,7 +410,7 @@ def test_artifacts_empty_workspace_all_missing():
     # artifacts 非空 ⇒ 写盘期望：零落盘 soft tip + 路径对账 warning；仍不 hard-fail。
     assert v.ok
     assert any("a.py" in w for w in v.warnings)
-    assert any("未把产物写入工作区" in w for w in v.warnings)
+    assert any("没有写成文件" in w for w in v.warnings)
     assert not is_zero_files_gap(v)
 
 
@@ -480,13 +478,14 @@ def test_debrief_meets_minimum_measures_summary_only():
     assert not debrief_meets_minimum({"key_points": ["a", "b"]})
 
 
-def test_format_handoff_feedback_asks_established_state_not_activity():
+def test_format_handoff_feedback_requires_call_when_dependents():
     text = format_handoff_feedback()
-    assert "现在什么已成立" in text
-    assert "下一棒要接" in text
+    assert "尚未调用 handoff" in text
+    assert "请调用 handoff" in text
+    assert "现在什么已成立" not in text
+    assert "下一棒要接" not in text
     assert "做出了什么" not in text
     assert "2–4" not in text
-    assert "再调用 handoff" in text
 
 
 def test_worker_expects_handoff_only_with_dependents():

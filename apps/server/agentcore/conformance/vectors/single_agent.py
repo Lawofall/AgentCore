@@ -223,7 +223,7 @@ def _single_agent_tool_channel_redirect() -> list[SSEEvent]:
             output=(
                 "打开源码再正则扫描请用 grep（检测到：re.findall(）。"
                 "在工作区搜符号、字符串或计数请用 grep；"
-                "看命中正文用 read。解析表格、改文件、对内存数据跑计算仍用 run。"
+                "看命中正文用 read。"
             ),
             failure=tool_failure_fields(code="source_grep_redirect"),
         ),

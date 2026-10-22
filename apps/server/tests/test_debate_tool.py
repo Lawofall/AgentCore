@@ -1187,8 +1187,8 @@ def test_debater_task_injects_research_dossier_index():
     for text in (task, brief):
         assert "【工作区材料索引】" in text
         assert "notes/法律透镜报告.md" in text
-        assert "【已核实·#rN】" in text
         assert "选读" in text
+    assert "【已核实·#rN】" in task
     assert "勿无差别" in task or "勿全量" in task
     assert payload.get("retrieval_budget") == DEFAULT_RETRIEVAL_BUDGET_DEBATER_WITH_DOSSIER
     assert DEFAULT_RETRIEVAL_BUDGET_DEBATER_WITH_DOSSIER == 2  # 2026-07-22 复测校准

@@ -119,12 +119,14 @@ def test_side_system_carries_evidence_burden_rule():
 
 
 def test_evidence_rule_constant_is_the_single_source():
-    """side_system 的证据段来自共享常量 EVIDENCE_RULE（口径单一、防漂移）。"""
-    assert EVIDENCE_RULE in side_system(_config(), _two_sides()[0])
+    """side_system / draft_system 的证据段来自共享常量 EVIDENCE_RULE（口径单一、防漂移）。"""
+    cfg, side = _config(), _two_sides()[0]
+    assert EVIDENCE_RULE in side_system(cfg, side)
+    assert EVIDENCE_RULE in draft_system(cfg, side, beat="opening")
 
 
 def test_side_system_carries_search_query_rule():
-    """辩论查询对照进系统提示：当事方/案由 vs 抽象文化词；空结果 ≠ 不存在。
+    """辩论查询对照进系统提示：当事方/案由 vs 抽象文化词。
 
     词数机械上限在 web_search schema；2–3 拆分建议在超限回执。个案 query / 检索轮次树不出常驻。
     """
@@ -141,7 +143,8 @@ def test_side_system_carries_search_query_rule():
     assert "禁止只搜" not in SEARCH_QUERY_RULE
     assert "当事方" in text or "案由" in text
     assert "抽象文化词" in text
-    assert "空结果" in text and "≠" in SEARCH_QUERY_RULE
+    assert "空结果" not in SEARCH_QUERY_RULE
+    assert "数字本身" not in SEARCH_QUERY_RULE
     schema = WebSearchTool().schema
     blob = schema.description + schema.parameters["properties"]["query"]["description"]
     assert "2–3" not in blob  # 拆分建议在超限回执；schema 只钉机械上限
@@ -240,12 +243,12 @@ def test_cx_answer_feedback_uses_canonical_markers():
     assert "至多 1–2 次检索" not in research
 
     brief = cx_draft_brief(cfg, side, 1, "成本", qs)
-    assert "【已核实" in brief and "【待核实" in brief
     assert "### 质询一" in brief
     assert "question_index" not in brief
     assert "JSON" not in brief or "不要输出 JSON" in brief
     assert "directly_addressed" not in brief
-    assert "【证据状态铁律】" in brief
+    assert "【证据状态铁律】" not in brief
+    assert EVIDENCE_RULE in draft_system(cfg, side, beat="cross_exam")
 
 
 def test_opening_draft_brief_is_speech_not_notes():
@@ -253,7 +256,7 @@ def test_opening_draft_brief_is_speech_not_notes():
     brief = opening_draft_brief(_config(), _two_sides()[0], focus="成本")
     assert EVIDENCE_NOTES_SPEC not in brief
     assert "立论" in brief
-    assert "【已核实" in brief
+    assert "【证据状态铁律】" not in brief
 
 
 # --- 主持人侧：质询盯待核实、裁判据标记记分/罚且诚实不罚 ---------------------
@@ -706,6 +709,7 @@ def test_cx_draft_brief_carries_output_budget():
     assert CX_LENGTH_HINT in brief
     assert "逐条写完" in brief
     assert "冒号" in brief or "截断" in brief
+    assert "是 / 否 / 部分成立" not in brief
 
 
 def test_background_schema_stays_short():

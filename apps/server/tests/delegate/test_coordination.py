@@ -1631,7 +1631,7 @@ def test_all_completed_inject_omits_audit_nudge_even_for_audit_wave():
 
 
 def test_inject_close_omits_closing_how():
-    # 收口 HOW 不进注入：终稿纪律只在综述脚；叫醒只带场面事实。
+    # 收口 HOW 不进注入；叫醒只带场面事实。
     from agentcore.runtime.coordination.inject import format_coordination_events
 
     session = CoordinationSession(execution_id="e", total_workers=2)

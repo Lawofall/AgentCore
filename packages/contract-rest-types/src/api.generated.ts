@@ -8527,7 +8527,7 @@ export interface components {
             name: string;
             /**
              * Origin
-             * @description Snapshot of official 标准 (daily tools on; debate / chats / folders off).
+             * @description Snapshot of official 标准 (daily tools on; browser / debate / chats / folders off).
              * @default standard
              * @constant
              */

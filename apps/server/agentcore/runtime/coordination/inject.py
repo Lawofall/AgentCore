@@ -125,9 +125,9 @@ def format_coordination_events(
     if not closing_now:
         return "\n".join(lines)
 
-    # Closing HOW (终稿纪律 / content_delta / 立刻交卷) lives on the synthesis
-    # footer only. Inject keeps wake-up + structural facts; cancel honesty
-    # sentences stay (已开工 ≠ 没启动).
+    # Closing HOW (终稿纪律 / content_delta / 立刻交卷) is not injected and
+    # is not on the synthesis footer. Inject keeps wake-up + structural facts;
+    # cancel honesty sentences stay (已开工 ≠ 没启动).
     if cancel_kind is not None:
         extra = cancel_discipline_sentence(cancel_kind, session)
         if extra:

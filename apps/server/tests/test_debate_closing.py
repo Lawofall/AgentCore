@@ -1,7 +1,7 @@
 """结辩收束（P4·阶段化发言角色）prompt / 材料注入 / 台账 id 闸自测（per-PR 零 LLM）。
 
 验收面：
-1. 阶段角色契约（胜负手 / 禁新论据 / CLOSING_LENGTH_HINT）仍在场；
+1. 阶段角色契约（胜负手 / 禁新论据）仍在场；字数课不进 brief；
 2. brief 携带三类材料（历轮论点 / 质询让步 / clash 命门）且裁剪封顶；
 3. closing_context_blocks 投喂==展示（task.body 逐字）+ 材料孪生块；
 4. 证据台账 id 闸：结辩引用不存在 id → 回炉；二次违规降级（与立论同闸，见
@@ -38,7 +38,6 @@ from agentcore.runtime.debate.prompt import (
 from agentcore.runtime.debate.speech_pipeline import research_then_draft
 from agentcore.runtime.debate.types import DebateClash
 from agentcore.runtime.events.types import EventType
-from agentcore.tools.builtin.debate.schema import CLOSING_LENGTH_HINT, LENGTH_HINT
 from agentcore.tools.protocol import ToolContext
 from agentcore.tools.registry import ToolRegistry
 from agentcore.tools.sandbox.subprocess import SubprocessSandbox
@@ -141,11 +140,11 @@ def test_closing_task_demands_winning_moves_and_bans_new_arguments():
 
 
 def test_closing_task_carries_phased_length_budget():
-    """阶段化长度预算：结辩注入更紧的长度预算（CLOSING_LENGTH_HINT），且不再是立论的 LENGTH_HINT。"""
+    """字数课不进结辩 brief。"""
     fb = closing_task(_config(), _two_sides()[0])
-    assert CLOSING_LENGTH_HINT in fb
-    assert LENGTH_HINT not in fb
-    assert CLOSING_LENGTH_HINT != LENGTH_HINT
+    assert "150–250" not in fb
+    assert "400–600" not in fb
+    assert "宁深勿长" not in fb
 
 
 def test_closing_task_carries_three_material_kinds():

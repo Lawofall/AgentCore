@@ -168,7 +168,7 @@ async def test_user_denied_approval_is_not_answered_with_an_order():
     model, user = _faces(sink)
     assert model == (
         "工具 'write' 未获用户授权，该操作未执行。"
-        "请改用其他方案或询问如何继续，不要再调用此工具。"
+        "不要再调用此工具。"
     )
     assert_user_face_clean(user)
     assert user == _CURATED_BY_CODE["approval_denied"]
@@ -191,9 +191,8 @@ async def test_grantable_without_gate_does_not_promise_a_missing_screen():
     model, user = _faces(sink)
     assert model == (
         "工具 'mcp_write' 需要用户授权，但当前路径没有可询问的用户，已拒绝执行。"
-        "请改用其他方案，或让用户在可确认的界面重试。"
     )
-    assert "让用户在可确认的界面重试" in model  # model face intentionally unchanged
+    assert "让用户在可确认的界面重试" not in model
     assert_user_face_clean(user)
     assert user == _CURATED_BY_CODE["approval_unattended"]
 
@@ -215,7 +214,6 @@ async def test_always_confirm_without_gate_does_not_promise_a_missing_screen():
     model, user = _faces(sink)
     assert model == (
         "工具 'run' 必须由用户逐次确认，但当前路径弹不出确认卡，已拒绝执行。"
-        "请改用其他方案，或让用户在可确认的界面重试。"
     )
     assert_user_face_clean(user)
     assert user == _CURATED_BY_CODE["approval_unattended"]
@@ -240,7 +238,7 @@ async def test_safety_breaker_deny_keeps_steer_off_the_user_face():
 
     assert tool.executed is False
     model, user = _faces(sink)
-    assert model == (f"工具 'run' 被安全熔断拒绝：{hit.reason}请改用其他方案，不要原样重试该路径。")
+    assert model == (f"工具 'run' 被安全熔断拒绝：{hit.reason}不要原样重试该路径。")
     assert_user_face_clean(user)
     assert user == _CURATED_BY_CODE["safety_breaker_deny"]
 
@@ -265,7 +263,7 @@ async def test_safety_breaker_without_gate_keeps_steer_off_the_user_face():
     assert tool.executed is False
     model, user = _faces(sink)
     assert model == (
-        f"工具 'run' 触发安全熔断且当前路径无法人工确认，已拒绝执行。{hit.reason}请改用其他方案。"
+        f"工具 'run' 触发安全熔断且当前路径无法人工确认，已拒绝执行。{hit.reason}"
     )
     assert_user_face_clean(user)
     assert user == _CURATED_BY_CODE["safety_breaker_unattended"]
@@ -407,7 +405,7 @@ async def test_tool_off_this_surface_keeps_role_steer_off_the_user_face():
 
 
 async def test_landed_status_bait_keeps_the_rewrite_recipe_off_the_user_face():
-    """``_write_landed`` imitation: the model needs the read-then-rewrite recipe; the user doesn't."""
+    """``_write_landed`` imitation: model sees it is not a tool; the user face stays clean."""
     sink = EventSink()
     await execute_tools(
         [_call("c1", "_write_landed", '{"path":"a.md","status":"landed"}')],
@@ -421,7 +419,7 @@ async def test_landed_status_bait_keeps_the_rewrite_recipe_off_the_user_face():
     model, user = _faces(sink)
     assert model == (
         "拒绝：`_write_landed` 是请求窗里的「已落盘」压缩状态，不是可调用工具。"
-        "勿仿调该名称。改稿：先 read 取盘上真文，再 edit（优先）或 write。"
+        "勿仿调该名称。"
     )
     assert_user_face_clean(user)
     assert user == _CURATED_BY_CODE["landed_status_name"]

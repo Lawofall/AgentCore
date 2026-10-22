@@ -152,11 +152,9 @@ def source_inspect_redirect_message(hit: SourceInspectHit) -> str:
         return (
             f"把工作区文件 dump 到 stdout 请用 read（检测到：{hit.matched}）。"
             "可分页；定位或计数请用 grep。"
-            "解析表格、改文件、跑计算仍用 run。"
         )
     return (
         f"打开源码再正则扫描请用 grep（检测到：{hit.matched}）。"
         "在工作区搜符号、字符串或计数请用 grep；"
         "看命中正文用 read。"
-        "解析表格、改文件、对内存数据跑计算仍用 run。"
     )

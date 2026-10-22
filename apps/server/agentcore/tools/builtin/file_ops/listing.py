@@ -40,7 +40,7 @@ from .path_hints import enrich_missing_path_message
 # One-layer ``file_list`` hit the backend's entry ceiling. A bounded listing is
 # fine; a silent one is not.
 LIST_TRUNCATED_NOTE = (
-    "（本层条目已达单次列举上限，还有更多未列出：可换子目录再列，或用 glob 按文件名查找。）"
+    "（本层条目已达单次列举上限，还有更多未列出：可换子目录再列。）"
 )
 
 LS_REMOVED_FIELDS: tuple[str, ...] = ("pattern", "recursive", "max_depth")
@@ -582,21 +582,21 @@ async def list_archive_as_directory(
         return ToolResult(
             tool_call_id="",
             success=True,
-            output="压缩包有密码，无法列出成员。ask_user 要密码或已解压的文件夹。",
+            output="压缩包有密码，无法列出成员。",
             duration_ms=int((time.monotonic() - start) * 1000),
         )
     except ZipExtractLimitError:
         return ToolResult(
             tool_call_id="",
             success=True,
-            output="压缩包过大，无法列出成员。ask_user 要已解压的文件夹。",
+            output="压缩包过大，无法列出成员。",
             duration_ms=int((time.monotonic() - start) * 1000),
         )
     except UnpackFailedError as exc:
         if exc.detail == "need_7z":
-            text = "这台电脑还没有解压器，无法列出成员。ask_user 要 zip 或已解压的文件夹。"
+            text = "这台电脑还没有解压器，无法列出成员。"
         else:
-            text = "无法列出这个压缩包的成员。ask_user 要已解压的文件夹。"
+            text = "无法列出这个压缩包的成员。"
         return ToolResult(
             tool_call_id="",
             success=True,
@@ -616,7 +616,6 @@ async def list_archive_as_directory(
     header = (
         f"压缩包 `{directory}` 未在区内展开（引用不改用户树）。"
         "下列是包内成员名，不是工作区路径；read 这些名字会找不到文件。"
-        "要读正文：用 unzip / 7z 解到工作区相对路径，或请人给已解压的文件夹。"
     )
     body = "\n".join(listing_names) if listing_names else empty_list_message(directory)
     output = f"{header}\n{body}"

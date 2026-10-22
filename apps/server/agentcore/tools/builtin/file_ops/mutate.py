@@ -18,7 +18,6 @@ from agentcore.tools.registration import (
     ToolRegistration,
     ToolSurface,
 )
-from agentcore.workspace.desk_empty import EMPTY_DESK_FACT
 from agentcore.workspace.file_kind import decode_stored_text, parse_too_large_size
 from agentcore.workspace.limits import is_file_too_large_detail, replace_max_bytes
 from agentcore.workspace.protocol import (
@@ -347,7 +346,7 @@ async def _assemble_str_replace_fail_receipt(
         else:
             head += (
                 "\n整段 old_string 均不在文件中（不是某一行像不像）。"
-                "请对照写回执 end_preview 重写精确锚，或先 read 再 edit。"
+                "请对照写回执 end_preview 重写精确锚。"
             )
     else:
         head = (
@@ -512,10 +511,8 @@ class FileWriteTool:
                     "file_path": {
                         "type": "string",
                         "description": (
-                            f"工作区相对 POSIX，或本机绝对路径。"
-                            f"{EMPTY_DESK_FACT}时第一层用"
-                            " `site/`（建站）、`app/`（新软件）、`src/`、`docs/`、"
-                            "`design/`、`game/`；套当前文件夹名或应用名当工程根 ≠ 建目录。"
+                            "工作区相对 POSIX，或本机绝对路径。"
+                            "套当前文件夹名或应用名当工程根 ≠ 建目录。"
                         ),
                     },
                     "content": {

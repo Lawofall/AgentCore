@@ -22,7 +22,6 @@ from tests.delegate.conftest import Provider, tool
 
 ROSTER_HEADING = "### 队员终态名册"
 ROSTER_COUNTERS = "计划节点：完成"
-CLOSING_DISCIPLINE = "【终稿纪律】"
 
 
 class _Session:
@@ -73,10 +72,7 @@ def test_bulky_batch_keeps_roster_in_terminal_payload():
     assert raw_chars >= CEO_SYNTHESIS_BUDGET
 
     synthesis = build_ceo_synthesis(t, plan, results)
-    # Packaging (roster + closing) still pushes the assembled package past the
-    # old 4000 shaper; that is no longer a second scrap-cut. Posting the
-    # canonical text must be identity with ToolResult.
-    assert len(synthesis.text) > 4000
+    assert ROSTER_HEADING in synthesis.text
     assert len(synthesis.text) <= ALL_COMPLETED_OUTPUT_LIMIT
 
     session = _Session()
@@ -92,11 +88,10 @@ def test_bulky_batch_keeps_roster_in_terminal_payload():
     assert posted == synthesis.text
     assert ROSTER_HEADING in posted
     assert ROSTER_COUNTERS in posted
-    assert CLOSING_DISCIPLINE in posted
     assert "失败" in posted and "w3" in posted
     assert len(posted) <= ALL_COMPLETED_OUTPUT_LIMIT
     assert len(posted) > len(synthesis.roster_text)
-    assert posted.index(ROSTER_HEADING) < posted.index(CLOSING_DISCIPLINE)
+    assert "【终稿纪律】" not in posted
 
     via_parts = _Session()
     post_session_all_completed(
@@ -117,9 +112,9 @@ def test_roster_survives_a_budget_smaller_than_the_prose():
     post_session_all_completed(
         session,
         output="队员正文。" * 4000,
-        roster_text="\n### 队员终态名册（地面真相）\n计划节点：完成 1 · 失败 1 · 跳过 0 · 取消 0。",
+        roster_text="\n### 队员终态名册\n计划节点：完成 1 · 失败 1 · 跳过 0 · 取消 0。",
         roster_facts={"completed": 1, "failed": 1},
-        closing_text="\n---\n【终稿纪律】失败必须写入，禁止编造「全部交付」。",
+        closing_text="",
         output_limit=1500,
         completed=1,
         total=2,
@@ -128,8 +123,7 @@ def test_roster_survives_a_budget_smaller_than_the_prose():
     posted = session.payload["output"]
     assert ROSTER_HEADING in posted
     assert ROSTER_COUNTERS in posted
-    assert CLOSING_DISCIPLINE in posted
-    assert posted.rstrip().endswith("禁止编造「全部交付」。")
+    assert "【终稿纪律】" not in posted
     assert "队员正文。" in posted
     assert len(posted) <= 1500
     assert "系统视图截断" in posted or "已省略" in posted or "…" in posted
@@ -142,7 +136,7 @@ def test_huge_roster_keeps_counters_and_stays_within_limit():
         session,
         output="队员正文。" * 2000,
         roster_text="\n### 队员终态名册\n计划节点：完成 0 · 失败 40。\n" + ("- 失败节点\n" * 400),
-        closing_text="\n---\n【终稿纪律】禁止编造「全部交付」。",
+        closing_text="",
         output_limit=1000,
         completed=0,
         total=40,
@@ -179,12 +173,14 @@ def test_roster_counters_ride_structured_user_facts():
 
 
 def test_ceo_in_turn_text_still_carries_roster_before_closing():
-    """The ToolResult read the CEO gets in-turn keeps its original section order."""
+    """The ToolResult read the CEO gets in-turn keeps roster and intro."""
     t = tool(Provider([]))
     plan, results = _bulky_plan_and_results(20)
     text = format_for_ceo(t, plan, results)
-    assert text.index(ROSTER_HEADING) < text.index(CLOSING_DISCIPLINE)
+    assert ROSTER_HEADING in text
+    assert ROSTER_COUNTERS in text
     assert text.startswith("## 团队执行结果")
+    assert "【终稿纪律】" not in text
 
 
 def test_synthesis_prose_excludes_the_non_negotiable_parts():
@@ -192,6 +188,5 @@ def test_synthesis_prose_excludes_the_non_negotiable_parts():
     plan, results = _bulky_plan_and_results(20)
     synthesis = build_ceo_synthesis(t, plan, results)
     assert ROSTER_HEADING not in synthesis.prose
-    assert CLOSING_DISCIPLINE not in synthesis.prose
     assert ROSTER_HEADING in synthesis.roster_text
-    assert CLOSING_DISCIPLINE in synthesis.closing_text
+    assert synthesis.closing_text == ""

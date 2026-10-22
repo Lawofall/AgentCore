@@ -1,5 +1,11 @@
+import {
+  type AttachSourceHandle,
+  AttachSourceInputs,
+  AttachSourcePopover,
+} from "@/components/chat/message-input/AttachSourceInputs";
 import { IconButton } from "@/components/ui";
 import { noticeChipNeutral } from "@/components/ui/tone-presets";
+import { hasNativeMediaCapture } from "@/lib/capabilities";
 import { collectClipboardFiles } from "@/lib/clipboardFiles";
 import { isComposerSubmitKey } from "@/lib/composerSendKey";
 import { cn } from "@/lib/utils";
@@ -108,6 +114,8 @@ export function ChatComposer({
   const [mentionActive, setMentionActive] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const attachSourceRef = useRef<AttachSourceHandle>(null);
+  const nativeCapture = hasNativeMediaCapture();
   const sendError = useMessagingStore((s) => s.sendError);
   const clearSendError = useMessagingStore((s) => s.clearSendError);
   const loadMembers = useMessagingStore((s) => s.loadMembers);
@@ -607,26 +615,49 @@ export function ChatComposer({
         )}
 
         <div className="flex items-end gap-2 px-3 py-2">
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            className="hidden"
-            onChange={(e) => {
-              addFiles(Array.from(e.target.files ?? []));
-              e.target.value = "";
-            }}
-          />
-          {!isEditing && (
-            <IconButton
-              size="md"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={sending}
-              aria-label="添加附件"
-            >
-              <Paperclip size={16} />
-            </IconButton>
+          {nativeCapture ? (
+            <AttachSourceInputs
+              ref={attachSourceRef}
+              onPicked={(files) => addFiles(files)}
+            />
+          ) : (
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              className="hidden"
+              onChange={(e) => {
+                addFiles(Array.from(e.target.files ?? []));
+                e.target.value = "";
+              }}
+            />
           )}
+          {!isEditing &&
+            (nativeCapture ? (
+              <AttachSourcePopover
+                trigger={
+                  <IconButton
+                    size="md"
+                    disabled={sending}
+                    aria-label="添加附件"
+                  >
+                    <Paperclip size={16} />
+                  </IconButton>
+                }
+                onCamera={() => attachSourceRef.current?.pickCamera()}
+                onGallery={() => attachSourceRef.current?.pickGallery()}
+                onFiles={() => attachSourceRef.current?.pickFiles()}
+              />
+            ) : (
+              <IconButton
+                size="md"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={sending}
+                aria-label="添加附件"
+              >
+                <Paperclip size={16} />
+              </IconButton>
+            ))}
           <textarea
             ref={textareaRef}
             value={value}

@@ -14,10 +14,8 @@ from agentcore.runtime.debate import (
     UserInterjection,
 )
 from agentcore.runtime.debate.constants import (
-    CLOSING_LENGTH_HINT,
     CX_LENGTH_HINT,
     FORM_LABELS,
-    LENGTH_HINT,
 )
 from agentcore.runtime.debate.match_ledger import (
     accumulate_match_ledger,
@@ -111,8 +109,6 @@ EVIDENCE_RULE = (
 # 查询取证：词数/截断唯一所有者是 web_search schema。此处只留辩论对照（当事方 vs 抽象文化词）。
 SEARCH_QUERY_RULE = (
     "\n【web_search 取证】query 须含命题中的当事方 / 案由 ≠ 只搜抽象文化词。"
-    "核实数字用主体 + 类别词，不要把数字本身塞进 query。"
-    "空结果 ≠ 不存在。"
 )
 
 
@@ -132,7 +128,7 @@ ARGUMENT_SKELETON_RULE = (
     "（标题 ≤16 字、一句话点破主张）；【已核实/待核实】证据标记只放正文、不放标题。"
     "禁止「X方立论 / 开场立论」类总标题（界面已渲染方名与阶段）；"
     "禁止用加粗行（如 `**标题**`）冒充章节标题。"
-    "按上文「2–3 个」论点口径展开，每个论点一块：`### 标题` + 正文。"
+    "每个论点一块：`### 标题` + 正文。"
 )
 
 
@@ -230,9 +226,8 @@ def opening_draft_brief(
     return (
         f"{_situation_header(config, side, focus=focus, ask_block=ask_block)}\n\n"
         f"请就本轮议题给出有力、具体、有论据的【开场立论】：聚焦你最能站住的论点，"
-        f"用具体证据 / 例子 / 推理链支撑；关键事实主张按【证据状态铁律】标注"
-        f"【已核实·#rN】/【待核实·推断】。"
-        f"{LENGTH_HINT}{bg_block}{dossier_block}"
+        f"用具体证据 / 例子 / 推理链支撑。"
+        f"{bg_block}{dossier_block}"
     )
 
 
@@ -269,7 +264,6 @@ def debater_task(
     research_task = (
         f"{_situation_header(config, side, focus=focus, ask_block=ask_block)}\n\n"
         f"{take_evidence}"
-        f"关键事实主张按【证据状态铁律】标注。"
         f"{EVIDENCE_NOTES_SPEC}{bg_block}{dossier_block}"
     )
     payload: dict[str, Any] = {
@@ -450,9 +444,7 @@ def round_draft_brief(
         f"对方上一轮的论点如下，{engage}：\n"
         f"{opp_block}{challenged}\n\n"
         f"直接输出你本轮的【完整发言】：**只补本轮焦点下的新论点 / 新回应**，用具体证据 / 例子 / "
-        f"推理链支撑；关键事实主张按【证据状态铁律】标注【已核实·#rN】/【待核实·推断】；"
-        f"不要重述你上一轮已说过的内容、不要复述对方原话、不要罗列改动清单。"
-        f"{LENGTH_HINT}"
+        f"推理链支撑；不要重述你上一轮已说过的内容、不要复述对方原话、不要罗列改动清单。"
     )
 
 
@@ -507,9 +499,7 @@ def cx_draft_brief(
         "不要寒暄前言、不要输出 JSON 或代码围栏）：\n\n"
         f"{skeleton}\n\n"
         "作答要求：\n"
-        "- 每条先用「是 / 否 / 部分成立」明确表态，再用具体证据或推理支撑；\n"
-        "- 凡涉及具体事实的前提都按【证据状态铁律】标注【已核实·#rN】/【待核实·推断】，"
-        "拿不出台账 id 就诚实标【待核实·推断】、别含糊带过或硬拗成已核实；\n"
+        "- 每条先明确表态，再用具体证据或推理支撑；\n"
         "- 若该认输 / 让步就坦诚承认，别答非所问、打太极或复述已说过的立论来回避；\n"
         f"- {CX_LENGTH_HINT}\n\n"
         f"质询列表（共 {n} 条）：\n{numbered}"
@@ -736,10 +726,8 @@ def closing_task(
         "- 你这一方最强的 1–2 个论点，为何它们站得住；\n"
         "- 对方针对你最关键的那条反驳，为何【不成立 / 已被你回应】。\n"
         "【不得引入任何新论据 / 新事实 / 新案例】、不复述你之前的全文、不逐条罗列改动；"
-        "结辩里引用的既有事实沿用你此前的证据状态标记（不把待核实的东西临门包装成已核实当胜负手）；"
-        "【已核实·#rN】只能沿用本方历轮发言 / 笔记中已出现过的 id，禁止临门臆造新 id、盲配未用过的台账号或自由出处短语；"
-        "已撤回论据禁止再当胜负手。"
-        f"{CLOSING_LENGTH_HINT}\n\n"
+        "不把待核实的东西临门包装成已核实当胜负手；"
+        "已撤回论据禁止再当胜负手。\n\n"
         "直接输出你的结辩陈词。"
     )
 

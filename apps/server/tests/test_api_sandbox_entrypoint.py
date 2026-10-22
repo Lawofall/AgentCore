@@ -9,6 +9,8 @@ from pathlib import Path
 
 _REPO = Path(__file__).resolve().parents[3]
 _DOCKERFILE = _REPO / "apps" / "server" / "Dockerfile"
+_GUEST_DOCKERFILE = _REPO / "apps" / "server" / "Dockerfile.guest"
+_BUILD_PINS = _REPO / "apps" / "server" / "build-pins.env"
 _ENTRYPOINT = _REPO / "deploy" / "sandboxd-entrypoint.sh"
 _COMPOSE = _REPO / "deploy" / "docker-compose.sandbox.yml"
 _APP_COMPOSE = _REPO / "deploy" / "docker-compose.app.yml"
@@ -16,9 +18,10 @@ _APP_COMPOSE = _REPO / "deploy" / "docker-compose.app.yml"
 
 def test_dockerfile_guest_menu_has_curl_and_gcc_not_on_runtime():
     text = _DOCKERFILE.read_text(encoding="utf-8")
+    guest_text = _GUEST_DOCKERFILE.read_text(encoding="utf-8")
     guest_apt = next(
         line
-        for line in text.splitlines()
+        for line in guest_text.splitlines()
         if "fonts-noto-cjk" in line and "nodejs" in line and "apt-get install" in line
     )
     assert " curl" in guest_apt or guest_apt.rstrip(";").endswith("curl")
@@ -45,6 +48,21 @@ def test_dockerfile_guest_menu_has_curl_and_gcc_not_on_runtime():
     assert "COPY --from=sevenzip /out/ /opt/agentcore/guest-rootfs/usr/bin/" in text
     # API 存活探针不改绑 curl。
     assert "urllib.request" in text
+
+
+def test_build_pins_pin_python_digest_and_playwright():
+    text = _BUILD_PINS.read_text(encoding="utf-8")
+    assert "PYTHON_IMAGE=python:3.12-slim@sha256:" in text
+    assert "PLAYWRIGHT_VERSION=" in text
+    assert "PLAYWRIGHT_DOWNLOAD_HOST=" in text
+    guest = _GUEST_DOCKERFILE.read_text(encoding="utf-8")
+    assert "PLAYWRIGHT_VERSION" in guest
+    assert "PLAYWRIGHT_DOWNLOAD_HOST" in guest
+    bake = (_REPO / "apps" / "server" / "docker-bake.hcl").read_text(encoding="utf-8")
+    assert 'dockerfile = "Dockerfile.guest"' in bake
+    assert "guest_image" in bake
+    assert _DOCKERFILE.read_text(encoding="utf-8").splitlines()[0] == "# syntax=docker/dockerfile:1.7"
+    assert guest.splitlines()[0] == "# syntax=docker/dockerfile:1.7"
 
 
 def test_dockerfile_creates_app_home_and_sets_home_env():
@@ -98,3 +116,5 @@ def test_app_compose_api_keeps_unprivileged_command():
     assert 'command: ["python", "-m", "agentcore"]' in text
     assert "privileged:" not in body
     assert "mem_limit: 2g" in body
+    assert "additional_contexts:" in text
+    assert "guest_image:" in text

@@ -218,6 +218,10 @@ def test_family_matching_covers_event_names_patterns_and_tool_detector():
         event="rate_limit.redis_fail_open", text="rate_limit.redis_fail_open"
     )
     assert "contract_failed" in reg.match(event="contract.failed", text="contract.failed")
+    assert "write_pass_exhausted" in reg.match(
+        event="contract.write_pass_exhausted",
+        text="本队员本波未交卷：没有写成文件",
+    )
     assert "path_not_dir" in reg.match(event="tool.execute_end", text="不是目录：xhs")
     assert "tool_failed" in reg.match(event="tool.execute_end", text="", tool_failed=True)
     assert reg.match(event="chat.turn_complete", text="chat.turn_complete") == []

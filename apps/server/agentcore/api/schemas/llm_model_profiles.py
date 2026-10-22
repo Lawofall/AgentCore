@@ -116,7 +116,7 @@ class CreateLlmModelProfileRequest(BaseModel):
     origin: Literal["standard"] = Field(
         default="standard",
         description=(
-            "Snapshot of official 标准 (daily tools on; debate / chats / folders off)."
+            "Snapshot of official 标准 (daily tools on; browser / debate / chats / folders off)."
         ),
     )
 

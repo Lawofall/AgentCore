@@ -45,8 +45,8 @@ echo "$ACR_PASS" | docker login "$ACR_HOST" -u "$ACR_USER" --password-stdin
 
 IMAGE="${IMAGE_REGISTRY}/api:${IMAGE_TAG}"
 echo "== [3/13] 拉 api 镜像 ($IMAGE) =="
-# 同机构建路径（remote-build-deploy.mjs 的 buildx --load）镜像已在本机：sha tag 视作
-# 不可变，直接复用、省一次 ACR 往返。浮动 latest 不享受此捷径（本机存在 ≠ 最新）。
+# 同机构建路径（remote-build-deploy.mjs 推完会 docker pull api:<sha>）镜像已在本机：
+# sha tag 视作不可变，直接复用、省一次 ACR 往返。浮动 latest 不享受此捷径（本机存在 ≠ 最新）。
 # 本机缺镜像时照旧 pull + 回退 latest，失败语义不变。
 if [[ "$IMAGE_TAG" != "latest" ]] && docker image inspect "$IMAGE" >/dev/null 2>&1; then
   echo "镜像本机已存在（同机构建），跳过 pull"
@@ -242,7 +242,9 @@ else
 fi
 
 # 健康后回收本机历史 api:<sha>（ACR 仍可回拉）。默认保留最近 5 个 tag + 容器在用镜像。
+# guest-base 按内容 id 钉死、体积大；保留最近几份，未点名的 build-cache 仓内层不动。
 KEEP_API_IMAGES="${KEEP_API_IMAGES:-5}"
+KEEP_GUEST_IMAGES="${KEEP_GUEST_IMAGES:-3}"
 echo "== prune old api images (keep ${KEEP_API_IMAGES}) =="
 _reg="${IMAGE_REGISTRY:-}"
 if [[ -n "$_reg" ]]; then
@@ -253,6 +255,14 @@ if [[ -n "$_reg" ]]; then
       docker rmi "${_reg}/api:${_t}" 2>/dev/null || true
     done
   fi
+  echo "== prune old guest-base images (keep ${KEEP_GUEST_IMAGES}) =="
+  mapfile -t _gtags < <(docker images "${_reg}/guest-base" --format '{{.CreatedAt}}\t{{.Tag}}' \
+    | sort -r | awk -F'\t' 'NR>0 && $2!="<none>" {print $2}')
+  if ((${#_gtags[@]} > KEEP_GUEST_IMAGES)); then
+    for _t in "${_gtags[@]:KEEP_GUEST_IMAGES}"; do
+      docker rmi "${_reg}/guest-base:${_t}" 2>/dev/null || true
+    done
+  fi
   # latest 浮动标签与当前 sha 共存；清掉已无引用的悬空层
   docker image prune -f >/dev/null 2>&1 || true
 fi
@@ -261,6 +271,12 @@ fi
 BUILDER_PRUNE_UNTIL="${BUILDER_PRUNE_UNTIL:-48h}"
 BUILDER_CACHE_MAX="${BUILDER_CACHE_MAX:-12gb}"
 echo "== prune builder cache (until=${BUILDER_PRUNE_UNTIL}, max=${BUILDER_CACHE_MAX}) =="
+if docker buildx inspect agentcore-cache >/dev/null 2>&1; then
+  docker buildx prune --builder agentcore-cache -af --filter "until=${BUILDER_PRUNE_UNTIL}" >/dev/null 2>&1 || true
+  if grep -q -- '--max-used-space' <<<"$(docker buildx prune --help 2>&1 || true)"; then
+    docker buildx prune --builder agentcore-cache -af --max-used-space "${BUILDER_CACHE_MAX}" >/dev/null 2>&1 || true
+  fi
+fi
 docker builder prune -af --filter "until=${BUILDER_PRUNE_UNTIL}" >/dev/null 2>&1 || true
 _builder_help="$(docker builder prune --help 2>&1 || true)"
 if grep -q -- '--max-used-space' <<<"$_builder_help"; then

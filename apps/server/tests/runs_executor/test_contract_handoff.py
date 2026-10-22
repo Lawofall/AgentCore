@@ -452,7 +452,7 @@ async def test_artifacts_missing_soft_completes_without_write_pass():
     assert state.phase is RunPhase.COMPLETED
     assert provider.calls == 1  # 无 write_pass
     assert state.files_touched == []
-    assert any("未把产物写入工作区" in w for w in (state.warnings or []))
+    assert any("没有写成文件" in w for w in (state.warnings or []))
     assert any("README.md" in w for w in (state.warnings or []))
 
 
@@ -627,4 +627,4 @@ async def test_strict_zero_landing_soft_completes_without_degraded_dependents():
     sec = res.get("t_sec") or res.get("t_1") or next(iter(res.values()))
     assert sec.phase is RunPhase.COMPLETED
     assert not (sec.files_touched or [])
-    assert any("未把产物写入工作区" in w for w in (sec.warnings or []))
+    assert any("没有写成文件" in w for w in (sec.warnings or []))

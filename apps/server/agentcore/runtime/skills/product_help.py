@@ -48,9 +48,7 @@ HTML「完整预览」仅桌面；Web / 手机走文件面板下载。\
 「下载路径 / 下载链接」= 上述入口 ≠ 传到网盘再给人网址。
 
 【规矩】
-Cursor `.cursor/rules` / `.mdc` ≈ 本桌 ``AgentCore/rules/*.md``（frontmatter 的 apply / description 决定常驻、按需、碰到文件；HOW → consult("prompts")）；\
-账号工具箱里已有的一篇是跨桌规矩（目录名，与 consult 的 name 相同）；\
-`skills/*.json` ≠ 规矩。
+本桌规矩怎么写 → consult("prompts")。
 
 【上报】
 看不到服务端日志 ≠ 假装读了。对人短答 consult("product_help:troubleshooting") ≠ 改产品仓 / 开 PR。

@@ -557,31 +557,20 @@ def _context_block_payloads(blocks: list[ContextBlock]) -> list[dict[str, Any]]:
 
 
 def _upstream_intermediate_persist_hint(spec: RunSpec) -> str:
-    """A1: where upstream links may park large intermediates for downstream ``read``.
+    """Pinned task-book paths as fact for upstream links. Free teams: empty.
 
-    Declared ``artifacts`` win (strict task-book paths). Otherwise free-form
-    teams self-locate and write into handoff; do not invent a dump path.
-    Never workspace-root ``findings-<role>.md``. Does not replace pinned
-    artifacts; only guides free teams.
+    Never teaches write/read HOW or a dump cabinet (including workspace-root
+    ``findings-<role>.md``).
     """
     pinned = [
         p.strip().replace("\\", "/")
         for p in (spec.deliverable.artifacts if spec.deliverable else [])
         if isinstance(p, str) and p.strip()
     ]
-    if pinned:
-        paths = "、".join(f"`{p}`" for p in pinned)
-        return (
-            "中间产物怎么交：零散发现直接写进你的文字产出即可（会自动转交下游）；若产物较大、"
-            "值得落盘供下游 read 取用，就调 write 并【严格按任务书路径】落盘"
-            f"（{paths}），切勿用空路径或另起工作区根文件名。"
-        )
-    return (
-        "中间产物怎么交：零散发现直接写进你的文字产出即可（会自动转交下游）；若产物较大、"
-        "值得落盘供下游 read 取用，就调 write，按桌上已有结构自定位，"
-        "或按任务书已声明路径落盘——不要发明新的约定柜，也勿用工作区根 "
-        "`findings-<角色>.md`，切勿用空路径。"
-    )
+    if not pinned:
+        return ""
+    paths = "、".join(f"`{p}`" for p in pinned)
+    return f"中间产物落盘：{paths}。"
 
 
 def _team_position_block(plan: RunPlan, spec: RunSpec) -> str:
@@ -592,16 +581,14 @@ def _team_position_block(plan: RunPlan, spec: RunSpec) -> str:
     Closes the「上游越权写最终交付物」gap: an upstream link sees the team-level
     原始用户请求 ("…保存一份报告…") but, blind to the writer downstream, used to chase the
     final artifact itself (and, lacking a filename, fire empty-path write). It now
-    learns it is one link that hands off — and, when it does want to PERSIST a large
-    intermediate product for the downstream to ``read``, A1 tells it either the
-    task-book ``artifacts`` path (strict) or to write into handoff / self-locate
-    (free teams; never workspace-root ``findings-<role>.md``). A TERMINAL node instead
-    learns it IS the final author (reinforcing structure ownership, the worker-side L3
-    lever). Blank for a solo single worker (no team → the request simply is its whole job).
+    learns it is one link that hands off. Pinned task-book paths are listed as fact;
+    free teams get no dump-path cookbook. A TERMINAL node instead learns it IS the
+    final author (reinforcing structure ownership, the worker-side L3 lever). Blank
+    for a solo single worker (no team → the request simply is its whole job).
 
     Branches on shape, in priority order:
       - has dependents    → upstream link: hands off, "别自己产最终交付物" +
-        中间产物落盘起名许可（A1）
+        pinned artifact paths when the task book named them
       - else has upstream  → terminal node:  "你是终端环，据上游产出最终交付物"
     Parallel-peer awareness (``sibling_summary`` roster, computed by the builder)
     is included in every team shape that has same-fan-out peers; a node with none
@@ -631,9 +618,6 @@ def _team_position_block(plan: RunPlan, spec: RunSpec) -> str:
         parts.append(
             f"你的位置：你是这条流水线的【终端环】。上游【{joined}】的产出已在下方「前置结果」"
             "交给你，你的职责是据此整合、产出团队交给老板的【最终交付物】。"
-            "「前置结果」若已列出工作区路径：先 read 这些路径再写总稿；"
-            "【禁止】把开工做成全仓 glob / grep / 再调研一遍。"
-            "路径含糊或列表缺文件时才 glob / file_list 补钉（见身份【找路径】）。"
         )
     if not parts:
         return ""

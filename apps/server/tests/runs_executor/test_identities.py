@@ -367,10 +367,11 @@ async def test_handoff_topology_lives_on_tool_not_identity():
     assert "便条写在这一轮正文" in desc
     assert "必须" in desc
     assert "默认不调用" in desc
-    assert "下一棒要接" in desc
-    assert "现在什么已成立" in desc
+    assert "下一棒要接" not in desc
+    assert "现在什么已成立" not in desc
     assert "便条 ≠ 文件说明" in desc
-    assert "未验证" in desc
+    assert "未验证" not in desc
+    assert "先写完" not in desc
     assert "2–4" not in desc
     assert "勿贴长文" not in desc
     assert "下一棒要接" not in leaf

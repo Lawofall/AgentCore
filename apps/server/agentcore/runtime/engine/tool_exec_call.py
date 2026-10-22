@@ -88,7 +88,7 @@ def _append_prose_close_note(msg_content: str, *, name: str, args: dict[str, Any
 _MISSING_FILE_MODEL_MSG = "内部资源缺失，请换一种方式继续，不要原样重试。"
 
 _CIRCUIT_TOOL_DISABLED_MSG = (
-    "工具 '{name}' 已因连续失败停用，未执行。请改用其他方案，不要原样重试该路径。"
+    "工具 '{name}' 已因连续失败停用，未执行。不要原样重试该路径。"
 )
 
 

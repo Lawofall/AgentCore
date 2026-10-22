@@ -1,5 +1,9 @@
 import { MentionMenu } from "@/components/chat/MentionMenu";
 import {
+  type AttachSourceHandle,
+  AttachSourceInputs,
+} from "@/components/chat/message-input/AttachSourceInputs";
+import {
   ComposerBodyEditor,
   type ComposerBodyHandle,
 } from "@/components/chat/message-input/ComposerBodyEditor";
@@ -12,6 +16,7 @@ import {
 import { settleAttachments } from "@/components/chat/message-input/settleAttachments";
 import { useComposerDrop } from "@/components/chat/message-input/useComposerDrop";
 import { useMentionMenu } from "@/components/chat/message-input/useMentionMenu";
+import { hasNativeMediaCapture } from "@/lib/capabilities";
 import { handlePlainPaste } from "@/lib/clipboardPlain";
 import { dropInlineIndex, insertInlineToken } from "@/lib/inlineBody";
 import { notifyError } from "@/lib/toast";
@@ -103,6 +108,8 @@ export function QueuedTurnEditor({
   const rootRef = useRef<HTMLDivElement>(null);
   const bodyRef = useRef<ComposerBodyHandle>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const attachSourceRef = useRef<AttachSourceHandle>(null);
+  const nativeCapture = hasNativeMediaCapture();
   const pendingCaretRef = useRef<number | null>(null);
   const [value, setValue] = useState(initialContent);
   const [attachments, setAttachments] = useState(initialAttachments);
@@ -136,7 +143,10 @@ export function QueuedTurnEditor({
     agentMentions,
     setAgentMentions,
     bodyRef,
-    onBrowserFilePick: () => fileInputRef.current?.click(),
+    onBrowserFilePick: () =>
+      nativeCapture
+        ? attachSourceRef.current?.pickFiles()
+        : fileInputRef.current?.click(),
   });
 
   const drop = useComposerDrop(
@@ -240,21 +250,31 @@ export function QueuedTurnEditor({
       onDragLeave={drop.handleDragLeave}
       onDrop={drop.handleDrop}
     >
-      <input
-        ref={fileInputRef}
-        type="file"
-        className="hidden"
-        multiple
-        tabIndex={-1}
-        aria-hidden
-        onChange={(event) => {
-          const files = Array.from(event.target.files ?? []);
-          event.target.value = "";
-          if (files.length === 0) return;
-          mention.clearActiveMention();
-          void drop.attachFiles(files);
-        }}
-      />
+      {nativeCapture ? (
+        <AttachSourceInputs
+          ref={attachSourceRef}
+          onPicked={(files) => {
+            mention.clearActiveMention();
+            void drop.attachFiles(files);
+          }}
+        />
+      ) : (
+        <input
+          ref={fileInputRef}
+          type="file"
+          className="hidden"
+          multiple
+          tabIndex={-1}
+          aria-hidden
+          onChange={(event) => {
+            const files = Array.from(event.target.files ?? []);
+            event.target.value = "";
+            if (files.length === 0) return;
+            mention.clearActiveMention();
+            void drop.attachFiles(files);
+          }}
+        />
+      )}
       {detached ? (
         <p className="text-xs text-muted-foreground">这条已经开始了</p>
       ) : null}

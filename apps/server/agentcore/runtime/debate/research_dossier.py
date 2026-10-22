@@ -176,7 +176,7 @@ def format_research_dossier_index(
         mapped = "\n".join(ledger_lines)
         block += (
             "\n\n【材料预登记台账·引用须用下列 #rN】\n"
-            "引用材料事实写成【已核实·#rN】（id 见下；徽章可溯源到文件）。\n"
+            "id 见下；徽章可溯源到文件。\n"
             f"{mapped}"
         )
     return block

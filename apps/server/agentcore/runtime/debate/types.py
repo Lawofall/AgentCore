@@ -284,8 +284,7 @@ class ClosingStatement:
     辩已辩尽（收敛 / 用户 conclude / 达上限）后、简报前，主持人请各方做一段收尾陈词：辩手经
     ``continue_run`` 走【干净成稿】（``allow_research=False``），brief 携带本场材料（历轮论点 /
     质询让步 / clash 命门），**只讲胜负手**（本方最强 1–2 点 + 为何对方最关键的反驳不成立）、
-    **不得引入新论据 / 新事实**、长度收紧（见 :data:`~agentcore.tools.builtin.debate.
-    schema.CLOSING_LENGTH_HINT`）。全文随 ``run_id`` 的 run 事件走（不塞 payload，与各方发言 / 质询作答
+    **不得引入新论据 / 新事实**。全文随 ``run_id`` 的 run 事件走（不塞 payload，与各方发言 / 质询作答
     同策），``ok`` 标记是否成功产出。收场后**一次性**发生（非逐轮），供前端「结辩」区渲染——这一层是
     辩手自己的 advocacy 收尾，与裁判中立的 ``brief.decisive`` 正交并存（真人辩论：结辩 + 裁决并存）。
     新场不跑结辩（结辩 runner 留旧场回放）；圆桌恒空。

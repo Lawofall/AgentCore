@@ -1,7 +1,7 @@
 """同回合二次委派的 seed：只带上一段 drive 的真实终态。
 
 首批失败 / 让出后未跑的节点绝不冒充完成——否则二次批次的「队员终态名册」会把失败算成
-交付（失败计数归零 →【叙事铁律】不再附加），未跑的尾节点也会被当成已派发而永不调度。
+交付（失败计数归零），未跑的尾节点也会被当成已派发而永不调度。
 """
 
 from __future__ import annotations
@@ -55,7 +55,7 @@ async def test_second_delegate_seed_keeps_failed_node_failed(monkeypatch):
     assert second.success is True
     assert "失败 1" in second.output
     assert "写手" in second.output and "boom" in second.output
-    assert "【叙事铁律】" in second.output
+    assert "【叙事铁律】" not in second.output
     # 已终结的首批节点仍不重派：seed 带真相，不等于放行重跑。
     assert executed == ["研究员", "写手", "校对"]
 

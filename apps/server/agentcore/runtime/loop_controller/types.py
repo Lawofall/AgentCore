@@ -72,8 +72,6 @@ _VALIDATION_PATH_STOP_STEER = (
 # Landing tools that echoed a landed status / cleared stub back as write args.
 _LANDED_SUMMARY_ECHO_STOP_STEER = (
     "同因把请求窗里的已落盘状态/清理占位当写盘参数："
-    "下一拍必须先 read 该 file_path 取盘上真文，"
-    "再 edit（优先）或按真文重填 content/new_string；"
     "禁止再次原样重发该只读状态条；工具保持可用。"
     "若同 path 再原样回灌将早停。"
 )

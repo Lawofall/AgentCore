@@ -722,17 +722,6 @@ def collect_worker_gaps(
             out.append((label, gaps))
     return out
 
-# Exact hard-gap closing copy — do not rephrase (soft-only path drops this block).
-_HARD_GAPS_CLOSING = (
-    "\n**【终稿诚实性·部分交付】**上方契约缺口非空：终稿必须使用「部分交付 / 尚未齐备」"
-    "类措辞，点明未闭合缺口与建议下一步；"
-    "【禁止】写「完整交付 / 全部完成 / 可运行无缺 / 无需审计 / 团队已交付完毕」等完成度断言。"
-)
-_SOFT_GAPS_CLOSING = (
-    "\n**【终稿诚实性】**"
-    "【禁止】写「完整交付 / 全部完成 / 可运行无缺 / 无需审计 / 团队已交付完毕」等完成度断言。"
-)
-
 
 def _gap_description_and_reason(gap: dict[str, str] | str) -> tuple[str, str]:
     if isinstance(gap, dict):
@@ -743,81 +732,33 @@ def _gap_description_and_reason(gap: dict[str, str] | str) -> tuple[str, str]:
     return str(gap).strip(), ""
 
 
-def _worker_gaps_have_hard(
-    gaps_by_worker: list[tuple[str, list[dict[str, str]]]] | list[tuple[str, list[str]]],
-) -> bool:
-    """True when any listed gap is outside ``_SOFT_GAP_REASONS`` (missing reason = hard)."""
-    from agentcore.runtime.delegate.delivery_status import _SOFT_GAP_REASONS
-
-    for _, gaps in gaps_by_worker:
-        for gap in gaps:
-            desc, reason = _gap_description_and_reason(gap)
-            if not desc:
-                continue
-            if reason not in _SOFT_GAP_REASONS:
-                return True
-    return False
-
-
 def format_worker_gaps_block(
     gaps_by_worker: list[tuple[str, list[dict[str, str]]]] | list[tuple[str, list[str]]],
     *,
     plan_open: bool = False,
 ) -> str:
-    """CEO-facing「契约缺口」section, or "" when nobody has residual gaps.
+    """CEO-facing leftover facts, or "" when nobody has residual gaps.
 
-    Cutoff reasons (token_budget / worker_timeout / degraded_handoff) are listed
-    for the CEO's continue decisions. User-facing gap disclosure is owned
-    by structured ``delivery_status.gaps`` + the presentation layer — the synopsis
-    only gets a light anti-contradiction discipline (no completeness claims).
-
-    Soft-only gaps (``_SOFT_GAP_REASONS``) ban completeness assertions but do **not**
-    force「部分交付 / 尚未齐备」. Any hard gap keeps the partial-delivery closing
-    copy unchanged.
-
-    ``plan_open``: 波边界 / 部分失败 stash 时 True（replan 仍可用）；批次已收口
-    时 False（只指路 delegate 点名续派，不提 replan）。
+    Descriptions only — including ``files_not_landed``. This block is a
+    protected failure heading (``### 未对齐``); do not hide zero-file
+    facts in truncatable worker prose. ``plan_open`` is kept for callers;
+    it no longer changes the copy.
     """
-    from agentcore.runtime.runs.cutoff import CUTOFF_REASONS
+    del plan_open
 
     if not gaps_by_worker:
         return ""
-    has_cutoff = False
-    has_hard = _worker_gaps_have_hard(gaps_by_worker)
-    if plan_open:
-        fill_how = (
-            "优先同一协作图 `replan(add)` + `replaces_run_id` / "
-            "`continue_from_run_id` 按缺口点名补；禁止无缺口另开大派，别假装收工。"
-        )
-    else:
-        fill_how = (
-            "批次已收口：再调 delegate，续派填 continue_from_run_id，"
-            "补失败/跳过填 replaces_run_id；禁止无缺口另开大派，别假装收工。"
-        )
-    lines = [
-        "\n### ⚠️ 契约缺口（请据缺口同图点名补，勿整团重开）\n"
-        "以下是各队员收尾后仍未对齐的声明交付物 / 交接缺口（含收敛强制收尾后无法再写文件"
-        f"留下的缺口，以及预算/超时掐断信号）。{fill_how}\n"
-    ]
+    rows: list[str] = []
     for label, gaps in gaps_by_worker:
         parts: list[str] = []
         for gap in gaps:
-            desc, reason = _gap_description_and_reason(gap)
+            desc, _reason = _gap_description_and_reason(gap)
             if not desc:
                 continue
-            if reason:
-                if reason in CUTOFF_REASONS:
-                    has_cutoff = True
-                parts.append(f"{desc}〔原因码 {reason}〕")
-            else:
-                parts.append(desc)
+            parts.append(desc)
         if parts:
-            lines.append(f"- **{label}**：{'；'.join(parts)}")
-    lines.append(_HARD_GAPS_CLOSING if has_hard else _SOFT_GAPS_CLOSING)
-    if has_cutoff:
-        lines.append(
-            "结构化交付缺口已由系统对账卡呈现，概览正文不必逐条复述掐断原因；"
-            "可建议续派、绑定本机执行环境或 continue_from_run_id。"
-        )
-    return "\n".join(lines) + "\n"
+            rows.append(f"- **{label}**：{'；'.join(parts)}")
+    if not rows:
+        return ""
+    return "\n### 未对齐\n" + "\n".join(rows) + "\n"
 

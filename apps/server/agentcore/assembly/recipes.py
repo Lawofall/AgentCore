@@ -22,7 +22,6 @@ STANDARD_TOOLS: frozenset[str] = frozenset(
     {
         "files",
         "run",
-        "browser",
         "web",
         "ask_user",
         "delegate",

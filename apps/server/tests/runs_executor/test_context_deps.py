@@ -58,7 +58,6 @@ def test_dep_block_file_writer_becomes_pointer():
     body = block.body
     assert "已生成数据集" in body  # the worker's prose handoff digest is kept
     assert "data/out.csv" in body and "data/schema.json" in body  # the pointer
-    assert "read" in body  # told how to pull the full content
     assert block.files == ["data/out.csv", "data/schema.json"]  # artifact paths carried
 
 

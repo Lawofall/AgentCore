@@ -391,7 +391,6 @@ def format_evidence_ledger_hint(
     return (
         "【本方已绑定来源·成稿只许引用下列 id（须已出现在本方证据笔记）】\n"
         + "\n".join(lines)
-        + "\n已核实主张写成【已核实·#rN】；不在上表 / 本方笔记的来源不得标已核实，改【待核实·推断】。"
     )
 
 

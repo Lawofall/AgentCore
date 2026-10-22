@@ -5423,7 +5423,7 @@
           "origin": {
             "const": "standard",
             "default": "standard",
-            "description": "Snapshot of official 标准 (daily tools on; debate / chats / folders off).",
+            "description": "Snapshot of official 标准 (daily tools on; browser / debate / chats / folders off).",
             "title": "Origin",
             "type": "string"
           },
@@ -17316,7 +17316,7 @@
   "info": {
     "description": "Multi-Agent AI Workspace API",
     "title": "AgentCore",
-    "version": "1.0.1"
+    "version": "1.0.2"
   },
   "openapi": "3.1.0",
   "paths": {

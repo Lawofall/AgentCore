@@ -9,7 +9,7 @@ describe("capabilityFromProfile", () => {
     const cap = capabilityFromProfile(testAssemblyProfile("asm-standard"));
     expect(cap).toEqual({
       assemblyId: "asm-standard",
-      disabledTools: ["debate", "folders", "chats"],
+      disabledTools: ["browser", "debate", "folders", "chats"],
       omittedProjections: [],
       omittedFactorySkills: [],
       omitDeskRules: false,

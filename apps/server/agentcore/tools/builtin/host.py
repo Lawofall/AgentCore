@@ -104,10 +104,7 @@ HOST_TOOL_PARAMETERS: dict[str, Any] = {
         },
         "command": {
             "type": "string",
-            "description": (
-                "省略 action 时必填的本机短命令。"
-                "干活根文件用 read / run。"
-            ),
+            "description": "省略 action 时必填的本机短命令。",
         },
         "ref": {
             "type": "string",

@@ -193,7 +193,9 @@ def test_grep_schema_teaches_omit_path_when_unsure():
     from agentcore.tools.builtin.grep import _empty_result_note
 
     note = _empty_result_note(pattern="x", rel_dir=".", glob="")
-    assert "省略 path" in note
+    assert "不要据此断定" in note
+    assert "可执行下一步" not in note
+    assert "glob" not in note
 
 
 async def test_grep_rejects_path_outside_workspace(tmp_path: Path):
@@ -401,8 +403,8 @@ async def test_grep_no_matches(tmp_path: Path):
     result = await GrepTool().execute({"pattern": "zzz_nope"}, _ctx(tmp_path))
     assert result.success is True
     assert "未匹配" in result.output or "没有匹配" in result.output
-    assert "可执行下一步" in result.output
-    assert "glob" in result.output
+    assert "不要据此断定" in result.output
+    assert "可执行下一步" not in result.output
     assert "file_list(pattern)" not in result.output
     assert result.metadata["match_count"] == 0
 

@@ -103,7 +103,7 @@ class WorkspaceSettings(BaseModel):
     # Local default tracks ``data_dir``; compose sets ``/data/sandbox`` when
     # ``DATA_DIR=/data``.
     gvisor_runtime_root: str = "./data/sandbox"
-    # Packed guest userland (Dockerfile guest stage). Not sandboxd/API live /usr.
+    # Packed guest userland (Dockerfile.guest). Not sandboxd/API live /usr.
     # Empty / missing → health fails closed (run unassembled), no host-bind fallback.
     gvisor_guest_rootfs: str = "/opt/agentcore/guest-rootfs"
     # Unix socket to the independent sandboxd service (compose overlay). API

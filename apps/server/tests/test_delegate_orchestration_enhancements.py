@@ -454,7 +454,7 @@ def test_landed_status_name_rejection_is_explicit():
     assert "落盘" in err
     assert "不是可调用工具" in err
     assert "not_found" not in err.lower()
-    assert "read" in err
+    assert "read(" not in err
     assert landed_status_name_rejection("write") is None
     assert landed_status_name_rejection("web_search") is None
 
@@ -553,7 +553,7 @@ def test_landed_summary_echo_fingerprint_collapses_per_path():
 
 
 def test_landed_summary_echo_validation_stop_names_file_read():
-    """摘要回灌：首次拒写即 path-stop（点名 read→edit/真文）；写工具保持可用。"""
+    """摘要回灌：首次拒写即 path-stop；写工具保持可用。不教 read→edit 序列。"""
     from agentcore.runtime.loop_controller import (
         LoopController,
         ToolAttempt,
@@ -570,9 +570,9 @@ def test_landed_summary_echo_validation_stop_names_file_read():
     assert err is not None
     assert "已落盘摘要" in err
     assert "docs/a.md" in err
-    assert "read" in err
-    assert "真文" in err
-    assert "edit" in err
+    assert "不能当写参" in err
+    assert "read(" not in err
+    assert "edit" not in err
     fp = fingerprint_tool_call("write", json.dumps(args, ensure_ascii=False))
 
     c = LoopController(tool_failure_warn=2, tool_failure_disable=3)
@@ -589,11 +589,10 @@ def test_landed_summary_echo_validation_stop_names_file_read():
     cb = c.tool_circuit_breaker()
     assert cb.validation_stop is not None
     stop = cb.validation_stop or ""
-    assert "read" in stop
-    assert "真文" in stop
-    assert "edit" in stop
     assert "write" in stop
     assert "docs/a.md" in stop
+    assert "原样重发" in stop
+    assert "read(" not in stop
     assert cb.disabled == ()
     assert c.tool_failure_count("write") == 0
     # 同指纹再撞 → thrash 早停。
@@ -648,8 +647,9 @@ def test_landed_status_echo_gets_one_strike_stop():
         ]
     )
     stop = c.tool_circuit_breaker().validation_stop or ""
-    assert "read" in stop
     assert "site/main.js" in stop
+    assert "原样重发" in stop
+    assert "read(" not in stop
 
 
 # ── 3. 记忆复用 ──────────────────────────────────────────────────────────────

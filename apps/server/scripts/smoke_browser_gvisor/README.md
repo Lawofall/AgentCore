@@ -28,8 +28,9 @@ driver 的 CDP Input 注入（与 …/browser/input 端点同一 session.send �
 
 ```powershell
 # 1) 构建产品镜像（INSTALL_BROWSER=1；自定 tag，别覆盖他人镜像）。
-#    首次含 Chromium ~177MB 下载，耐心等；本机实测全程 ~161s（runsc 层命中缓存）。
-docker build -t agentcore-server:browser-smoke --build-arg INSTALL_BROWSER=1 apps/server
+#    首次含 Chromium 下载，耐心等。guest 输入未变时 bake 会复用 guest-base。
+#    先 source apps/server/build-pins.env。
+docker buildx bake -f apps/server/docker-bake.hcl api --set API_TAGS=agentcore-server:browser-smoke
 
 # 2) privileged 容器内跑产品模块端到端冒烟。
 #    GVISOR_ENABLED=true 让 registry 走真 gVisor 沙箱工厂；

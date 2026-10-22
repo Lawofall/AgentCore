@@ -19,7 +19,8 @@ from agentcore.tools.sandbox.cloud_python import (
 )
 
 _REPO = Path(__file__).resolve().parents[3]
-_DOCKERFILE = _REPO / "apps" / "server" / "Dockerfile"
+_DOCKERFILE = _REPO / "apps" / "server" / "Dockerfile.guest"
+_RUNTIME_DOCKERFILE = _REPO / "apps" / "server" / "Dockerfile"
 _RUN_TOOL = (
     _REPO / "apps" / "server" / "agentcore" / "tools" / "builtin" / "run.py"
 )
@@ -113,6 +114,19 @@ def test_dockerfile_installs_from_the_list_file():
     assert _dockerfile_errors(text) == []
 
 
+def test_runtime_dockerfile_copies_named_guest_image():
+    text = _RUNTIME_DOCKERFILE.read_text(encoding="utf-8")
+    assert "FROM guest_image AS guest" in text
+    assert "COPY --from=guest /guest-root /opt/agentcore/guest-rootfs" in text
+    assert "cloud_python.txt" not in text
+    packages = load_cloud_python_packages()
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        assert not _token_hits(stripped, packages), line
+
+
 def test_run_sources_have_no_inventory_literals():
     src = _RUN_TOOL.read_text(encoding="utf-8")
     assert _literal_errors(src, where="run.py") == []
@@ -133,8 +147,8 @@ def test_deploy_doc_points_at_the_list_file():
 def test_inline_dockerfile_list_goes_red():
     text = _DOCKERFILE.read_text(encoding="utf-8")
     broken = text.replace(
-        'pip install --no-cache-dir -i "${PYPI_INDEX}" -r /tmp/cloud_python.txt',
-        'pip install --no-cache-dir -i "${PYPI_INDEX}" python-pptx pillow',
+        'pip install -i "${PYPI_INDEX}" -r /tmp/cloud_python.txt',
+        'pip install -i "${PYPI_INDEX}" python-pptx pillow',
     )
     assert broken != text
     errors = _dockerfile_errors(broken)

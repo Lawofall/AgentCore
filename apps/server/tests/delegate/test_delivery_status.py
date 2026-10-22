@@ -226,7 +226,6 @@ def test_blocked_with_criteria_gap_and_bind_action_on_cloud():
     assert "Composer「先在云上做" not in desc
     assert "推荐** Composer「先在云上做" not in desc
     assert "**推荐** Composer「先在云上做" not in desc
-    assert "合法非默认" in desc or "本机传统" in desc or "export_to_local" in desc
     assert "改导" not in desc
     assert "勿再绑" not in desc
 

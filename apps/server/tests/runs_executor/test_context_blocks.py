@@ -36,10 +36,9 @@ def test_team_position_block_four_dag_shapes():
     # upstream PRODUCT injection (_dep_context_blocks). Four shapes → four framings; this
     # pins each so the「上游越权写最终交付物」fix (an upstream link learns it hands off,
     # not authors the final artifact) and the terminal-ownership boost (a writer learns
-    # it IS the final author) can't silently regress. Also pins A1 (递指针 affordance):
-    # the upstream branch — and ONLY it — grants intermediate persist guidance:
-    # task-book artifacts (strict) or self-locate into handoff (free teams);
-    # never workspace-root findings-<role>.md. Terminal / parallel / solo must NOT get A1.
+    # it IS the final author) can't silently regress. Also pins A1: the upstream branch — and ONLY it — may list pinned
+    # task-book artifact paths as fact; free teams get no dump-path cookbook.
+    # Terminal / parallel / solo must NOT get A1.
 
     plan, errs = build_run_plan(
         [
@@ -63,18 +62,20 @@ def test_team_position_block_four_dag_shapes():
     assert "不要自己产出整个最终交付物" in up
     assert "调研员B" in up  # parallel-peer awareness still present
     assert "不一定全是你的活" in up  # request reframed as a team goal, not a mandate
-    # A1 free-team path: self-locate; do not invent a dump cabinet.
-    assert "自定位" in up and "切勿用空路径" in up
+    # A1 free-team path: no dump-cabinet cookbook.
+    assert "自定位" not in up
+    assert "切勿用空路径" not in up
     assert "自起描述性文件名" not in up
-    assert "findings-" in up
-    assert "工作区根" in up
+    assert "findings-" not in up
+    assert "约定柜" not in up
 
     # (2) TERMINAL synthesizer (has upstream, no dependents): told it IS the final author
     #     — reinforces structure ownership (the worker-side L3 lever).
     term = _build_messages(plan, w, {}, "SYS", "原始请求")[1].content or ""
     assert "你：写手（本职见「你的任务」）" in term
     assert "终端环" in term and "最终交付物" in term
-    assert "先 read" in term and "全仓" in term
+    assert "先 read" not in term
+    assert "全仓" not in term
     assert "不要自己产出整个最终交付物" not in term  # not an upstream link
     assert "约定柜" not in term  # A1 is upstream-only
     assert w.sibling_summary == ""  # lone fan-in → no parallel-peer line
@@ -101,7 +102,7 @@ def test_team_position_block_four_dag_shapes():
 
 
 def test_team_position_a1_respects_pinned_artifacts():
-    """A1 with task-book artifacts: strict path, not RESEARCH_DIR free naming."""
+    """A1 with task-book artifacts: path listed as fact, no dump-cabinet cookbook."""
     research_dir = "notes"
 
     plan, errs = build_run_plan(
@@ -121,10 +122,11 @@ def test_team_position_a1_respects_pinned_artifacts():
     )
     assert errs == []
     up = _build_messages(plan, plan.by_id("pin_r1"), {}, "SYS", "原始请求")[1].content or ""
-    assert "严格按任务书路径" in up
+    assert "严格按任务书路径" not in up
     assert f"{research_dir}/选型调研报告.md" in up
     assert "自起描述性文件名" not in up
     assert "findings-" not in up
+    assert "自定位" not in up
 
 
 def test_team_position_roster_keeps_full_sibling_task_and_artifacts():

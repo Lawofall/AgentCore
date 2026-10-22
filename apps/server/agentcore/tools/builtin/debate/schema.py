@@ -8,18 +8,14 @@ from typing import Any
 from agentcore.llm.model_ref import parse_model_input
 from agentcore.runtime.debate import DebateSide
 from agentcore.runtime.debate.constants import (
-    CLOSING_LENGTH_HINT,
     CX_LENGTH_HINT,
     DEBATE_OUTPUT_LIMIT,
     FORM_LABELS,
-    LENGTH_HINT,
 )
 from agentcore.tools.protocol import ToolResult
 
 __all__ = [
     "DEBATE_OUTPUT_LIMIT",
-    "LENGTH_HINT",
-    "CLOSING_LENGTH_HINT",
     "CX_LENGTH_HINT",
     "FORM_LABELS",
     "DEBATE_DESCRIPTION",

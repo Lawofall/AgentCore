@@ -83,6 +83,8 @@ def check_repo_assets() -> list[str]:
 
     required = [
         SERVER_ROOT / "Dockerfile",
+        SERVER_ROOT / "Dockerfile.guest",
+        SERVER_ROOT / "build-pins.env",
         SERVER_ROOT / "scripts" / "fetch_runsc.py",
         SERVER_ROOT / "agentcore" / "tools" / "sandbox" / "gvisor.py",
         SERVER_ROOT / "agentcore" / "tools" / "sandbox" / "limits.py",
@@ -98,12 +100,19 @@ def check_repo_assets() -> list[str]:
             _fail(f"missing {path.relative_to(REPO_ROOT)}")
 
     dockerfile = (SERVER_ROOT / "Dockerfile").read_text(encoding="utf-8")
-    for needle in ("runsc", "cloud_python.txt", "fonts-noto-cjk", "INSTALL_RUNSC"):
+    guestfile = (SERVER_ROOT / "Dockerfile.guest").read_text(encoding="utf-8")
+    for needle in ("runsc", "INSTALL_RUNSC", "guest_image", "guest-rootfs"):
         if needle in dockerfile:
             _ok(f"Dockerfile mentions {needle}")
         else:
             errors.append(f"Dockerfile missing {needle}")
             _fail(f"Dockerfile missing {needle}")
+    for needle in ("cloud_python.txt", "fonts-noto-cjk", "INSTALL_BROWSER"):
+        if needle in guestfile:
+            _ok(f"Dockerfile.guest mentions {needle}")
+        else:
+            errors.append(f"Dockerfile.guest missing {needle}")
+            _fail(f"Dockerfile.guest missing {needle}")
 
     sandbox_yml = (REPO_ROOT / "deploy" / "docker-compose.sandbox.yml").read_text(
         encoding="utf-8"

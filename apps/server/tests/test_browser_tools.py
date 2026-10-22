@@ -508,12 +508,21 @@ async def test_navigate_success_includes_elements_in_untrusted(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_click_missing_ref_does_not_steer_snapshot_first(tmp_path):
+    result = await BrowserClickTool().execute({}, _ctx(tmp_path))
+    assert not result.success
+    text = _fail_text(result)
+    assert "ref" in text
+    assert "snapshot" not in text.lower()
+
+
+@pytest.mark.asyncio
 async def test_ref_stale_error_is_not_doubled(tmp_path):
     """Driver ValueError + host prefix must not appear twice in model-facing text."""
     session = _FakeSession(
         BrowserCommandResult(
             ok=False,
-            error="ValueError: ref 版本过期（快照 v1 ≠ 当前 v2）：页面已变化，请重新 browser_snapshot 获取最新 ref",
+            error="ValueError: ref 版本过期（快照 v1 ≠ 当前 v2）：页面已变化",
         )
     )
     tool = BrowserClickTool(registry=_FakeRegistry(session=session))
@@ -673,7 +682,7 @@ async def test_navigate_missing_frame_succeeds_with_honest_note(tmp_path):
     payload = json.loads(result.output)
     note = payload.get("note") or ""
     assert "未截到画面" in note
-    assert "snapshot" in note.lower() or "browser_snapshot" in note
+    assert "snapshot" not in note.lower()
 
 
 @pytest.mark.asyncio

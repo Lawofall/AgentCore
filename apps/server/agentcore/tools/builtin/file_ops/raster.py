@@ -21,12 +21,7 @@ from agentcore.workspace.protocol import (
 )
 
 _IMAGE_NATIVE_OUTPUT = (
-    "已把工作区图片发给当前模型（多模态）。"
-    "勿再要求 run 开图，也勿假定未看见像素。"
-)
-
-_IMAGE_UNSUPPORTED_NEXT = (
-    "当前主模型不收图。勿把路径当作已读像素；勿用 run 开图；勿索要重发。"
+    "已把工作区图片发给当前模型（多模态）。勿假定未看见像素。"
 )
 
 
@@ -34,7 +29,6 @@ def _observe(
     *,
     kind: str,
     path: str,
-    next_actions: str,
     start: float,
     size: int | None = None,
     text: str = "",
@@ -45,7 +39,6 @@ def _observe(
         kind=kind,
         path=path,
         type_label="image",
-        next_actions=next_actions,
         size=size,
         text=text,
     )
@@ -71,9 +64,8 @@ async def read_raster_image(
         return _observe(
             kind="image",
             path=display,
-            next_actions=_IMAGE_UNSUPPORTED_NEXT,
             start=start,
-            text="当前主模型不收图，本回合未把像素发给模型。",
+            text="当前主模型不收图，本回合未把像素发给模型。勿把路径当作已读像素。",
         )
     try:
         raw = await context.backend.read_bytes(rel_path)
@@ -104,10 +96,9 @@ async def read_raster_image(
         return _observe(
             kind="image",
             path=display,
-            next_actions="文件为空，没有像素可发。",
             start=start,
             size=0,
-            text="工作区图片为空。",
+            text="工作区图片为空，没有像素可发。",
         )
     mime = image_data_mime(display)
     b64 = base64.b64encode(raw).decode("ascii")

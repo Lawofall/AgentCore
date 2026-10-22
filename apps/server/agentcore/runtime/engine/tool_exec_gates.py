@@ -238,7 +238,7 @@ async def _check_safety_and_approval_gates(
         )
         denial = (
             f"工具 '{name}' 被安全熔断拒绝：{breaker.reason}"
-            "请改用其他方案，不要原样重试该路径。"
+            "不要原样重试该路径。"
         )
         # ``denial`` steers the model and stays on ``result``; the user face is curated
         # by code only (see tool_failure_face) — an order aimed at the model is not copy.
@@ -419,29 +419,26 @@ async def _check_safety_and_approval_gates(
             # 该问而没人可问 → fail closed。到这里 ``approval_gate is None`` 只剩一个
             # 含义：这条路根本没有可询问的用户（无人值守作业 / 运维关闸），**不是**
             # 「这条路不需要卡」——后者已在上面按 sandbox_approval 判掉了。
-            # Model face keeps「让用户在可确认的界面重试」; the user face must not — on an
-            # unattended path the reader IS the user and that surface does not exist.
+            # Unattended: no confirm screen exists. Do not tell the model to send
+            # the reader (who IS the user) to retry on a missing UI.
             if force_breaker:
                 no_gate_status = "circuit_breaker_no_gate"
                 no_gate_face = "safety_breaker_unattended"
                 denial = (
                     f"工具 '{name}' 触发安全熔断且当前路径无法人工确认，已拒绝执行。"
                     f"{breaker.reason if breaker else ''}"
-                    "请改用其他方案。"
                 )
             elif always_confirm:
                 no_gate_status = "always_confirm_no_gate"
                 no_gate_face = "approval_unattended"
                 denial = (
                     f"工具 '{name}' 必须由用户逐次确认，但当前路径弹不出确认卡，已拒绝执行。"
-                    "请改用其他方案，或让用户在可确认的界面重试。"
                 )
             else:
                 no_gate_status = "grantable_no_gate"
                 no_gate_face = "approval_unattended"
                 denial = (
                     f"工具 '{name}' 需要用户授权，但当前路径没有可询问的用户，已拒绝执行。"
-                    "请改用其他方案，或让用户在可确认的界面重试。"
                 )
             sink.emit(
                 tool_use_end(
@@ -521,7 +518,7 @@ async def _check_safety_and_approval_gates(
                 # failure — mark policy_failure so the run-scoped circuit breaker ignores it.
                 denial = (
                     f"工具 '{name}' 未获用户授权，该操作未执行。"
-                    "请改用其他方案或询问如何继续，不要再调用此工具。"
+                    "不要再调用此工具。"
                 )
                 # The user just clicked 拒绝 (or let the card expire) — echoing the
                 # model's「不要再调用此工具」back at them reads as an order to the person

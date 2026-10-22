@@ -86,7 +86,7 @@ export function testAssemblyProfile(
     recipe: "standard",
     enabled_mcp_server_ids: [],
     omitted_factory_skills: [],
-    disabled_tools: ["debate", "folders", "chats"],
+    disabled_tools: ["browser", "debate", "folders", "chats"],
     omitted_projections: [],
     omit_desk_rules: false,
     skill_membership: null,

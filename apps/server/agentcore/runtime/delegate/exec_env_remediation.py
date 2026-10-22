@@ -75,9 +75,6 @@ def exec_env_remediation_zh(
         return (
             "本回合已是云端会话，但云端执行沙箱未装配"
             f"{failure_clause}——**不要**再引导「云上做完再写入」。"
-            "可选：① 稍后重试（待宿主 gVisor/沙箱恢复）；"
-            "② 有产物时 export_to_local 后在本机 npm/pip 运行；"
-            "③ 打开本机文件夹（桌面默认通道，≠离线）。"
         )
 
     if kind == "capability_office":
@@ -116,9 +113,7 @@ def exec_env_remediation_zh(
             "需执行才能生成的 Office 目标（.pptx/.xlsx 等）无法在本回合生成。"
             f"{docx_clause}"
             "【禁止】再派「写脚本 / 跑脚本」空转，也【禁止】再 claim 已装配；"
-            "【禁止】再引导「云上做完再写入」。"
-            "请立即发 ask_user 说明沙箱不可用，并给 export_to_local / 本机传统 /"
-            "稍后重试，或诚实收口标缺口。"
+            "【禁止】再引导「云上做完再写入」。诚实收口并标缺口。"
         )
 
     # capability_run
@@ -142,8 +137,7 @@ def exec_env_remediation_zh(
         "[能力提示] 本回合已是云端会话，执行沙箱未装配"
         f"{failure_clause}（无 run）："
         "worker 只能写脚本 / 文件，无法真正运行或生成需执行才能产出的产物。"
-        "【禁止】再引导「云上做完再写入」。收尾如实标缺口，或 ask_user："
-        "稍后重试 / export_to_local 本机跑 / 打开本机文件夹（≠离线）。"
+        "【禁止】再引导「云上做完再写入」。收尾如实标缺口。"
     )
 
 

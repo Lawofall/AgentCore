@@ -175,8 +175,10 @@ async def test_list_profiles_marks_default_when_present(monkeypatch):
     assert views[0].id == capability_preset_id(STANDARD)
     assert views[0].is_default is True
     assert views[0].omitted_factory_skills == ()
+    assert "browser" in views[0].disabled_tools
     assert "debate" in views[0].disabled_tools
     assert "files" not in views[0].disabled_tools
+    assert "web" not in views[0].disabled_tools
 
 
 @pytest.mark.asyncio

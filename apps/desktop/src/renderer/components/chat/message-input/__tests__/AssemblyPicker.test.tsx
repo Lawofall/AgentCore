@@ -122,7 +122,7 @@ describe("AssemblyPicker", () => {
     );
     expect(names).toEqual(["标准", "完整", "极简", "写稿", "官方DS"]);
     expect(list?.textContent).toContain("能改文件、跑命令、上网。");
-    expect(list?.textContent).toContain("含辩论、搜旧对话。");
+    expect(list?.textContent).toContain("含浏览器、辩论、搜旧对话。");
     expect(list?.textContent).toContain("这场只聊天。");
     expect(list?.textContent).not.toContain("默认");
     expect(list?.textContent).not.toContain("预置");

@@ -160,4 +160,4 @@ async def test_files_form_soft_completes_on_pure_prose_no_landing():
     state = res["t_1"]
     assert state.phase is RunPhase.COMPLETED
     assert not (state.files_touched or [])
-    assert any("工作区" in w for w in (state.warnings or []))
+    assert any("没有写成文件" in w for w in (state.warnings or []))

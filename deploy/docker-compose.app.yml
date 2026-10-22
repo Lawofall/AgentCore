@@ -10,8 +10,10 @@
 #     -f deploy/docker-compose.app.yml \
 #     --env-file deploy/config/production.env \
 #     up -d
-# 镜像由 CI 构建推 ACR；deploy-server.sh 设 IMAGE_TAG=<sha> 后 pull 部署。
-# 本地可 `up --build` 直接从 apps/server 构建。
+# 镜像由生产机 `pnpm deploy:backend` 构建推 ACR（guest-base:<id> + api:<sha>）；
+# deploy-server.sh / finish-server 设 IMAGE_TAG=<sha> 后 pull。本地构建走
+# `docker buildx bake -f apps/server/docker-bake.hcl api`（先 source build-pins.env）。
+# compose `up --build` 需要本机已有 guest-base 镜像（named context guest_image）。
 #
 # 注：worker 容器（部署拓扑与环境.md §三 当前容器清单）暂不纳入——当前执行引擎是
 # 进程内 asyncio 协程，无独立 worker 入口；贸然起第二个 `python -m agentcore`
@@ -34,9 +36,12 @@ services:
     build:
       context: ../apps/server
       dockerfile: Dockerfile
+      additional_contexts:
+        guest_image: "docker-image://${IMAGE_REGISTRY:-agentcore}/guest-base:${GUEST_BASE_TAG:-local}"
       args:
         GIT_SHA: ${GIT_SHA:-unknown}
         BUILT_AT: ${BUILT_AT:-unknown}
+        PYTHON_IMAGE: ${PYTHON_IMAGE:-}
     restart: unless-stopped
     # 停机预算（宽限期 40s 不动）：uvicorn 排空 5s + 抢救 20s + 收尾硬顶 8s + 余量 7s。
     # Docker 默认 10s 会中途 SIGKILL、制造孤儿 lease。

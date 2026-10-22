@@ -60,7 +60,6 @@ _REPLAN_PARAMETERS = {
             "description": (
                 "对这个人说的话。他正停着等拍板：这句就是决定，他接着干。"
                 "他还没开始：开工前交给他。"
-                "偏好、授权或花钱先 ask_user，再把用户的话写在这里。"
             ),
             "items": {
                 "type": "object",

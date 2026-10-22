@@ -420,7 +420,7 @@ def format_evidence_pack_index(pack: EvidencePack) -> str:
         )
         ledger_lines = (
             "\n\n【证据包预登记台账·引用须用下列 #rN】\n"
-            "引用附件事实写成【已核实·#rN】（id 见下；双方共享，禁各造私证）。\n"
+            "id 见下；双方共享，禁各造私证。\n"
             f"{mapped}"
         )
     incomplete_banner = format_evidence_completeness_notice(

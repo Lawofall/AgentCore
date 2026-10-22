@@ -65,10 +65,8 @@ class HandoffTool:
             name=HANDOFF_TOOL_NAME,
             description=(
                 "收尾。便条写在这一轮正文（给主管/下游）。"
-                "有下游：必须调用；一句话结论（现在什么已成立）；"
-                "下一棒要接的路径/数字/决定。便条 ≠ 文件说明。"
-                "无下游：默认不调用；仅盘上没有的假设/风险/未验证才补。"
-                "先写完交付再调用。"
+                "有下游：必须调用。无下游：默认不调用。"
+                "便条 ≠ 文件说明。"
             ),
             parameters={"type": "object", "properties": {}, "required": []},
             face=ToolFace.ORCHESTRATION,

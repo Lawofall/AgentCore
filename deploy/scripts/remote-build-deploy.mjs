@@ -8,8 +8,9 @@
  *
  * 前置：deploy/.env.deploy.local 配好 DEPLOY_SSH_*；生产机 /opt/agentcore/.env 含 ACR 凭据。
  * 活栈若不在默认 repo/deploy：在 .env.deploy.local 设 AGENTCORE_DEPLOY_DIR（会传入 SSH）。
- * 预构建耗时：层缓存命中约 1–2min；冷缓存 15–30min+。勿中途杀 SSH；进度可查
- * check-remote-build.mjs。切流才停 api。权威 → docs/05-平台与运维/发布与门禁.md
+ * 预构建：guest-base:<content-id> 命中后只编 api（约数分钟）；guest 输入变了才
+ * 重下 Chromium（小时级）。勿中途杀 SSH；进度可查 check-remote-build.mjs。
+ * 切流才停 api。权威 → docs/05-平台与运维/发布与门禁.md
  */
 import { pathToFileURL } from "node:url";
 import { resolve } from "node:path";
@@ -91,11 +92,16 @@ function ensureBuildxBlock() {
   sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq docker-buildx-plugin
 fi
 export DOCKER_BUILDKIT=1
+if ! docker buildx inspect agentcore-cache >/dev/null 2>&1; then
+  echo "==> creating docker-container builder agentcore-cache (registry cache)"
+  docker buildx create --name agentcore-cache --driver docker-container --driver-opt network=host
+fi
+docker buildx inspect agentcore-cache --bootstrap >/dev/null
 `;
 }
 
 function prepareBlock() {
-  return `echo "==> prepare api:\$SHA (worktree; no checkout of live tree; no latest)"
+  return `echo "==> prepare api:\$SHA (worktree; guest-base + registry cache; no latest)"
 ${ensureBuildxBlock()}WT="\$HOME_DIR/build-worktrees/\$SHA"
 mkdir -p "\$HOME_DIR/build-worktrees"
 git worktree prune
@@ -105,12 +111,50 @@ fi
 git worktree add --detach "\$WT" "\$SHA"
 cleanup_wt() { git -C "\$REPO" worktree remove --force "\$WT" 2>/dev/null || rm -rf "\$WT"; }
 trap cleanup_wt EXIT
+set -a
+# shellcheck disable=SC1091
+. "\$WT/apps/server/build-pins.env"
+set +a
+: "\${PYTHON_IMAGE:?build-pins.env missing PYTHON_IMAGE}"
+: "\${PLAYWRIGHT_VERSION:?build-pins.env missing PLAYWRIGHT_VERSION}"
+GUEST_ID="\$(
+  cd "\$WT/apps/server"
+  sha256sum Dockerfile.guest build-pins.env agentcore/tools/sandbox/cloud_python.txt \\
+    | sha256sum | cut -c1-16
+)"
+GUEST_IMAGE="\${IMAGE_REG}/guest-base:\${GUEST_ID}"
+CACHE_API="\${IMAGE_REG}/build-cache:api"
+CACHE_GUEST="\${IMAGE_REG}/build-cache:guest"
+echo "==> guest-base=\$GUEST_IMAGE"
+if docker pull "\$GUEST_IMAGE"; then
+  echo "==> guest-base cache hit"
+else
+  echo "==> building guest-base (cold; Playwright/Chromium)"
+  docker buildx build --builder agentcore-cache --progress=plain --push --pull \\
+    --provenance=false --sbom=false \\
+    -t "\$GUEST_IMAGE" \\
+    --cache-from "type=registry,ref=\$CACHE_GUEST" \\
+    --cache-to "type=registry,ref=\$CACHE_GUEST,mode=max,ignore-error=true" \\
+    --build-arg PYTHON_IMAGE="\$PYTHON_IMAGE" \\
+    --build-arg PLAYWRIGHT_VERSION="\$PLAYWRIGHT_VERSION" \\
+    --build-arg PLAYWRIGHT_DOWNLOAD_HOST="\${PLAYWRIGHT_DOWNLOAD_HOST:-}" \\
+    -f "\$WT/apps/server/Dockerfile.guest" \\
+    "\$WT/apps/server"
+fi
 BUILT_AT="\$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-docker buildx build --progress=plain --load \\
+echo "==> building api:\$SHA"
+docker buildx build --builder agentcore-cache --progress=plain --push \\
+  --provenance=false --sbom=false \\
   -t "\$IMAGE" \\
+  --cache-from "type=registry,ref=\$CACHE_API" \\
+  --cache-to "type=registry,ref=\$CACHE_API,mode=max,ignore-error=true" \\
+  --build-context "guest_image=docker-image://\$GUEST_IMAGE" \\
+  --build-arg PYTHON_IMAGE="\$PYTHON_IMAGE" \\
   --build-arg GIT_SHA="\$SHA" --build-arg BUILT_AT="\$BUILT_AT" \\
+  -f "\$WT/apps/server/Dockerfile" \\
   "\$WT/apps/server"
-docker push "\$IMAGE"
+echo "==> pulling api:\$SHA onto host for switch inspect"
+docker pull "\$IMAGE"
 `;
 }
 
@@ -131,7 +175,12 @@ docker push "\${IMAGE_REG}/api:latest"
 `;
 }
 
-function remoteScript(mode, sha) {
+/**
+ * @param {DeployMode} mode
+ * @param {string} sha
+ * @returns {string}
+ */
+export function remoteScript(mode, sha) {
   const prelude = remotePrelude(sha);
   if (mode === "prepare") return prelude + prepareBlock();
   if (mode === "switch") return prelude + switchBlock();
@@ -154,7 +203,7 @@ function main() {
   const { mode, sha } = parsed;
   loadDeployEnv();
   const labels = {
-    prepare: `→ remote prepare api:${sha}（不切流、不推 latest；层缓存命中约 1–2min）`,
+    prepare: `→ remote prepare api:${sha}（不切流、不推 latest；guest-base 命中后约数分钟）`,
     switch: `→ remote switch api:${sha}（finish-server，不重建）`,
     now: `→ remote prepare+switch api:${sha}（紧急；切流仍在构建之后）`,
   };

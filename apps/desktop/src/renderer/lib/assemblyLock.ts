@@ -7,7 +7,7 @@ export const OFFICIAL_CHAT_READONLY =
 
 const PICKER_BLURB: Record<string, string> = {
   standard: "能改文件、跑命令、上网。",
-  full: "含辩论、搜旧对话。",
+  full: "含浏览器、辩论、搜旧对话。",
   chat: "这场只聊天。",
 };
 

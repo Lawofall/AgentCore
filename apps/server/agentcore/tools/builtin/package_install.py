@@ -442,11 +442,8 @@ def network_unavailable_message() -> str:
     return (
         "无法装包：当前会话未授权受限出网，或云端主机不具备包装源白名单出网能力"
         "（云端需 Linux gVisor + netns chokepoint；本机执行不依赖主机 gVisor）。"
-        "装包不会在无授权 / 无 chokepoint 时空转。\n"
-        "可选降级：① 把会话边界升到「本文件夹」后重试 run（command 写成装包命令） "
-        "→ 再验；② 走结构自检（graph_consistent / import 图）；"
-        "③ export_to_local 或本机传统打开本地文件夹后 npm/pnpm/yarn / uv/pip/poetry "
-        "install（已是云端会话时【勿】再引导「云上做完再写入」当修复）。"
+        "装包不会在无授权 / 无 chokepoint 时空转。"
+        "已是云端会话时【勿】再引导「云上做完再写入」当修复。"
     )
 
 

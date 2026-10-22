@@ -53,4 +53,8 @@
     <!-- 语音输入 (@capgo/capacitor-speech-recognition 原生识别)。iOS 待补：原生工程尚未生成
          (无 Info.plist)，接入 iOS 时需加 NSSpeechRecognitionUsageDescription + NSMicrophoneUsageDescription。 -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- 对话/IM「拍照」走系统相机（WebView file input capture）。不申请相册全盘读：
+         相册/文件走系统选择器。iOS 待补 NSCameraUsageDescription。 -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
 </manifest>
