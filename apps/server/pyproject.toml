@@ -22,7 +22,7 @@ dependencies = [
     "boto3>=1.43.29",
     "cryptography>=50.0.0",
     "pyotp>=2.9",
-    "pillow>=12.3.0",
+    "pillow>=13.0.0",
     "markdown-it-py>=3.0",
     "markitdown[docx,pdf,pptx]>=0.1.6",
     "python-docx>=1.2.0",
@@ -52,7 +52,7 @@ sidecar = [
     "markitdown[docx,pdf,pptx]>=0.1.6",
     "python-docx>=1.2.0",
     "fpdf2>=2.8.0",
-    "pillow>=12.3.0",
+    "pillow>=13.0.0",
     "pypdfium2>=5.11.0",
 ]
 dev = [
