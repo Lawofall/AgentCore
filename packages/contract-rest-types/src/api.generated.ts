@@ -3374,8 +3374,9 @@ export interface paths {
          *
          *     The response doubles as the device's declaration for this root: the caller's
          *     ``X-Client-Device`` is bound onto its live fulfill session *and* stored on the
-         *     grant (``fulfill/declare.py``), so the very first ``external/<alias>/`` op of
-         *     the resuming turn has a machine to route to.
+         *     grant (``fulfill/declare.py``), so the first file op of the resuming turn has
+         *     a machine to route to. Scratch conversations promote the first grant to the
+         *     working root (session cwd); ``folder_id`` does not change.
          */
         post: operations["grant_external_folder_v1_conversations__conversation_id__workspace_external_grants_post"];
         /**
@@ -9496,6 +9497,11 @@ export interface components {
             namespace: string;
             /** Root Id */
             root_id: string;
+            /**
+             * Working Root
+             * @default false
+             */
+            working_root: boolean;
         };
         /** ExternalGrantListResponse */
         ExternalGrantListResponse: {

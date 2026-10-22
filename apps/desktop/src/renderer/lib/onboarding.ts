@@ -1,43 +1,9 @@
 /**
- * 新用户首启体验 — 草稿空态的纯客户端决策。
+ * 空草稿居中判定 — 纯客户端。
  *
- * 平台代付、开箱即用：不存在「先接入模型才能对话」的门。首启入口 = 草稿空态
- *（starter chips / returning），判定不依赖服务端状态 / DB。BYOK 降级为
- *「设置·模型配置」里的可选升级。
+ * 平台代付、开箱即用：不存在「先接入模型才能对话」的门。空草稿只留问候 + 输入框，
+ * 新老用户同一张脸。BYOK 降级为「设置·模型配置」里的可选升级。
  */
-
-/** 草稿页空态两态（平台代付后无「未接入」态）。 */
-export type DraftEmptyKind = "starter_chips" | "returning";
-
-/** 判定只看「有没有真的跑成过一轮」，故每条对话只需要消息数。 */
-export type DraftEmptyConversation = {
-  messageCount: number;
-};
-
-export type DraftEmptyInput = {
-  conversations: readonly DraftEmptyConversation[];
-};
-
-/**
- * 一来一回才算「跑成过」：用户发出的那条 + AI 答回来的那条。
- *
- * 误触新建（0 条）、发出去就没下文 / 中途放弃（1 条）都不算——这些人恰恰最需要引导。
- */
-const ENGAGED_MESSAGE_COUNT = 2;
-
-/**
- * 草稿空态（无消息）两态选择。
- *
- * 判定的是「这个人跑成过一次吗」，不是「这个账号建过对话吗」。曾经按后者判定：只要库里
- * 有一条记录——失败的、中途放弃的、误触建的——示例任务就一起永久消失，
- * 第一次没成功的人第二次回来反而更没抓手。
- */
-export function resolveDraftEmptyKind(input: DraftEmptyInput): DraftEmptyKind {
-  const engaged = input.conversations.some(
-    (c) => c.messageCount >= ENGAGED_MESSAGE_COUNT,
-  );
-  return engaged ? "returning" : "starter_chips";
-}
 
 /**
  * 空草稿态是否把对话输入框与引导合成视口中央块。
@@ -59,10 +25,3 @@ export function shouldCenterDraftComposer(input: {
   if (input.hasMessages) return false;
   return input.isDraft || input.knownEmptyPersisted === true;
 }
-
-/** 首启任务建议 — 天然触发多 Agent 分工；点击仅填入输入框。 */
-export const STARTER_TASK_CHIPS: readonly string[] = [
-  "分三路并行调研：竞品定价、用户痛点、渠道策略，各自产出一页摘要后由你汇总成决策简报。",
-  "请拉一位写手起草产品介绍初稿，一位审校挑逻辑漏洞，一位整理成对外可用的发布说明。",
-  "帮我规划一次周末短途旅行：一人查交通与住宿，一人排景点与用餐，最后合成一份可执行行程。",
-] as const;

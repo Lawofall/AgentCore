@@ -23,6 +23,7 @@ export type GrantReadonlyResult =
       root: FsRoot;
       alias: string;
       namespace: string;
+      workingRoot?: boolean;
       displayLabel?: string;
     }
   | { ok: false; reason: "unavailable" }
@@ -32,7 +33,7 @@ export type GrantReadonlyResult =
       message: string;
     };
 
-const ALIAS_STORE_FAILED = "授权已登记但本机没能记下挂载名，请重试";
+const ALIAS_STORE_FAILED = "授权已登记但本机没能记下别名，请重试";
 
 const RESOLVE_FAIL_FALLBACK: Record<
   Exclude<GrantSessionReadonlyRootFailReason, "invalid">,
@@ -45,7 +46,9 @@ const RESOLVE_FAIL_FALLBACK: Record<
   cancelled: "用户拒绝授权",
 };
 
-type ExternalGrantBody = { grant: { alias: string; namespace: string } };
+type ExternalGrantBody = {
+  grant: { alias: string; namespace: string; working_root?: boolean };
+};
 
 function describeGrantError(e: unknown): string {
   if (e instanceof ApiError && e.status === 404) {
@@ -58,9 +61,10 @@ function describeGrantError(e: unknown): string {
 export function formatGrantReadonlyFolderAnswer(
   optionLabel: string,
   folderName: string,
-  namespace: string,
+  workingRoot = false,
 ): string {
-  return `${optionLabel}（${folderName} → ${namespace}；只读、仅本次对话、可撤销）`;
+  const role = workingRoot ? "本次对话正在用" : "额外文件夹";
+  return `${optionLabel}（${folderName}；${role}，可撤销）`;
 }
 
 /**
@@ -116,7 +120,14 @@ export async function pickAndGrantReadonlyFolder(
       throw e;
     }
     // 别名只有这一个来源。存不下就没有可用的挂载（本机引擎按它解析路径），当作授权失败。
-    if (!(await adoptServerAlias(conversationId, root.id, body.grant.alias))) {
+    if (
+      !(await adoptServerAlias(
+        conversationId,
+        root.id,
+        body.grant.alias,
+        body.grant.working_root,
+      ))
+    ) {
       await revokeExternalGrant(conversationId, root.id);
       return { ok: false, reason: "error", message: ALIAS_STORE_FAILED };
     }
@@ -126,6 +137,7 @@ export async function pickAndGrantReadonlyFolder(
       root,
       alias: body.grant.alias,
       namespace: body.grant.namespace,
+      workingRoot: body.grant.working_root === true,
       displayLabel: granted.displayLabel,
     };
   } catch (e) {

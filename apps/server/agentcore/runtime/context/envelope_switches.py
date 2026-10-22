@@ -72,8 +72,8 @@ PROJECTIONS: tuple[EnvelopeProjection, ...] = (
     ),
     EnvelopeProjection(
         MOUNTS,
-        "区外",
-        "信封报挂进来的区外目录和能不能改。",
+        "文件夹",
+        "信封报正在用的文件夹和额外授权目录能不能改。",
     ),
     EnvelopeProjection(
         GAPS,

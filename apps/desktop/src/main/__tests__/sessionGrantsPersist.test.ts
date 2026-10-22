@@ -42,6 +42,7 @@ describe("fs-session-grants payload", () => {
             conversationId: "c1",
             mode: "organize",
             alias: "desk",
+            workingRoot: true,
           },
         ],
         [
@@ -63,6 +64,8 @@ describe("fs-session-grants payload", () => {
     expect(Object.keys(payload).sort()).toEqual(["c1", "c2"]);
     expect(payload.c1.map((r) => r.id).sort()).toEqual(["s1", "s2"]);
     expect(payload.c1.find((r) => r.id === "s2")?.mode).toBe("organize");
+    expect(payload.c1.find((r) => r.id === "s2")?.workingRoot).toBe(true);
+    expect(payload.c1.find((r) => r.id === "s1")?.workingRoot).toBe(false);
     expect(payload.c2).toHaveLength(1);
     expect(payload).not.toHaveProperty("perm");
   });

@@ -157,6 +157,10 @@ vi.mock("@/hooks/useWorkspaces", () => ({
   useConversationWorkspace: () => null,
   useWorkspaces: () => ({ data: [] }),
 }));
+vi.mock("@/hooks/useExternalGrants", () => ({
+  useExternalGrants: () => ({ data: [], isError: false, refetch: vi.fn() }),
+  useRevokeExternalGrant: () => ({ mutate: vi.fn(), isPending: false }),
+}));
 const toolBoard = vi.hoisted(() => ({
   disabled: [] as string[],
   switches: [] as [],

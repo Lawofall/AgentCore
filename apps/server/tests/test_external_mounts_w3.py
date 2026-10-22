@@ -194,7 +194,11 @@ async def test_add_grant_retries_on_alias_integrity_error(monkeypatch):
     )
 
     m = await gs.add_grant(
-        "c1", root_id="r-new", label="报表", alias_hint="reports"
+        "c1",
+        root_id="r-new",
+        label="报表",
+        alias_hint="reports",
+        working_root=False,
     )
     assert aliases_seen == ["reports", "reports_2"]
     assert m.alias == "reports_2"
@@ -256,7 +260,9 @@ async def test_add_grant_retries_on_root_integrity_error(monkeypatch):
         lambda: _FakeSessionCM(),
     )
 
-    m = await gs.add_grant("c1", root_id="r1", label="桌面新", alias_hint="desk")
+    m = await gs.add_grant(
+        "c1", root_id="r1", label="桌面新", alias_hint="desk", working_root=False
+    )
     assert upsert_n["n"] == 2
     assert m.alias == "desk"
     assert m.label == "桌面新"
@@ -293,7 +299,9 @@ async def test_add_grant_exhausts_retries_raises(monkeypatch):
     )
 
     with pytest.raises(RuntimeError, match="conflict after retries"):
-        await gs.add_grant("c1", root_id="r1", label="x", alias_hint="desk")
+        await gs.add_grant(
+            "c1", root_id="r1", label="x", alias_hint="desk", working_root=False
+        )
 
 
 @pytest.mark.asyncio
@@ -389,7 +397,10 @@ async def test_server_workspace_external_readonly(tmp_path: Path):
     with pytest.raises(OutsideWorkspace, match="只读"):
         await ws.write("external/ext/note.txt", "x")
     entries = await ws.list("external/ext", "*")
-    assert any(e.path == "external/ext/note.txt" for e in entries)
+    assert any(
+        e.path.replace("\\", "/").endswith("note.txt") for e in entries
+    )
+    assert not any("external/" in e.path.replace("\\", "/") for e in entries)
 
 
 @pytest.mark.asyncio
@@ -423,14 +434,17 @@ async def test_server_workspace_model_path_no_dotdot_leak(tmp_path: Path):
     )
     # Reverse-lookup without logical (the dangerous fallback path).
     mapped = ws._model_path(ext / "a.txt")
-    assert mapped == "external/ext/a.txt"
-    assert ".." not in mapped
+    assert mapped.replace("\\", "/").endswith("a.txt")
+    assert ".." not in mapped.replace("\\", "/")
+    assert "external/" not in mapped.replace("\\", "/")
 
     tree = await ws.list_tree("external/ext", max_depth=2)
     assert tree.entries
     for e in tree.entries:
-        assert e.path.startswith("external/ext")
-        assert ".." not in e.path
+        posix = e.path.replace("\\", "/")
+        assert posix.endswith("a.txt") or posix.endswith("ext")
+        assert ".." not in posix
+        assert "external/" not in posix
 
 
 def test_external_env_var_name():

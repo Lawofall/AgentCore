@@ -1,10 +1,12 @@
-"""Session-level external directory mounts (W3 readonly + organize).
+"""Session-level directory grants (readonly / organize / attach_rw).
 
-Model-facing paths use the relative namespace ``external/<alias>/…`` — absolute
-OS paths never enter prompts. File tools route through these mounts; access is
-gated by per-alias ``mode`` (readonly | organize | attach_rw). ``resolve_safe_path`` /
-pathGuard algorithms are unchanged: each mount is a separate root passed into
-the same guard.
+Authorization is not a path rename. The model-facing dialect is native:
+relatives under the working root, OS-absolute for extra grants that have
+``abs_path``. Internal routing may still use ``external/<alias>/…`` for extras
+without abs (cloud worker + desktop channel). Absolute OS paths never persist
+on the server. File tools route through these mounts; access is gated by
+per-alias ``mode``. ``resolve_safe_path`` / pathGuard algorithms are unchanged:
+each mount is a separate root passed into the same guard.
 """
 
 from __future__ import annotations
@@ -83,14 +85,15 @@ ORGANIZE_DENIED_OPS: frozenset[str] = frozenset(
 
 @dataclass(frozen=True)
 class ExternalMount:
-    """One session-scoped directory grant under ``external/<alias>/``.
+    """One session-scoped directory grant.
 
     ``root_id`` is the desktop authorized-root handle (LocalWorkspace channel /
     cloud ServerWorkspace external bridge). ``abs_path`` is set only where the
     engine has direct Path I/O (sidecar); cloud grants leave it ``None`` and let
     the desktop resolve via per-op ``root_id``. ``mode`` is explicit: never flip a
     bare ``readonly=False`` (that would also open execute / process_start /
-    archive on the desktop dispatch path).
+    archive on the desktop dispatch path). ``working_root`` marks the session
+    cwd (first grant on a scratch conversation); at most one per conversation.
     """
 
     alias: str
@@ -98,6 +101,7 @@ class ExternalMount:
     label: str
     abs_path: str | None = None
     mode: ExternalMountMode = "readonly"
+    working_root: bool = False
 
     @property
     def readonly(self) -> bool:
@@ -317,12 +321,13 @@ def build_external_env(mounts: dict[str, ExternalMount]) -> dict[str, str]:
     """Map alias → abs path for code_execute env injection.
 
     Organize mounts are **excluded** (proposal §五): file tools are the only
-    supported external write path under organize. ``attach_rw`` injects (本机
-    附加可写根上的 ``code_execute`` 靠环境变量找到目录). Skips missing abs.
+    supported extra write path under organize. Working-root grants are excluded
+    (``run`` cwd is that folder). Extra ``attach_rw`` injects so code can find
+    the directory. Skips missing abs.
     """
     out: dict[str, str] = {}
     for alias, m in mounts.items():
-        if m.mode == "organize":
+        if m.mode == "organize" or m.working_root:
             continue
         if m.abs_path:
             out[external_env_var(alias)] = m.abs_path

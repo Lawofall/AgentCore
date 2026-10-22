@@ -355,8 +355,9 @@ def _fold_history_messages(
     """Fold ORM rows into the CEO window, merging consecutive empty failures.
 
     ``journals`` maps assistant message id → journal facts. When present, an
-    assistant row expands into that turn's captain transcript. Callers that
-    omit it (unit folds, memory) keep prose only.
+    assistant row expands into that turn's projected captain transcript
+    (window compact / restorable tool-result clearing + sealed prose). Callers
+    that omit it (unit folds, memory) keep prose only.
     """
     history: list[dict] = []
     pending_failures: list[str] = []
@@ -523,8 +524,10 @@ async def load_chat_context(
     the un-folded recent tail; otherwise just the plain recent window.
 
     Rows are ``user`` / ``assistant`` / ``tool``. An assistant turn with a journal
-    expands into that captain's tool rounds plus the sealed prose. When the conversation has a
-    summary, the tail is everything strictly newer than the watermark (recent-biased
+    expands into that captain's **projected** tool rounds plus the sealed prose
+    (window compact when present; otherwise restorable tool-result clearing).
+    When the conversation has a
+    summary, the tail is everything strictly newer than the watermark (recent-biased)
     and capped at ``compaction_context_max_messages``, not the fold-time 24k token
     budget — that budget decides where to fold, never a per-request sliding cut),
     taken from its first ``user`` on so that cap-driven drop keeps the near-end

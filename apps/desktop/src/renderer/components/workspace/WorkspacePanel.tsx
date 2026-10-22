@@ -2,8 +2,10 @@ import { EmptyHint, IconButton } from "@/components/files/parts";
 import { Button } from "@/components/ui";
 import { useConversationFileSource } from "@/hooks/useConversationFileSource";
 import { getConversations } from "@/hooks/useConversations";
+import { useExternalGrants } from "@/hooks/useExternalGrants";
 import { useConversationWorkspace } from "@/hooks/useWorkspaces";
 import { hasLocalFiles } from "@/lib/capabilities";
+import { createLocalRootSource } from "@/services/sources/localRootSource";
 import { useConversationStore } from "@/stores/conversation";
 import { useFoldersStore } from "@/stores/folders";
 import { FolderOpen, Trash2, X } from "lucide-react";
@@ -40,7 +42,13 @@ export function WorkspaceMode() {
   // IPC、云端走 REST，故 Agent 在本地写的文件这里也能列出（修复「写在本地、读在云端」）。
   const ws = useConversationWorkspace(conversationId);
   const fsAvailable = hasLocalFiles();
-  const source = useConversationFileSource(conversationId);
+  const convSource = useConversationFileSource(conversationId);
+  const grants = useExternalGrants(conversationId);
+  const working = (grants.data ?? []).find((g) => g.working_root);
+  const source =
+    working && fsAvailable
+      ? createLocalRootSource(working.root_id, working.label)
+      : convSource;
 
   useEffect(() => {
     const sourceKind: "local" | "cloud" | null =
@@ -71,7 +79,9 @@ export function WorkspaceMode() {
     );
   }
 
-  const emptyTreeHint = "工作区暂无文件。";
+  const emptyTreeHint = working
+    ? "这个文件夹里还没有列出文件。"
+    : "工作区暂无文件。快速对话可在输入区添加文件夹。";
 
   const isCloudWorkspace = ws?.location === "cloud";
   const localRootId = ws?.location === "local" ? ws.rootId : null;

@@ -69,6 +69,7 @@ from .observe import (
     extract_failed_text,
     format_observe_envelope,
     ole_next,
+    pdf_next,
     scan_next,
     source_too_large_next,
     table_next,
@@ -930,7 +931,17 @@ class FileReadTool:
             images_sent=len(jpegs),
             accepts_images=accepts_images,
         )
-        return _file_read_ok(output, start, metadata=image_meta)
+        assembled = _code_execute_assembled(context)
+        return _observe_ok(
+            kind="pdf",
+            path=display,
+            type_label="pdf",
+            next_actions=pdf_next(code_execute_assembled=assembled),
+            start=start,
+            size=size,
+            text=output,
+            metadata=image_meta,
+        )
 
     async def _observe_ole(
         self,

@@ -25,6 +25,7 @@ describe("sidecar externalMounts mode", () => {
         label: "Desktop",
         absPath: "C:\\Users\\me\\Desktop",
         mode: "organize",
+        workingRoot: false,
       },
     ]);
   });
@@ -56,5 +57,22 @@ describe("sidecar externalMounts mode", () => {
       },
     ]);
     expect(mounts[0]?.mode).toBe("readonly");
+  });
+
+  it("forwards workingRoot for the session cwd", () => {
+    const mounts = buildExternalMounts([
+      {
+        id: "r4",
+        name: "对账单",
+        absPath: "D:\\对账单",
+        sessionOnly: true,
+        conversationId: "c1",
+        mode: "attach_rw",
+        alias: "bills",
+        workingRoot: true,
+      },
+    ]);
+    expect(mounts[0]?.workingRoot).toBe(true);
+    expect(mounts[0]?.mode).toBe("attach_rw");
   });
 });

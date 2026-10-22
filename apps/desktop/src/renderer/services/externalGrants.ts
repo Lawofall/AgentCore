@@ -11,7 +11,9 @@ export type ExternalGrantItem = Schemas["ExternalGrantItem"];
 export function externalGrantModeLabel(
   mode: ExternalGrantItem["mode"],
 ): string {
-  return mode === "organize" ? "整理" : "只读";
+  if (mode === "organize") return "整理";
+  if (mode === "attach_rw") return "可改";
+  return "只读";
 }
 
 export async function listExternalGrants(

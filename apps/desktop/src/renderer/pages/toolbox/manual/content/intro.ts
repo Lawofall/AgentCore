@@ -5,7 +5,7 @@ import type { ManualChapterContent } from "../types";
 /**
  * 认识 AgentCore —— 第一章内容源。
  *
- * 口径：实用说明、不营销；上手步骤与空态引导（DraftEmptyState）对齐——平台代付、开箱即用，
+ * 口径：实用说明、不营销；上手步骤与空态对齐——平台代付、开箱即用，
  * 第一步就是说目标，BYOK 只是可选升级，不占开头把人支去外部站点。
  */
 export const introChapter: ManualChapterContent = {
@@ -74,7 +74,7 @@ export const introChapter: ManualChapterContent = {
           items: [
             {
               title: "说目标",
-              desc: "新建对话，用大白话描述你想要什么——平台代付，打开就能聊，不用先接入模型。空态页的建议任务可一键填入。",
+              desc: "新建对话，用大白话描述你想要什么——平台代付，打开就能聊，不用先接入模型。",
             },
             {
               title: "看它干活",

@@ -1,44 +1,5 @@
-import {
-  type DraftEmptyInput,
-  STARTER_TASK_CHIPS,
-  resolveDraftEmptyKind,
-  shouldCenterDraftComposer,
-} from "@/lib/onboarding";
+import { shouldCenterDraftComposer } from "@/lib/onboarding";
 import { describe, expect, it } from "vitest";
-
-describe("resolveDraftEmptyKind", () => {
-  const base: DraftEmptyInput = { conversations: [] };
-
-  it("starter_chips for a keyless brand-new user (no access gate)", () => {
-    expect(resolveDraftEmptyKind(base)).toBe("starter_chips");
-  });
-
-  it("returning once the user has actually run a turn end to end", () => {
-    expect(
-      resolveDraftEmptyKind({ conversations: [{ messageCount: 2 }] }),
-    ).toBe("returning");
-  });
-
-  // 第一次没跑成的人，第二次回来最需要抓手——不能因为库里留了条记录就把引导收走。
-  it("keeps the guidance for someone whose only attempts never got an answer", () => {
-    expect(
-      resolveDraftEmptyKind({
-        conversations: [
-          { messageCount: 0 }, // 误触新建
-          { messageCount: 1 }, // 发出去就没下文 / 中途放弃
-        ],
-      }),
-    ).toBe("starter_chips");
-  });
-
-  it("one successful conversation among failures is enough to graduate", () => {
-    expect(
-      resolveDraftEmptyKind({
-        conversations: [{ messageCount: 1 }, { messageCount: 4 }],
-      }),
-    ).toBe("returning");
-  });
-});
 
 describe("shouldCenterDraftComposer", () => {
   it("centers an empty draft (keyless included — no access gate)", () => {
@@ -81,15 +42,5 @@ describe("shouldCenterDraftComposer", () => {
         knownEmptyPersisted: true,
       }),
     ).toBe(true);
-  });
-});
-
-describe("starter chips", () => {
-  it("ships exactly three Chinese multi-agent starter tasks", () => {
-    expect(STARTER_TASK_CHIPS).toHaveLength(3);
-    for (const chip of STARTER_TASK_CHIPS) {
-      expect(chip.length).toBeGreaterThan(10);
-      expect(/[\u4e00-\u9fff]/.test(chip)).toBe(true);
-    }
   });
 });

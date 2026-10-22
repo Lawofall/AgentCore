@@ -65,8 +65,15 @@ export async function resolveHostShellCwd(
     if (authorized.length === 0) {
       return { ok: true, cwd: os.homedir() };
     }
-    const permanent = getAllRoots()[0];
-    want = (permanent ?? authorized[0]).absPath;
+    const working = conversationId
+      ? listSessionRoots(conversationId).find((r) => r.workingRoot)
+      : undefined;
+    if (working?.absPath) {
+      want = working.absPath;
+    } else {
+      const permanent = getAllRoots()[0];
+      want = (permanent ?? authorized[0]).absPath;
+    }
   }
 
   const resolved = await realAbs(want);

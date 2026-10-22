@@ -127,6 +127,10 @@ function parseBoundary(p: unknown): FolderGrantBoundary | undefined {
     : undefined;
 }
 
+function parsePick(p: unknown): boolean {
+  return isRecord(p) && p.pick === true;
+}
+
 async function realpathOrSelf(absPath: string): Promise<string> {
   try {
     return await fs.realpath(absPath);
@@ -444,6 +448,7 @@ export function registerFsIpc(): void {
       const pathHint = parseGrantPath(p);
       const rootId = parseRootId(p);
       const boundary = parseBoundary(p);
+      const pick = parsePick(p);
       await ensureReady();
 
       let absPath: string;
@@ -462,6 +467,24 @@ export function registerFsIpc(): void {
         }
         absPath = existing.absPath;
         displayLabel = existing.name;
+      } else if (pick && !pathHint && !wellKnown && !targetName) {
+        const picked = await pickDirectoryForRoot();
+        if (!picked.ok) {
+          if (picked.reason === "cancelled") {
+            return { ok: false, reason: "cancelled", message: "用户拒绝授权" };
+          }
+          return {
+            ok: false,
+            reason: "invalid",
+            message: picked.message,
+          };
+        }
+        absPath = picked.absPath;
+        displayLabel = basename(absPath) || absPath;
+        const canon = await realpathOrSelf(absPath);
+        existing = listSessionRoots(args.conversationId).find(
+          (r) => r.absPath === canon,
+        );
       } else {
         const resolved = await resolveGrantAbsPath({
           path: pathHint,
@@ -566,10 +589,13 @@ export function registerFsIpc(): void {
         "alias",
       ]);
       if (!args) return false;
+      const workingRoot =
+        isRecord(p) && p.workingRoot === true;
       const ok = await adoptSessionRootAlias(
         args.conversationId,
         args.rootId,
         args.alias,
+        workingRoot,
       );
       if (ok) await pushLiveExternalMounts(args.conversationId);
       return ok;

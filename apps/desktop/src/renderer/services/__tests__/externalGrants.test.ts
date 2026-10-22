@@ -25,6 +25,7 @@ describe("externalGrants", () => {
   it("maps mode labels", () => {
     expect(externalGrantModeLabel("readonly")).toBe("只读");
     expect(externalGrantModeLabel("organize")).toBe("整理");
+    expect(externalGrantModeLabel("attach_rw")).toBe("可改");
   });
 
   it("lists grants from GET external-grants", async () => {

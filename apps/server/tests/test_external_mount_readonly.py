@@ -61,7 +61,8 @@ def test_format_external_mount_not_found_names_folder_only():
     exc = ExternalMountError("找不到该目录", reason="not_found")
     text = format_external_mount_error(exc)
     assert "找不到" in text
-    assert "挂载只接受文件夹" in text
+    assert "授权只接受文件夹" in text
+    assert "无法挂载" not in text
     assert "安装包/文件" in text
     assert "reason=not_found" in text
 

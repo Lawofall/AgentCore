@@ -87,6 +87,7 @@ _ACTION_ENUM = sorted(GUI_ACTIONS | {"shell"})
 HOST_TOOL_DESCRIPTION = (
     "这台电脑上的短命令（Windows：PowerShell 5.1；macOS/Linux：登录壳）；"
     "或附着一扇窗后读控件并按 ref 点按/键入。"
+    "干活根和已授权文件夹里的文件用 read / run，不要用 host 拼盘符或 cd 进去。"
 )
 
 HOST_TOOL_PARAMETERS: dict[str, Any] = {
@@ -102,7 +103,10 @@ HOST_TOOL_PARAMETERS: dict[str, Any] = {
         },
         "command": {
             "type": "string",
-            "description": "省略 action 时必填的本机短命令。",
+            "description": (
+                "省略 action 时必填的本机短命令。"
+                "干活根文件用 read / run，不要 cd 或拼已授权盘符。"
+            ),
         },
         "ref": {
             "type": "string",
@@ -300,12 +304,21 @@ def _host_shell_transport_args(
     command: str, timeout_seconds: int, context: ToolContext
 ) -> dict[str, Any]:
     """cwd is runtime-injected; never forward a model-supplied abs path."""
+    from agentcore.workspace.working_root import working_cwd_payload
+
     payload: dict[str, Any] = {
         "command": command,
         "timeout_seconds": timeout_seconds,
         "conversation_id": context.conversation_id or "",
     }
     backend = context.backend
+    cwd_abs, working_rid = working_cwd_payload(backend)
+    if cwd_abs:
+        payload["cwd"] = cwd_abs
+    if working_rid:
+        payload["root_id"] = working_rid
+    if cwd_abs:
+        return payload
     if getattr(backend, "location", None) != "local":
         return payload
     root = getattr(backend, "root", None)
@@ -316,7 +329,7 @@ def _host_shell_transport_args(
     channel = getattr(backend, "_channel", None)
     rid = getattr(channel, "root_id", None) if channel is not None else None
     if isinstance(rid, str) and rid:
-        payload["root_id"] = rid
+        payload.setdefault("root_id", rid)
     return payload
 
 
@@ -345,6 +358,14 @@ async def _execute_shell(
             "用 action=read|list 确认进程仍在跑。"
         )
     timeout_seconds, slack = _shell_budget(command)
+    from agentcore.workspace.working_root import (
+        HOST_GRANT_ABS_MSG,
+        host_command_hits_grant_abs,
+    )
+
+    mounts = getattr(context.backend, "_mounts", None) or {}
+    if host_command_hits_grant_abs(command, mounts):
+        return _fail(HOST_GRANT_ABS_MSG, contract_failure=True)
     channel = context.desktop_channel
     if channel is None:
         return _no_channel_error()

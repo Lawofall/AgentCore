@@ -18,6 +18,7 @@ export async function adoptSessionRootAlias(
   conversationId: string,
   rootId: string,
   alias: string,
+  workingRoot?: boolean,
 ): Promise<boolean> {
   await ensureReady();
   const root = getRoot(rootId);
@@ -26,8 +27,9 @@ export async function adoptSessionRootAlias(
   }
   const next = alias.trim();
   if (!next) return false;
-  if (root.alias === next) return true;
-  setRoot({ ...root, alias: next });
+  const nextWorking = workingRoot === true;
+  if (root.alias === next && root.workingRoot === nextWorking) return true;
+  setRoot({ ...root, alias: next, workingRoot: nextWorking });
   await saveSessionGrants();
   return true;
 }

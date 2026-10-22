@@ -24,6 +24,7 @@ describe("ManualIntro", () => {
     expect(screen.getByText("说目标")).toBeTruthy();
     expect(screen.queryByText("接入额度后开聊")).toBeNull();
     expect(screen.getByText(/平台代付，打开就能聊/)).toBeTruthy();
+    expect(screen.queryByText(/建议任务/)).toBeNull();
     // BYOK 仍在，但降级为可选升级。
     expect(screen.getByText(/可选升级/)).toBeTruthy();
   });

@@ -104,7 +104,7 @@ async function runExternalMount(
         ok: false,
         error: {
           kind: "ExternalMountError",
-          detail: "非桌面环境，无法挂载本机目录",
+          detail: "非桌面环境，无法授权本机目录",
           reason: "unavailable",
         },
       };

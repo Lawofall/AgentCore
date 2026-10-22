@@ -7,7 +7,9 @@ append-only until the next compact.
 
 Canonical ``messages`` and the turn journal stay full. Resume rebuilds the fat
 window via ``window_from_journal``, then ``build_request_window`` re-applies this
-projection from the latest ``window_compact`` fact. UI is unchanged.
+projection from the latest ``window_compact`` fact. The next user turn's
+``transcript_rows`` applies the same fact so a completed ReAct is not
+un-compacted at the chat boundary. UI is unchanged.
 
 → 执行引擎架构设计 §三 · 工人回合内 window compact
 """

@@ -264,11 +264,13 @@ def recency_keep_index(
 ) -> int:
     """Index of the first kept message: newest user-led turns packed to ``token_budget``.
 
-    The budget counts replayed tool rounds when ``journals`` is supplied, so a short
-    bubble with a long receipt does not stay verbatim forever. Always keeps the
-    latest user-led turn, even when it alone exceeds the budget. Returns
-    ``len(batch)`` when there is no user-led turn (fold nothing — no keep
-    boundary). Returns ``0`` when the whole batch fits (or is that one turn).
+    The budget counts the projected replay (window compact + restorable
+    tool-result clearing), not the fat journal. Latest user utterance and
+    sealed prose stay; that turn's tool middle is already slimmed by
+    ``transcript_rows``. Always keeps the latest user-led DB turn (the
+    watermark grain), even when the slim replay still exceeds the budget.
+    Returns ``len(batch)`` when there is no user-led turn. Returns ``0``
+    when the whole batch fits (or is that one turn).
     """
     n = len(batch)
     starts = _user_led_starts(batch)

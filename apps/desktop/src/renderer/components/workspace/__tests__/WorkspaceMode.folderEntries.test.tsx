@@ -39,6 +39,11 @@ vi.mock("@/lib/capabilities", () => ({
   hasLocalFiles: () => false,
 }));
 
+vi.mock("@/hooks/useExternalGrants", () => ({
+  useExternalGrants: () => ({ data: [], isError: false, refetch: vi.fn() }),
+  useRevokeExternalGrant: () => ({ mutate: vi.fn(), isPending: false }),
+}));
+
 vi.mock("@/components/workspace/FileBrowser", () => ({
   FileBrowser: ({
     renderWorkroomLead,

@@ -388,7 +388,8 @@ class WindowCompactFact:
 
     Canonical messages / journal stay full. ``build_request_window`` replaces the
     first ``folded_rounds`` assistant rounds after the task head with ``summary``.
-    Last write per ``run_id`` wins. Not part of ``window_from_journal``.
+    Last write per ``run_id`` wins. Not part of ``window_from_journal``. The next
+    user turn reads this fact from the journal via ``transcript_rows``.
     """
 
     run_id: str

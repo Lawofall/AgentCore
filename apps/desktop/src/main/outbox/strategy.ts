@@ -395,6 +395,7 @@ function remapPathOrVerifyFailure(raw: string): string | null {
       "不是目录：",
       "路径不存在：",
       "区外路径不存在",
+      "读不到这个路径",
     ].some((n) => raw.includes(n))
   ) {
     return "not_found";

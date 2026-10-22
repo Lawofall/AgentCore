@@ -23,6 +23,7 @@ export type GrantOrganizeResult =
       root: FsRoot;
       alias: string;
       namespace: string;
+      workingRoot?: boolean;
       displayLabel?: string;
     }
   | { ok: false; reason: "unavailable" }
@@ -32,7 +33,7 @@ export type GrantOrganizeResult =
       message: string;
     };
 
-const ALIAS_STORE_FAILED = "授权已登记但本机没能记下挂载名，请重试";
+const ALIAS_STORE_FAILED = "授权已登记但本机没能记下别名，请重试";
 
 const RESOLVE_FAIL_FALLBACK: Record<
   Exclude<GrantSessionReadonlyRootFailReason, "invalid">,
@@ -45,7 +46,9 @@ const RESOLVE_FAIL_FALLBACK: Record<
   cancelled: "用户拒绝授权",
 };
 
-type ExternalGrantBody = { grant: { alias: string; namespace: string } };
+type ExternalGrantBody = {
+  grant: { alias: string; namespace: string; working_root?: boolean };
+};
 
 function describeGrantError(e: unknown): string {
   if (e instanceof ApiError && e.status === 404) {
@@ -109,7 +112,14 @@ export async function pickAndGrantSessionFolder(
       throw e;
     }
     // 别名只有这一个来源。存不下就没有可用的挂载（本机引擎按它解析路径），当作授权失败。
-    if (!(await adoptServerAlias(conversationId, root.id, body.grant.alias))) {
+    if (
+      !(await adoptServerAlias(
+        conversationId,
+        root.id,
+        body.grant.alias,
+        body.grant.working_root,
+      ))
+    ) {
       await revokeExternalGrant(conversationId, root.id);
       return { ok: false, reason: "error", message: ALIAS_STORE_FAILED };
     }
@@ -119,11 +129,19 @@ export async function pickAndGrantSessionFolder(
       root,
       alias: body.grant.alias,
       namespace: body.grant.namespace,
+      workingRoot: body.grant.working_root === true,
       displayLabel: granted.displayLabel,
     };
   } catch (e) {
     return { ok: false, reason: "error", message: describeGrantError(e) };
   }
+}
+
+/** Input-area「添加文件夹」: OS picker, no folder_id rebind. */
+export async function pickAndGrantConversationFolder(
+  conversationId: string,
+): Promise<GrantOrganizeResult> {
+  return pickAndGrantSessionFolder(conversationId, "attach_rw", { pick: true });
 }
 
 export async function pickAndGrantOrganizeFolder(

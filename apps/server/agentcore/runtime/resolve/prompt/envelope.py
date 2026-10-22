@@ -153,6 +153,28 @@ def history_row_to_llm_message(msg: dict) -> LLMMessage:
     )
 
 
+def llm_message_to_history_row(message: LLMMessage) -> dict[str, Any]:
+    """Reverse of :func:`history_row_to_llm_message` for compact projections."""
+    row: dict[str, Any] = {"role": message.role, "content": message.content or ""}
+    if message.tool_calls:
+        row["tool_calls"] = [
+            {
+                "id": call.id,
+                "type": "function",
+                "function": {
+                    "name": call.function.name or "",
+                    "arguments": call.function.arguments or "",
+                },
+            }
+            for call in message.tool_calls
+        ]
+    if message.tool_call_id:
+        row["tool_call_id"] = message.tool_call_id
+    if message.reasoning_content:
+        row["reasoning_content"] = message.reasoning_content
+    return row
+
+
 def opening_ceo_messages(
     *,
     system_prompt: str,

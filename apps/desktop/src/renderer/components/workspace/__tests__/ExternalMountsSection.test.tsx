@@ -18,6 +18,14 @@ vi.mock("@/lib/toast", () => ({
   notifyError: vi.fn(),
 }));
 
+vi.mock("@/lib/capabilities", () => ({
+  hasLocalFiles: () => true,
+}));
+
+vi.mock("@/lib/grantOrganizeFolder", () => ({
+  pickAndGrantConversationFolder: vi.fn(),
+}));
+
 import { useExternalGrants } from "@/hooks/useExternalGrants";
 import { ExternalMountsSection } from "../ExternalMountsSection";
 
@@ -38,17 +46,19 @@ function mockQuery(
 const SAMPLE = [
   {
     root_id: "root-1",
-    alias: "咨询",
-    label: "咨询",
-    namespace: "external/咨询",
-    mode: "readonly" as const,
+    alias: "bills",
+    label: "对账单",
+    namespace: ".",
+    mode: "attach_rw" as const,
+    working_root: true,
   },
   {
     root_id: "root-2",
-    alias: "报表",
-    label: "报表资料",
-    namespace: "external/报表",
-    mode: "organize" as const,
+    alias: "desk",
+    label: "桌面",
+    namespace: "external/desk",
+    mode: "readonly" as const,
+    working_root: false,
   },
 ];
 
@@ -62,25 +72,23 @@ afterEach(() => {
 });
 
 describe("ExternalMountsSection", () => {
-  it("renders nothing when the grant list is empty", () => {
-    const { container } = render(
-      <ExternalMountsSection conversationId="conv-1" />,
-    );
-    expect(container.firstChild).toBeNull();
+  it("shows add-folder when the grant list is empty on desktop", () => {
+    render(<ExternalMountsSection conversationId="conv-1" />);
+    expect(screen.getByText("正在用的文件夹")).toBeTruthy();
+    expect(screen.getByText(/还没有授权文件夹/)).toBeTruthy();
   });
 
-  it("lists label / namespace / mode without absolute paths", () => {
+  it("lists working root vs extra without exposing external/", () => {
     useExternalGrantsMock.mockReturnValue(mockQuery(SAMPLE) as never);
     render(<ExternalMountsSection conversationId="conv-1" />);
 
-    expect(screen.getByText("区外目录挂载")).toBeTruthy();
-    expect(screen.getByText("咨询")).toBeTruthy();
-    expect(screen.getByText("报表资料")).toBeTruthy();
-    expect(screen.getByText(/external\/咨询 · 只读/)).toBeTruthy();
-    expect(screen.getByText(/external\/报表 · 整理/)).toBeTruthy();
+    expect(screen.getByText("正在用的文件夹")).toBeTruthy();
+    expect(screen.getByText("对账单")).toBeTruthy();
+    expect(screen.getByText("桌面")).toBeTruthy();
+    expect(screen.getByText(/正在用 · 可改/)).toBeTruthy();
+    expect(screen.getByText(/额外 · 只读/)).toBeTruthy();
+    expect(screen.queryByText(/external\//)).toBeNull();
     expect(screen.queryByText(/^[A-Za-z]:\\/)).toBeNull();
-    expect(screen.queryByText(/\/Users\//)).toBeNull();
-    expect(screen.queryByText(/\/home\//)).toBeNull();
   });
 
   it("calls revoke with root_id when 撤销 is clicked", () => {
@@ -106,7 +114,7 @@ describe("ExternalMountsSection", () => {
       mockQuery(undefined, { isError: true }) as never,
     );
     render(<ExternalMountsSection conversationId="conv-1" />);
-    const line = screen.getByText(/无法加载区外挂载/);
+    const line = screen.getByText(/无法加载已授权文件夹/);
     expect(line.className).toContain("text-muted-foreground");
     expect(line.className).not.toContain("destructive");
     expect(screen.getByRole("button", { name: "重试" })).toBeTruthy();

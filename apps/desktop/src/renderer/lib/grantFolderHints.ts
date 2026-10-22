@@ -8,6 +8,8 @@ export type GrantFolderHints = {
   targetName?: string;
   /** Existing session root id — upgrade without a path. */
   rootId?: string;
+  /** Open the OS folder picker (input-area「添加文件夹」). */
+  pick?: boolean;
 };
 
 export function grantIpcFields(hints?: GrantFolderHints): {
@@ -15,6 +17,7 @@ export function grantIpcFields(hints?: GrantFolderHints): {
   wellKnown?: GrantSessionWellKnown;
   targetName?: string;
   rootId?: string;
+  pick?: boolean;
 } {
   if (!hints) return {};
   return {
@@ -22,5 +25,6 @@ export function grantIpcFields(hints?: GrantFolderHints): {
     ...(hints.wellKnown ? { wellKnown: hints.wellKnown } : {}),
     ...(hints.targetName ? { targetName: hints.targetName } : {}),
     ...(hints.rootId ? { rootId: hints.rootId } : {}),
+    ...(hints.pick ? { pick: true } : {}),
   };
 }

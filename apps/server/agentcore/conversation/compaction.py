@@ -140,7 +140,9 @@ def _select_fold(
     """Oldest messages to fold this pass: everything before the token-budget keep window.
 
     Packs newest user-led turns up to ``token_budget`` (default
-    ``compaction_recency_token_budget``), always keeping the latest user-led turn.
+    ``compaction_recency_token_budget``), always keeping the latest user-led
+    turn at the DB-row grain (user utterance + sealed reply). Tool process of
+    that turn is the compact projection, not an extra verbatim exemption.
     ``recency`` is ignored — message count is not the retain rule. Returns ``[]``
     unless at least ``min_fold`` messages sit outside that window. ``batch`` is the
     un-folded tail, oldest-first; the last folded created_at becomes the watermark.

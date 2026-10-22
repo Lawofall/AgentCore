@@ -671,23 +671,26 @@ def test_no_mounts_forbids_claiming_grant_confirmed():
 
 
 class _FakeMount:
-    def __init__(self, mode: str) -> None:
+    def __init__(self, mode: str, *, label: str = "", working_root: bool = False) -> None:
         self.mode = mode
+        self.label = label
+        self.working_root = working_root
 
 
 def test_mount_mode_labels_are_capability_facts_not_how():
-    """区外坐标只报授权档；对人开口 / 拷贝配方不进本块。"""
+    """文件夹坐标只报授权档；对人开口 / 拷贝配方不进本块。"""
     backend = _FakeBackend("server")
     backend._mounts = {  # noqa: SLF001
-        "desk": _FakeMount("readonly"),
-        "org": _FakeMount("organize"),
-        "home": _FakeMount("attach_rw"),
+        "desk": _FakeMount("readonly", label="桌面"),
+        "org": _FakeMount("organize", label="整理夹"),
+        "home": _FakeMount("attach_rw", label="对账单", working_root=True),
     }
     out = build_workspace_context(backend, desktop_online=True, run_enabled=False)
-    assert "区外：" in out
-    assert "`external/desk/`（只能看）" in out
-    assert "`external/org/`（可拷入、不覆盖）" in out
-    assert "`external/home/`（可改原件）" in out
+    assert "文件夹：" in out
+    assert "正在用 `对账单`（可改原件；相对路径，`.`=根）" in out
+    assert "额外 `桌面`（只能看；用列举回执里的本机路径）" in out
+    assert "额外 `整理夹`（可拷入、不覆盖；用列举回执里的本机路径）" in out
+    assert "external/" not in out
     assert "（只读）" not in out
     assert "（可读写）" not in out
     assert "先写工作区" not in out

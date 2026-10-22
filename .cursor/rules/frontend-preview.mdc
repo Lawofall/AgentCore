@@ -15,7 +15,7 @@ alwaysApply: false
 |---|---|
 | 人·应用内 | 命令面板（`Ctrl/Cmd+K`）搜「前端预览」→ `#/preview`；深链单场景 `#/preview?s=<场景名>`；工具栏帧滑块拖动看流式中间态（深链 `?k=<n>`） |
 | 人·纯浏览器 | `pnpm -C apps/desktop dev:web` → 开 `http://localhost:5199/index.web.html#/preview` |
-| AI·渲染冒烟（需要看画面时） | `pnpm -C apps/desktop shoot [场景名过滤]` → 逐场景出图到 `shoot-out/<name>.png`，`SHOOT_FRAMES=N` 连中间帧。同族独立预览：首启体验 `#/preview/onboarding` + `shoot:onboarding`（草稿空态两态 + composer 生成中插话态，平台代付无接入门；非 conformance 向量、纯 UI 场景）；产品手册 `shoot:manual`（四章代表场景，含机制真图与辩论室/拍板卡嵌入预览；改手册内容源 `pages/toolbox/manual/content/` 或手册渲染器时才跑） |
+| AI·渲染冒烟（需要看画面时） | `pnpm -C apps/desktop shoot [场景名过滤]` → 逐场景出图到 `shoot-out/<name>.png`，`SHOOT_FRAMES=N` 连中间帧。同族独立预览：首启体验 `#/preview/onboarding` + `shoot:onboarding`（草稿空态 + composer 生成中插话态，平台代付无接入门；非 conformance 向量、纯 UI 场景）；产品手册 `shoot:manual`（四章代表场景，含机制真图与辩论室/拍板卡嵌入预览；改手册内容源 `pages/toolbox/manual/content/` 或手册渲染器时才跑） |
 | AI·协作图视口探针 | `pnpm -C apps/desktop shoot:graph-probe -- <场景名> [输出前缀]` → 对聊天内联 / 全屏两入口量 emptyTopRatio · fullyInside · 裁切数并出截图/JSON 到 `shoot-out-graph-probe/`；**改图宿主/布局/fit/视口后必跑**（辩论场景 `multi_agent_debate`、`multi_agent_debate_multibeat`） |
 | AI·协作图掉帧探针 | 离线：`shoot:graph-perf`（`#/preview`，≤9 节点、不触发 ELK）。**真实掉帧**用 `shoot:graph-perf-live`：先 `electron-vite dev --remoteDebuggingPort=9222`，再 CDP 连运行中应用；报告 `shoot-out-graph-perf/live-*.json`（实测刷新率；遮挡 1Hz 限流秒剔除）。**长任务里跑了什么**用 `shoot:graph-perf-trace`（同 CDP；Chrome trace 拆 Layout/Style/Paint/GC/JS 并点名函数；相位表证伪「不动也卡」；不依赖 `__graphPerf`，可测生产构建）→ `trace-*.json`。不入 CI |
 

@@ -43,7 +43,23 @@ def _row_to_mount(row) -> ExternalMount:
         label=row.label or row.alias,
         abs_path=None,
         mode=normalize_mount_mode(row.mode),
+        working_root=bool(getattr(row, "working_root", False)),
     )
+
+
+async def _conversation_is_scratch(conversation_id: str) -> bool:
+    """True when this conversation has no project ``folder_id`` (裸聊 / 快速对话)."""
+    if _memory is not None:
+        return False
+    from agentcore.db.base import async_session_factory
+    from agentcore.db.models import Conversation
+
+    async with async_session_factory() as session:
+        getter = getattr(session, "get", None)
+        if not callable(getter):
+            return False
+        conv = await getter(Conversation, conversation_id)
+        return conv is not None and getattr(conv, "folder_id", None) is None
 
 
 async def _load_from_db(conversation_id: str) -> dict[str, ExternalMount]:
@@ -91,6 +107,7 @@ async def add_grant(
     alias_hint: str | None = None,
     mode: ExternalMountMode | str = "readonly",
     device_id: str | None = None,
+    working_root: bool | None = None,
 ) -> ExternalMount:
     """Register or refresh a conversation grant. Same ``root_id`` updates label/mode.
 
@@ -102,20 +119,30 @@ async def add_grant(
     ``fulfill/declare.py``) so the binding outlives that device's fulfill
     session. It is not part of the mount the engine sees — a mount is addressed
     by ``root_id``, and picking the machine is the hub's job.
+
+    ``working_root``: ``True`` promotes this grant to session cwd when none
+    exists; ``False`` never promotes; ``None`` auto-promotes the first grant on
+    a scratch conversation (no project ``folder_id``). Memory tests opt in
+    with ``True``.
     """
     resolved_mode = normalize_mount_mode(mode if isinstance(mode, str) else mode)
 
     if _memory is not None:
         with _lock:
             by_alias = _memory.setdefault(conversation_id, {})
+            already = any(m.working_root for m in by_alias.values())
             for existing in by_alias.values():
                 if existing.root_id == root_id:
+                    promote = existing.working_root or (
+                        working_root is True and not already
+                    )
                     updated = ExternalMount(
                         alias=existing.alias,
                         root_id=root_id,
                         label=label or existing.label,
                         abs_path=None,
                         mode=resolved_mode,
+                        working_root=promote,
                     )
                     by_alias[existing.alias] = updated
                     return updated
@@ -123,12 +150,14 @@ async def add_grant(
             alias = uniquify_alias(alias_hint or label, taken)
             if not alias_is_routable(alias):
                 raise ValueError(f"external alias not routable: {alias!r}")
+            promote = working_root is True and not already
             mount = ExternalMount(
                 alias=alias,
                 root_id=root_id,
                 label=label or alias,
                 abs_path=None,
                 mode=resolved_mode,
+                working_root=promote,
             )
             by_alias[alias] = mount
             return mount
@@ -140,16 +169,30 @@ async def add_grant(
     for _ in range(_MAX_GRANT_UPSERT_ATTEMPTS):
         current = await _ensure_cached(conversation_id)
         existing_alias: str | None = None
+        already = any(m.working_root for m in current.values())
         for m in current.values():
             if m.root_id == root_id:
                 existing_alias = m.alias
                 break
+        existing_working = bool(
+            existing_alias and current[existing_alias].working_root
+        )
         if existing_alias is not None:
             alias = existing_alias
         else:
             alias = uniquify_alias(alias_hint or label, set(current))
             if not alias_is_routable(alias):
                 raise ValueError(f"external alias not routable: {alias!r}")
+        if existing_working:
+            promote = True
+        elif working_root is True:
+            promote = not already
+        elif working_root is False:
+            promote = False
+        else:
+            promote = (not already) and await _conversation_is_scratch(
+                conversation_id
+            )
 
         try:
             async with async_session_factory() as session:
@@ -160,6 +203,7 @@ async def add_grant(
                     label=label or alias,
                     mode=resolved_mode,
                     device_id=device_id,
+                    working_root=promote,
                 )
                 mount = _row_to_mount(row)
         except IntegrityError as exc:

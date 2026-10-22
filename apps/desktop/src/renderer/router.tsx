@@ -210,7 +210,7 @@ export const router = createHashRouter([
       // committed conformance vectors through the real dispatch to eyeball every AI
       // state offline (no backend / LLM). See preview/replay.ts.
       { path: "preview", element: <PreviewPage /> },
-      // Preview 首启体验（草稿空态两态 + composer 生成中插话态）.
+      // Preview 首启体验（草稿空态 + composer 生成中插话态）.
       { path: "preview/onboarding", element: <OnboardingPreviewPage /> },
       // Preview 全部对话管理页（时间线列表 · mock 数据离线自检）.
       { path: "preview/conversations", element: <ConversationsPreviewPage /> },

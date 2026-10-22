@@ -2,26 +2,19 @@ export type OnboardingPreviewScene = {
   id: string;
   title: string;
   intent: string;
-  /** Draft empty-state kind or composer generating variant. */
+  /** Draft empty-state or composer generating variant. */
   kind:
-    | "empty-starter-chips"
-    | "empty-returning"
+    | "empty-draft"
     | "composer-generating-bar"
     | "composer-generating-card";
 };
 
 export const ONBOARDING_PREVIEW_SCENES: readonly OnboardingPreviewScene[] = [
   {
-    id: "empty-starter-chips",
-    title: "空态 · 首启任务",
-    intent: "问候 + chips + 输入框居中成一体",
-    kind: "empty-starter-chips",
-  },
-  {
-    id: "empty-returning",
-    title: "空态 · 老用户",
+    id: "empty-draft",
+    title: "空态",
     intent: "单句问候 + 输入框居中成一体",
-    kind: "empty-returning",
+    kind: "empty-draft",
   },
   {
     id: "composer-generating-bar",

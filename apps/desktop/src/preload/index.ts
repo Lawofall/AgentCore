@@ -118,11 +118,12 @@ const fsApi: FsApi = {
     ipcRenderer.invoke(FS_CHANNELS.clearSessionReadonlyRoots, {
       conversationId,
     }),
-  adoptSessionRootAlias: (conversationId, rootId, alias) =>
+  adoptSessionRootAlias: (conversationId, rootId, alias, workingRoot) =>
     ipcRenderer.invoke(FS_CHANNELS.adoptSessionRootAlias, {
       conversationId,
       rootId,
       alias,
+      workingRoot: workingRoot === true,
     }),
   listDir: (rootId, relPath) =>
     ipcRenderer.invoke(FS_CHANNELS.listDir, { rootId, relPath }),

@@ -7,6 +7,7 @@ export interface SidecarExternalMount {
   label: string;
   absPath: string;
   mode: "readonly" | "organize" | "attach_rw";
+  workingRoot?: boolean;
 }
 
 /**
@@ -30,5 +31,6 @@ export function buildExternalMounts(
       absPath: r.absPath,
       mode:
         r.mode === "organize" || r.mode === "attach_rw" ? r.mode : "readonly",
+      workingRoot: r.workingRoot === true,
     }));
 }

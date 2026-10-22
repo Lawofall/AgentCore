@@ -88,7 +88,7 @@ node scripts/check-ui-tokens.mjs --src apps/desktop/src/renderer
 | StatusStrip Recovery 文字链 | 故意弱操作 |
 | 辩论赛事页 | 长期域例外，另一 IA/密度 |
 | 文件类型图标（Material） | SVG 内嵌扩展名品牌色；入口 `FileTypeIcon` / `DirTypeIcon` |
-| `DraftEmptyState` | 对话草稿空态（starter chips），不并 EmptyHint |
+| `DraftEmptyState` | 对话草稿空态（问候），不并 EmptyHint |
 | 侧栏 / 抽屉一行空态 | 导航密度，不套居中 EmptyHint |
 
 ## 桌面 UI 统一

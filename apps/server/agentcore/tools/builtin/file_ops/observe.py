@@ -95,9 +95,21 @@ def table_next(*, code_execute_assembled: bool) -> str:
     if code_execute_assembled:
         return (
             "read 不抽表格全文；用 run（如 openpyxl / pandas）"
-            "按工作区相对路径解析。不要手抄单元格。"
+            "按干活根相对路径解析。不要手抄单元格。"
         )
     return (
         "read 不抽表格全文，本回合也没有按单元格解析的执行工具。"
         "用已给的列名、类型和样例写原件结构报告并落盘待跑变换脚本，不要手抄数据。"
+    )
+
+
+def pdf_next(*, code_execute_assembled: bool) -> str:
+    if code_execute_assembled:
+        return (
+            "read 只看这一窗文本层。要对账、抽表、落盘整理用 run"
+            "（PyMuPDF / pandas）按干活根相对路径解析。不要手抄单元格。"
+        )
+    return (
+        "read 只看这一窗文本层。本回合没有按单元格解析的执行工具。"
+        "用已给文本写结构报告并落盘待跑变换脚本，不要手抄数据。"
     )

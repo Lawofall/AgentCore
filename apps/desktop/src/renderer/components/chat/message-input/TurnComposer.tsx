@@ -16,7 +16,10 @@ import {
 } from "@/lib/composerDelivery";
 import { useComposerActiveProfile } from "@/lib/composerModelProfile";
 import { isComposerSubmitKey, occupiedQueueHint } from "@/lib/composerSendKey";
+import { hasLocalFiles } from "@/lib/capabilities";
 import { connectivityEscalationSuffix } from "@/lib/errors";
+import { pickAndGrantConversationFolder } from "@/lib/grantOrganizeFolder";
+import { notifyError } from "@/lib/toast";
 import {
   dropInlineIndex,
   insertInlineToken,
@@ -71,7 +74,11 @@ import { ComposerContextCompactedHint } from "./ComposerContextCompactedHint";
 import { ComposerDelegateMode } from "./ComposerDelegateMode";
 import { ComposerFailureBanner } from "./ComposerFailureBanner";
 import { ComposerGitStatusChip } from "./ComposerGitStatusChip";
-import { ComposerMoreAddRow, ComposerPlusMenu } from "./ComposerPlusMenu";
+import {
+  ComposerAddFolderRow,
+  ComposerMoreAddRow,
+  ComposerPlusMenu,
+} from "./ComposerPlusMenu";
 import { ComposerReceivedContextButton } from "./ComposerReceivedContextButton";
 import { ComposerVisionHint } from "./ComposerVisionHint";
 import { ComposerWorkspaceChip } from "./ComposerWorkspaceChip";
@@ -712,9 +719,20 @@ export function TurnComposer({
   const attachButton = liveDebate ? null : (
     <ComposerPlusButton onBrowse={mention.openBrowse} />
   );
+  const addFolder = async () => {
+    if (!conversationId) return;
+    const result = await pickAndGrantConversationFolder(conversationId);
+    if (!result.ok && result.reason !== "cancelled") {
+      if (result.reason === "unavailable") return;
+      notifyError(new Error(result.message), "添加文件夹失败");
+    }
+  };
   const moreMenu = compactWorld ? (
     <ComposerPlusMenu>
       {liveDebate ? null : <ComposerMoreAddRow onBrowse={mention.openBrowse} />}
+      {liveDebate || !hasLocalFiles() ? null : (
+        <ComposerAddFolderRow onAddFolder={() => void addFolder()} />
+      )}
       {workspaceChip}
       {gitChip}
       {permissionChip}

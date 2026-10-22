@@ -66,8 +66,9 @@ class ExternalGrantItem(BaseModel):
     alias: str
     root_id: str
     label: str
-    namespace: str  # ``external/<alias>``
+    namespace: str  # ``.`` for working root; ``external/<alias>`` for extras
     mode: Literal["readonly", "organize", "attach_rw"] = "readonly"
+    working_root: bool = False
 
 
 class ExternalGrantListResponse(BaseModel):

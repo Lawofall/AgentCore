@@ -7509,6 +7509,11 @@
           "root_id": {
             "title": "Root Id",
             "type": "string"
+          },
+          "working_root": {
+            "default": false,
+            "title": "Working Root",
+            "type": "boolean"
           }
         },
         "required": [
@@ -30563,7 +30568,7 @@
         ]
       },
       "post": {
-        "description": "Register a conversation external mount (readonly, organize, or attach_rw).\n\nCalled after desktop mint (silent read-only host-path mount or user-confirmed\norganize / attach_rw grant). Body carries ``root_id`` / label / mode only — never\nabsolute paths. ``attach_rw`` is local-traditional only.\n\nThe response doubles as the device's declaration for this root: the caller's\n``X-Client-Device`` is bound onto its live fulfill session *and* stored on the\ngrant (``fulfill/declare.py``), so the very first ``external/<alias>/`` op of\nthe resuming turn has a machine to route to.",
+        "description": "Register a conversation external mount (readonly, organize, or attach_rw).\n\nCalled after desktop mint (silent read-only host-path mount or user-confirmed\norganize / attach_rw grant). Body carries ``root_id`` / label / mode only — never\nabsolute paths. ``attach_rw`` is local-traditional only.\n\nThe response doubles as the device's declaration for this root: the caller's\n``X-Client-Device`` is bound onto its live fulfill session *and* stored on the\ngrant (``fulfill/declare.py``), so the first file op of the resuming turn has\na machine to route to. Scratch conversations promote the first grant to the\nworking root (session cwd); ``folder_id`` does not change.",
         "operationId": "grant_external_folder_v1_conversations__conversation_id__workspace_external_grants_post",
         "parameters": [
           {

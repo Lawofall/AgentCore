@@ -53,6 +53,7 @@ describe("pickAndGrantOrganizeFolder", () => {
       "conv-1",
       "r1",
       "ext_2wcyoa",
+      undefined,
     );
   });
 

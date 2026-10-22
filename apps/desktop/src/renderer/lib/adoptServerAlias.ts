@@ -16,6 +16,7 @@ export async function adoptServerAlias(
   conversationId: string,
   rootId: string,
   alias: string,
+  workingRoot?: boolean,
 ): Promise<boolean> {
   if (!alias) return false;
   if (!hasLocalFiles() || !window.fsApi?.adoptSessionRootAlias) return false;
@@ -24,6 +25,7 @@ export async function adoptServerAlias(
       conversationId,
       rootId,
       alias,
+      workingRoot,
     );
   } catch {
     return false;

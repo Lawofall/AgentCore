@@ -970,6 +970,7 @@ def _remap_path_or_verify_failure(message: str) -> str | None:
             "不是目录：",
             "路径不存在：",
             "区外路径不存在",
+            "读不到这个路径",
         )
     ):
         return "not_found"

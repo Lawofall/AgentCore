@@ -165,8 +165,8 @@ class DesktopClientChannel:
                     registry=self.registry,
                     request_id=request_id,
                     error_kind="ExternalMountError",
-                    error_detail="挂载本机目录失败: no fulfiller（无履约方）",
-                    origin_offline_detail=f"挂载本机目录失败: {ORIGIN_DEVICE_OFFLINE}",
+                    error_detail="授权本机目录失败: no fulfiller（无履约方）",
+                    origin_offline_detail=f"授权本机目录失败: {ORIGIN_DEVICE_OFFLINE}",
                     deadline_seconds=deadline,
                 ),
             )
@@ -176,7 +176,7 @@ class DesktopClientChannel:
                 conversation_id=self.conversation_id,
                 request_id=request_id,
             )
-            raise ExternalMountError("挂载本机目录超时（客户端未响应）") from e
+            raise ExternalMountError("授权本机目录超时（客户端未响应）") from e
 
         if not isinstance(result, dict) or not result.get("ok"):
             detail = ""
@@ -191,7 +191,7 @@ class DesktopClientChannel:
                 elif err:
                     detail = str(err)
             raise ExternalMountError(
-                detail or "找不到该目录，无法挂载",
+                detail or "找不到该目录",
                 reason=reason,
             )
         value = result.get("value")

@@ -37,10 +37,13 @@ def _merge_live_abs(
     out: dict[str, ExternalMount] = {}
     for alias, mount in grants.items():
         prev = live.get(alias)
-        if not mount.abs_path and prev is not None and prev.abs_path:
-            out[alias] = replace(mount, abs_path=prev.abs_path)
-        else:
-            out[alias] = mount
+        merged = mount
+        if prev is not None:
+            if not mount.abs_path and prev.abs_path:
+                merged = replace(merged, abs_path=prev.abs_path)
+            if not mount.working_root and prev.working_root:
+                merged = replace(merged, working_root=True)
+        out[alias] = merged
     for alias, prev in live.items():
         if alias not in out and prev.abs_path:
             out[alias] = prev

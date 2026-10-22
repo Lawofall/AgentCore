@@ -148,8 +148,8 @@ export function draftEnvelopeBoard(): EnvelopeSwitchboard {
       },
       {
         id: "mounts",
-        label: "区外",
-        summary: "信封报挂进来的区外目录和能不能改。",
+        label: "文件夹",
+        summary: "信封报正在用的文件夹和额外授权目录能不能改。",
         off: false,
       },
       {

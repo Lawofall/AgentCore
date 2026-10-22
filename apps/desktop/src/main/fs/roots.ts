@@ -15,8 +15,10 @@ export interface StoredRoot {
    * ``attach_rw`` = 本机传统附加可写（可覆盖）。
    */
   mode?: "readonly" | "organize" | "attach_rw";
-  /** Model-facing alias under ``external/<alias>/``. */
+  /** Internal alias for the engine router. */
   alias?: string;
+  /** Session cwd for a scratch conversation. At most one per conversation. */
+  workingRoot?: boolean;
 }
 
 /** Raw disk row — may still carry a legacy ``readonly`` boolean (migrated on load). */
@@ -29,6 +31,7 @@ type SessionGrantDiskRow = {
   mode?: unknown;
   readonly?: unknown;
   alias?: string;
+  workingRoot?: unknown;
 };
 
 /** On-disk shape: conversationId → session grant rows (paths stay on desktop). */
@@ -65,6 +68,7 @@ function sessionRootPayload(r: StoredRoot): StoredRoot {
     conversationId: r.conversationId,
     mode: coerceSessionMode(r.mode, undefined),
     alias: r.alias,
+    workingRoot: r.workingRoot === true,
   };
 }
 
@@ -81,6 +85,7 @@ function fromDiskRow(
     conversationId: row.conversationId ?? conversationId,
     mode: coerceSessionMode(row.mode, row.readonly),
     alias: typeof row.alias === "string" ? row.alias : undefined,
+    workingRoot: row.workingRoot === true,
   };
 }
 

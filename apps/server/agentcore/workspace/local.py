@@ -39,7 +39,6 @@ from agentcore.workspace.external_mounts import (
     cross_root_copy_error,
     cross_root_move_error,
     external_mutation_allowed,
-    external_ns,
     is_external_namespace,
     route_external,
 )
@@ -61,6 +60,13 @@ from agentcore.workspace.protocol import (
     TreeEntry,
     TreeResult,
     WorkspaceIOError,
+)
+from agentcore.workspace.working_root import (
+    out_routed_path,
+    posix_rel,
+    routes_to_working_root,
+    stays_on_primary,
+    working_mount,
 )
 
 logger = get_logger(__name__)
@@ -177,7 +183,22 @@ class LocalWorkspace:
             # Same contract as ServerWorkspace.resolve_safe_path / desktop pathGuard:
             # bare `/`/`\` → `.`; `/<root_label>/…` strip — before the channel sees it.
             norm = normalize_workspace_path(path, root_label=self.root_label)
-            return None, self._in(norm), None
+            if stays_on_primary(norm) or not routes_to_working_root(norm, self._mounts):
+                return None, self._in(norm), None
+            working = working_mount(self._mounts)
+            assert working is not None
+            routed_rel = posix_rel(norm)
+            if write:
+                err = external_mutation_allowed(
+                    working,
+                    op or "write",
+                    path=path,
+                    permanent=permanent,
+                )
+                if err:
+                    raise OutsideWorkspace(err)
+            rel = routed_rel if routed_rel not in ("", ".") else "."
+            return working.root_id, rel, working.alias
         if write:
             err = external_mutation_allowed(
                 routed.mount,
@@ -191,9 +212,10 @@ class LocalWorkspace:
         return routed.mount.root_id, rel, routed.mount.alias
 
     def _out_routed(self, path: str, alias: str | None) -> str:
-        if alias is None:
-            return self._out(path)
-        return external_ns(alias, path)
+        rewritten = out_routed_path(path, alias, self._mounts)
+        if rewritten is not None:
+            return rewritten
+        return self._out(path)
 
     def _in(self, path: str) -> str:
         """Workspace-relative path → container-relative (prefix the subpath base).
@@ -610,15 +632,17 @@ class LocalWorkspace:
         external_roots = {
             alias: m.root_id
             for alias, m in self._mounts.items()
-            if m.root_id and m.mode != "organize"
+            if m.root_id and m.mode != "organize" and not m.working_root
         }
+        working = working_mount(self._mounts)
+        execute_root = working.root_id if working and working.root_id else None
         args: dict[str, Any] = {
             "code": req.code,
             "language": req.language,
             "timeout_seconds": req.timeout_seconds,
             "memory_limit_mb": req.memory_limit_mb,
             "stdin": req.stdin,
-            "cwd": self._base,
+            "cwd": "." if execute_root else self._base,
             "conversation_id": self._channel.conversation_id,
             "external_roots": external_roots,
         }
@@ -630,6 +654,7 @@ class LocalWorkspace:
         value: dict[str, Any] = await self._channel.request(
             WorkspaceOp.EXECUTE,
             args,
+            root_id=execute_root,
             on_output=req.on_output,
             # Outlive the desktop's own execution timeout (the authoritative kill)
             # by the slack, so a long but legal run is not cut off by the flat
@@ -655,6 +680,8 @@ class LocalWorkspace:
         """
         if not isinstance(raw, list):
             return None
+        if working_mount(self._mounts) is not None:
+            return [posix_rel(str(p)) for p in raw if str(p).strip()]
         return [self._out(str(p)) for p in raw if str(p).strip()]
 
     async def capture_turn_baseline(self, message_id: str) -> str | None:

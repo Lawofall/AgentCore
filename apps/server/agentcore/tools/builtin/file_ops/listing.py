@@ -134,16 +134,20 @@ def looks_like_external_directory(directory: str) -> bool:
 
 
 def external_directory_hint(backend: Any) -> str:
-    """Actionable mounts guidance for bare / failed ``external`` list attempts."""
-    guide = "须使用 `external/<别名>/`（例如 `external/desktop/`）访问已授权区外目录"
+    """Actionable guidance when a reserved internal path is used by mistake."""
+    from agentcore.workspace.working_root import working_mount
+
     mounts = getattr(backend, "_mounts", None) or {}
-    if not mounts:
-        return (
-            f"{guide}；本对话尚无会话级区外目录授权"
-            "（对本机路径 `read` / `file_batch` copy 后才会出现 mounts）。"
-        )
-    parts = [f"`external/{a}/`" for a in mounts]
-    return f"{guide}；当前 mounts：{'；'.join(parts)}。"
+    working = working_mount(mounts)
+    extras = [m for m in mounts.values() if not m.working_root]
+    if working:
+        return "当前干活根是已授权的文件夹；用相对路径 file_list / read。"
+    if extras:
+        return "额外授权目录请用该目录的本机绝对路径，不要拼内部别名。"
+    return (
+        "本对话还没有授权文件夹。"
+        "请用户在输入区添加文件夹，或对本机路径 read。"
+    )
 
 
 def leftover_fields(arguments: dict[str, Any], names: tuple[str, ...]) -> tuple[str, ...]:
@@ -447,7 +451,7 @@ def visible_list_entries(
 
 def bare_external_error(directory: str, backend: Any, start: float) -> ToolResult:
     return _error(
-        f"directory={directory!r} 无效：裸 `external` 不是可列目录。"
+        f"directory={directory!r} 读不到。"
         + external_directory_hint(backend),
         start,
     )
@@ -469,7 +473,7 @@ async def map_listing_failure(
     if isinstance(exc, NotADirectory):
         if looks_like_external_directory(str(directory)):
             return _error(
-                f"不是可列的区外目录：{directory}。"
+                f"读不到这个路径：{directory}。"
                 + external_directory_hint(context.backend),
                 start,
             )
@@ -489,7 +493,7 @@ async def map_listing_failure(
     if isinstance(exc, PathNotFound):
         if looks_like_external_directory(str(directory)):
             return _path_missing_error(
-                f"区外路径不存在或未授权：{directory}。"
+                f"读不到这个路径：{directory}。"
                 + external_directory_hint(context.backend),
                 start,
                 path=str(directory),

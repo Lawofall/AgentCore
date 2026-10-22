@@ -43,7 +43,6 @@ from agentcore.workspace.external_mounts import (
     cross_root_copy_error,
     cross_root_move_error,
     external_mutation_allowed,
-    external_ns,
     is_external_namespace,
     parse_external_path,
     route_external,
@@ -95,6 +94,13 @@ from agentcore.workspace.trash import (
     soft_delete_expanding_trash_ancestor,
     soft_delete_to_trash,
     trash_dest_under_target,
+)
+from agentcore.workspace.working_root import (
+    model_facing_path,
+    posix_rel,
+    routes_to_working_root,
+    stays_on_primary,
+    working_mount,
 )
 
 # AI-facing ``list`` default — a directory dump this size already crowds the
@@ -424,19 +430,27 @@ class ServerWorkspace:
         self._desktop_channel = channel
 
     def _external_needs_channel(self, *paths: str) -> bool:
-        """True when any path is ``external/`` without ``abs_path`` (desktop channel).
+        """True when any path is a grant without ``abs_path`` (desktop channel).
 
         Unknown aliases raise ``PathNotFound`` immediately. Paths with ``abs_path``
-        (sidecar) stay on direct Path I/O.
+        (sidecar) stay on direct Path I/O. Working-root relatives without abs
+        also go through the channel.
         """
         needs = False
+        working = working_mount(self._mounts)
         for path in paths:
-            if not is_external_namespace(path):
+            if is_external_namespace(path):
+                routed = route_external(path, self._mounts)
+                if routed is None:
+                    raise PathNotFound(path)
+                if not routed.mount.abs_path:
+                    needs = True
                 continue
-            routed = route_external(path, self._mounts)
-            if routed is None:
-                raise PathNotFound(path)
-            if not routed.mount.abs_path:
+            if (
+                working is not None
+                and not working.abs_path
+                and routes_to_working_root(path, self._mounts)
+            ):
                 needs = True
         return needs
 
@@ -489,44 +503,67 @@ class ServerWorkspace:
             routed = route_external(rel, self._mounts)
             if routed is None:
                 raise PathNotFound(rel)
-            if write:
-                err = external_mutation_allowed(
-                    routed.mount,
-                    op or "write",
-                    path=rel,
-                    permanent=permanent,
-                )
-                if err:
-                    raise OutsideWorkspace(err)
-            if not routed.mount.abs_path:
-                raise WorkspaceIOError("会话授权目录在本机引擎外不可直读")
-            mount_root = Path(routed.mount.abs_path)
-            mount_rel = routed.rel if routed.rel not in ("", ".") else "."
-            # Same guard algorithm — separate root, not a weakened boundary.
-            resolved = resolve_safe_path(mount_root, mount_rel if mount_rel != "." else ".")
+            return self._resolve_mount(
+                routed.mount,
+                routed.rel,
+                path=rel,
+                write=write,
+                op=op,
+                permanent=permanent,
+            )
+        if stays_on_primary(rel) or not routes_to_working_root(rel, self._mounts):
+            # Normalize model-supplied absolute root-label paths (``/workspace/x.md`` →
+            # ``x.md``) at this single seam before the traversal guard runs — only inputs
+            # the guard would already reject can be rescued; ``..`` / other-root paths
+            # still fail (see strip_root_label_prefix).
+            resolved = resolve_safe_path(self._root, rel, root_label=self.root_label)
             if resolved is None:
-                # ``"."`` against root: resolve_safe_path(workspace, ".") → workspace
-                if mount_rel in ("", "."):
-                    return mount_root.resolve()
                 raise OutsideWorkspace(rel)
             return resolved
-        # Normalize model-supplied absolute root-label paths (``/workspace/x.md`` →
-        # ``x.md``) at this single seam before the traversal guard runs — only inputs
-        # the guard would already reject can be rescued; ``..`` / other-root paths
-        # still fail (see strip_root_label_prefix).
-        resolved = resolve_safe_path(self._root, rel, root_label=self.root_label)
+        working = working_mount(self._mounts)
+        assert working is not None
+        return self._resolve_mount(
+            working, posix_rel(rel), path=rel, write=write, op=op, permanent=permanent
+        )
+
+    def _resolve_mount(
+        self,
+        mount: ExternalMount,
+        mount_rel: str,
+        *,
+        path: str,
+        write: bool,
+        op: str | None,
+        permanent: bool,
+    ) -> Path:
+        if write:
+            err = external_mutation_allowed(
+                mount,
+                op or "write",
+                path=path,
+                permanent=permanent,
+            )
+            if err:
+                raise OutsideWorkspace(err)
+        if not mount.abs_path:
+            raise WorkspaceIOError("会话授权目录在本机引擎外不可直读")
+        mount_root = Path(mount.abs_path)
+        rel = mount_rel if mount_rel not in ("", ".") else "."
+        resolved = resolve_safe_path(mount_root, rel if rel != "." else ".")
         if resolved is None:
-            raise OutsideWorkspace(rel)
+            if rel in ("", "."):
+                return mount_root.resolve()
+            raise OutsideWorkspace(path)
         return resolved
 
     def _model_path(self, abs_path: Path, *, logical: str | None = None) -> str:
-        """Map an absolute path back to a model-facing relative path.
+        """Map an absolute path back to a model-facing path.
 
-        Prefer the caller's logical ``external/<alias>/…`` namespace; if that
-        fails (or is absent), reverse-lookup mounts by abs
-        containment so a mount file never falls through to
-        ``relpath(…, primary_root)`` which would leak ``../``-shaped paths into
-        model-visible list/grep output.
+        Prefer the caller's logical path; if that fails (or is absent),
+        reverse-lookup mounts by abs containment so a mount file never falls
+        through to ``relpath(…, primary_root)`` which would leak ``../``-shaped
+        paths into model-visible list/grep output. Working-root files stay
+        relative; extras with abs stay OS-absolute.
         """
         resolved = abs_path.resolve()
         if logical and parse_external_path(logical) is not None:
@@ -535,7 +572,16 @@ class ServerWorkspace:
                 mount_root = Path(routed.mount.abs_path).resolve()
                 try:
                     rel = resolved.relative_to(mount_root)
-                    return external_ns(routed.mount.alias, _posix(str(rel)))
+                    return model_facing_path(routed.mount, _posix(str(rel)))
+                except ValueError:
+                    pass
+        if logical and routes_to_working_root(logical, self._mounts):
+            working = working_mount(self._mounts)
+            if working and working.abs_path:
+                mount_root = Path(working.abs_path).resolve()
+                try:
+                    rel = resolved.relative_to(mount_root)
+                    return model_facing_path(working, _posix(str(rel)))
                 except ValueError:
                     pass
         for mount in self._mounts.values():
@@ -544,7 +590,7 @@ class ServerWorkspace:
             mount_root = Path(mount.abs_path).resolve()
             try:
                 rel = resolved.relative_to(mount_root)
-                return external_ns(mount.alias, _posix(str(rel)))
+                return model_facing_path(mount, _posix(str(rel)))
             except ValueError:
                 continue
         return _posix(os.path.relpath(resolved, self._root.resolve()))
@@ -1144,7 +1190,9 @@ class ServerWorkspace:
 
     async def copy(self, src: str, dst: str) -> None:
         dst_on_channel = self._external_needs_channel(dst)
-        src_is_workspace = not is_external_namespace(src)
+        src_is_workspace = not is_external_namespace(src) and not routes_to_working_root(
+            src, self._mounts
+        )
         if dst_on_channel and src_is_workspace:
             await self._copy_workspace_to_channel_dest(src, dst)
             self._mark_mutated()
@@ -1338,7 +1386,11 @@ class ServerWorkspace:
             self._mark_mutated()
             env = dict(req.env or {})
             env.update(build_external_env(self._mounts))
-            cwd = str(self._root.resolve())
+            working = working_mount(self._mounts)
+            if working and working.abs_path:
+                cwd = str(Path(working.abs_path).resolve())
+            else:
+                cwd = str(self._root.resolve())
             # D11′：python 执行与 TestExitCode 同源注入 PYTHONPATH（. + 现存 src/lib）
             if req.language == "python":
                 from agentcore.tools.sandbox.pythonpath import merge_pythonpath_into_env

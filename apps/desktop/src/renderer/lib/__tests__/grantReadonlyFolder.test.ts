@@ -36,16 +36,22 @@ vi.mock("@/services/api", () => ({
 
 describe("formatGrantReadonlyFolderAnswer", () => {
   it("mentions readonly session scope without absolute paths", () => {
+    const text = formatGrantReadonlyFolderAnswer("授权只读访问", "6月报表");
+    expect(text).toContain("额外文件夹");
+    expect(text).toContain("可撤销");
+    expect(text).toContain("6月报表");
+    expect(text).not.toContain("external/");
+    expect(text).not.toMatch(/^[A-Za-z]:\\/);
+  });
+
+  it("labels the first scratch grant as the session cwd", () => {
     const text = formatGrantReadonlyFolderAnswer(
       "授权只读访问",
-      "6月报表",
-      "external/6月报表",
+      "对账单",
+      true,
     );
-    expect(text).toContain("只读");
-    expect(text).toContain("仅本次对话");
-    expect(text).toContain("可撤销");
-    expect(text).toContain("external/6月报表");
-    expect(text).not.toMatch(/^[A-Za-z]:\\/);
+    expect(text).toContain("本次对话正在用");
+    expect(text).not.toContain("额外文件夹");
   });
 });
 
@@ -83,6 +89,7 @@ describe("pickAndGrantReadonlyFolder 别名以回执为准", () => {
       "conv-1",
       "r1",
       "ext_mfrggzdf",
+      undefined,
     );
     expect(result.ok && result.alias).toBe("ext_mfrggzdf");
   });

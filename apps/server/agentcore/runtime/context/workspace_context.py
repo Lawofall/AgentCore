@@ -1,7 +1,7 @@
 """Per-turn ``<工作区>`` — short environment coordinates for CEO and workers.
 
 只写开场工具表看不出来的现场：执行、出站坐标、桌、系统、Git、客户端、未装配缺口、
-已挂区外。已装配不报（开场表就是通道）；产物格式 / 出站 HOW /
+已授权文件夹。已装配不报（开场表就是通道）；产物格式 / 出站 HOW /
 表格解析 / 通道履约剧本不在这里。本机「桌」写文件夹名 / ``root_label``，不写 OS 绝对路径
 （工具 path 只认相对 POSIX；盘符进任务会让队员按错坐标系）。
 
@@ -391,8 +391,12 @@ def build_workspace_context(
                 if mode == "readonly"
                 else ("可改原件" if mode == "attach_rw" else "可拷入、不覆盖")
             )
-            parts.append(f"`external/{alias}/`（{mode_zh}）")
-        mounts_line = "区外：" + "；".join(parts)
+            label = (getattr(mount, "label", None) or alias).strip() or alias
+            if getattr(mount, "working_root", False):
+                parts.append(f"正在用 `{label}`（{mode_zh}；相对路径，`.`=根）")
+            else:
+                parts.append(f"额外 `{label}`（{mode_zh}；用列举回执里的本机路径）")
+        mounts_line = "文件夹：" + "；".join(parts)
 
     if run_enabled is not None:
         exec_on = run_enabled

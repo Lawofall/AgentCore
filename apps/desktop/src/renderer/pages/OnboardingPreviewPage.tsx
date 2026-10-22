@@ -8,11 +8,11 @@ import { useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 
 /**
- * Hidden preview (`#/preview/onboarding`) for draft empty states and composer
- * generating variants. Deep-link: `#/preview/onboarding?s=empty-starter-chips` 等.
+ * Hidden preview (`#/preview/onboarding`) for draft empty state and composer
+ * generating variants. Deep-link: `#/preview/onboarding?s=empty-draft` 等.
  *
- * Empty scenes mirror ChatView placement: starter_chips / returning = greeting
- * (+ chips) + composer as one centered block（平台代付后无 needs_key 态）。
+ * Empty scene mirrors ChatView placement: greeting + composer as one centered
+ * block（平台代付后无 needs_key 态）。
  */
 export function OnboardingPreviewPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -92,21 +92,14 @@ export function OnboardingPreviewPage() {
       </aside>
 
       <div className="@container/chat relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">
-        {(current?.kind === "empty-starter-chips" ||
-          current?.kind === "empty-returning") && (
+        {current?.kind === "empty-draft" && (
           <div
             className="absolute inset-0 z-10 flex items-center justify-center overflow-y-auto py-10"
             data-composer-dock="center"
           >
             <div className="relative mx-auto w-full max-w-3xl">
               <div className="absolute inset-x-0 bottom-full mb-6">
-                <DraftEmptyState
-                  previewKind={
-                    current.kind === "empty-starter-chips"
-                      ? "starter_chips"
-                      : "returning"
-                  }
-                />
+                <DraftEmptyState />
               </div>
               <MessageInput className="px-4 pb-2" />
             </div>

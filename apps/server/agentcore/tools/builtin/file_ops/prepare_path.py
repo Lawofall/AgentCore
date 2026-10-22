@@ -1,4 +1,8 @@
-"""Rewrite host OS paths on file tools to ``external/<alias>/…`` before sanitize."""
+"""Rewrite host OS paths on file tools before sanitize.
+
+Working-root grants become relatives; extra grants keep the internal
+``external/<alias>/`` router so backends can address them.
+"""
 
 from __future__ import annotations
 
@@ -25,7 +29,8 @@ from .errors import _error
 
 # Model-facing path contract: rewrite at the tool entry, not a second dialect.
 TOOL_PATH_DESCRIPTION = (
-    "工作区相对 POSIX（`.`=根），或本机绝对路径 / ~/Desktop|Downloads|Documents。"
+    "干活根相对 POSIX（`.`=根），或本机绝对路径 / ~/Desktop|Downloads|Documents。"
+    "授权不是改名：不要把盘符路径和别名拼在一起。"
 )
 
 

@@ -1,7 +1,9 @@
-"""Mint a session external mount for a host OS path and rewrite to ``external/``.
+"""Mint a session directory grant for a host OS path.
 
 Transport stays the existing ClientTool event; the model never sees a mount
-tool. Server still stores only alias/root_id/mode — never abs.
+tool. Server still stores only alias/root_id/mode — never abs. Working-root
+grants rewrite to a relative remainder; extras keep the internal
+``external/<alias>/`` router (listing shows OS abs when the engine has it).
 """
 
 from __future__ import annotations
@@ -11,7 +13,7 @@ from agentcore.db.sidecar_tickets import sidecar_narrow_tickets_bound
 from agentcore.desktop.channel import ExternalMountError
 from agentcore.tools.protocol import ToolContext
 from agentcore.workspace import grant_store
-from agentcore.workspace.external_mounts import external_ns, parse_external_path
+from agentcore.workspace.external_mounts import parse_external_path
 from agentcore.workspace.host_path import (
     ClassifiedPath,
     GrantMode,
@@ -19,6 +21,7 @@ from agentcore.workspace.host_path import (
     split_host_entry_for_mount,
 )
 from agentcore.workspace.hot_attach import attach_grants_to_backend
+from agentcore.workspace.working_root import internal_tool_path
 
 logger = get_logger(__name__)
 
@@ -28,19 +31,19 @@ _MOUNT_NOT_DIRECTORY = (
     "这是文件不是文件夹；请选它所在的目录，或把内容放进当前工作区。"
 )
 _MOUNT_NOT_FOUND = (
-    "找不到该目录，无法挂载。"
-    "挂载只接受文件夹；若给的是安装包/文件，请改选它所在目录或放进工作区。"
+    "找不到该目录。"
+    "授权只接受文件夹；若给的是安装包/文件，请改选它所在目录或放进工作区。"
 )
 _NO_DESKTOP = (
     "读取或整理本机路径需要桌面回填通道：当前无在线桌面客户端。"
-    "请如实说明须用桌面客户端，勿假装已挂载。"
+    "请如实说明须用桌面客户端，勿假装已能读本机目录。"
 )
 _CLOUD_ATTACH_RW = (
     "云对话不能把本机目录加成可覆盖写根。"
     "本回合不能改该文件夹原件。"
     "拷入新文件：先写工作区，再 file_batch copy（须用户确认整理授权、不覆盖）。"
 )
-_FORBIDDEN_ROOT = "不能挂载整盘或系统根；请给出具体文件夹。"
+_FORBIDDEN_ROOT = "不能授权整盘或系统根；请给出具体文件夹。"
 _HOME_NOT_WELL_KNOWN = (
     "家目录下只接受 ~/Desktop、~/Downloads、~/Documents（或其下路径）；"
     "其它 ~ 路径请改用本机绝对路径。"
@@ -66,7 +69,10 @@ def format_external_mount_error(exc: ExternalMountError) -> str:
     elif reason == "not_found":
         detail = _MOUNT_NOT_FOUND
     else:
-        detail = str(exc).strip() or "找不到该目录，无法挂载"
+        detail = (str(exc).strip() or "找不到该目录").replace(
+            "，无法挂载", ""
+        ).replace("无法挂载", "")
+        detail = detail.strip(" ，") or "找不到该目录"
     if not reason:
         return detail
     parts = [f"{detail}（reason={reason}）"]
@@ -77,12 +83,6 @@ def format_external_mount_error(exc: ExternalMountError) -> str:
 
 def format_host_path_denied(exc: HostPathDeniedError) -> str:
     return str(exc).strip()
-
-
-def _join_ns(namespace: str, remainder: str) -> str:
-    base = namespace.replace("\\", "/").strip().rstrip("/")
-    rel = remainder.replace("\\", "/").strip("/")
-    return f"{base}/{rel}" if rel else base
 
 
 async def _mint(
@@ -122,23 +122,35 @@ async def _mint(
     display_label = str(value.get("display_label") or "").strip() or None
     namespace_from_desktop = str(value.get("namespace") or "").strip() or None
     if not root_id:
-        raise HostPathDeniedError("桌面挂载回填缺少 root_id，无法登记授权")
+        raise HostPathDeniedError("桌面回填缺少 root_id，无法登记授权")
 
     if sidecar_narrow_tickets_bound():
         # Desktop already POSTed cloud ``external-grants`` and hot-pushed abs.
         # Tickets, not ``location=local``: cloud local-binding still uses grant_store.
         alias = alias_hint or ""
         if not alias:
-            raise HostPathDeniedError("桌面挂载回填缺少 alias，无法寻址挂载")
+            raise HostPathDeniedError("桌面回填缺少 alias，无法登记授权")
         await attach_grants_to_backend(
             context.backend,
             context.conversation_id,
             desktop_channel=channel,
             workspace_channel=context.workspace_channel,
         )
-        namespace = namespace_from_desktop or external_ns(alias)
+        live = (getattr(context.backend, "_mounts", None) or {}).get(alias)
+        mount = live
         _ = display_label
-        return _join_ns(namespace, remainder)
+        _ = namespace_from_desktop
+        if mount is None:
+            from agentcore.workspace.external_mounts import ExternalMount, normalize_mount_mode
+
+            mount = ExternalMount(
+                alias=alias,
+                root_id=root_id,
+                label=label or alias,
+                abs_path=None,
+                mode=normalize_mount_mode(grant_mode),
+            )
+        return internal_tool_path(mount, remainder)
 
     mount = await grant_store.add_grant(
         context.conversation_id,
@@ -153,9 +165,12 @@ async def _mint(
         desktop_channel=channel,
         workspace_channel=context.workspace_channel,
     )
-    namespace = namespace_from_desktop or external_ns(mount.alias)
+    live = (getattr(context.backend, "_mounts", None) or {}).get(mount.alias)
+    if live is not None:
+        mount = live
     _ = display_label
-    return _join_ns(namespace, remainder)
+    _ = namespace_from_desktop
+    return internal_tool_path(mount, remainder)
 
 
 async def ensure_host_path(
@@ -165,7 +180,7 @@ async def ensure_host_path(
     as_directory: bool,
     grant_mode: GrantMode,
 ) -> str:
-    """Return ``external/<alias>/…`` for a classified host path.
+    """Return a backend path for a classified host path.
 
     A file or a name being created (``as_directory=False``) mints the parent
     folder and keeps the last segment as remainder. Listing a directory mints
@@ -245,7 +260,7 @@ async def ensure_external_upgrade(
 
     root_id = str(mount.root_id or "").strip()
     if not root_id:
-        raise HostPathDeniedError("已挂载目录缺少 root_id，无法升级授权", reason="invalid")
+        raise HostPathDeniedError("已授权目录缺少 root_id，无法升级授权", reason="invalid")
 
     await _mint(
         context,

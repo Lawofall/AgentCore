@@ -35,6 +35,11 @@ vi.mock("@/lib/capabilities", () => ({
   hasLocalFiles: () => true,
 }));
 
+vi.mock("@/hooks/useExternalGrants", () => ({
+  useExternalGrants: () => ({ data: [], isError: false, refetch: vi.fn() }),
+  useRevokeExternalGrant: () => ({ mutate: vi.fn(), isPending: false }),
+}));
+
 vi.mock("@/components/workspace/FileBrowser", () => ({
   FileBrowser: ({ trailing }: { trailing?: import("react").ReactNode }) => (
     <div>

@@ -58,6 +58,11 @@ vi.mock("@/hooks/useFolderSharing", () => ({
   useSharedWithMeFolders: () => ({ data: sharedWithMe.value }),
 }));
 
+vi.mock("@/hooks/useExternalGrants", () => ({
+  useExternalGrants: () => ({ data: [], isError: false, refetch: vi.fn() }),
+  useRevokeExternalGrant: () => ({ mutate: vi.fn(), isPending: false }),
+}));
+
 vi.mock("@/lib/bindLocalFolder", () => ({
   pickLocalFolderRoot: vi.fn(),
   notifyLocalPickerFailure: vi.fn(),

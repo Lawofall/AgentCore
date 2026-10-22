@@ -609,12 +609,16 @@ class SidecarServer(HandlerMixin, DeliveryMixin, TurnExecutionMixin):
             abs_path = str(m.get("absPath") or m.get("abs_path") or "").strip()
             if not alias or not abs_path:
                 continue
+            working_raw = m.get("workingRoot")
+            if working_raw is None:
+                working_raw = m.get("working_root")
             mounts[alias] = ExternalMount(
                 alias=alias,
                 root_id=str(m.get("rootId") or m.get("root_id") or ""),
                 label=str(m.get("label") or alias),
                 abs_path=abs_path,
                 mode=normalize_mount_mode(str(m.get("mode") or "")),
+                working_root=bool(working_raw),
             )
         return mounts
 

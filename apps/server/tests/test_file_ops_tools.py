@@ -2371,8 +2371,8 @@ async def test_file_list_bare_external_actionable_hint_no_mounts(tmp_path: Path)
         {"directory": "external"}, _ctx(tmp_path)
     )
     assert result.success is False
-    assert "external/<别名>/" in result.error
-    assert "尚无" in result.error or "授权" in result.error
+    assert "external/" not in (result.error or "")
+    assert "授权文件夹" in (result.error or "")
 
 
 async def test_file_list_bare_external_lists_current_mounts(tmp_path: Path):
@@ -2392,8 +2392,8 @@ async def test_file_list_bare_external_lists_current_mounts(tmp_path: Path):
     )
     result = await FileListTool().execute({"directory": "external"}, ctx)
     assert result.success is False
-    assert "external/<别名>/" in result.error
-    assert "`external/desk/`" in result.error
+    assert "external/" not in (result.error or "")
+    assert "本机绝对路径" in (result.error or "")
 
 
 # --- write_scope ---

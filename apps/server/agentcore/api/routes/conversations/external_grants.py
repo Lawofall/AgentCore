@@ -1,8 +1,9 @@
-"""W3 conversation-scoped external directory grants (readonly | organize | attach_rw).
+"""Conversation-scoped directory grants (readonly | organize | attach_rw).
 
-Separate from workspace binding — grants add ``external/<alias>/`` mounts for
-file tools within one conversation; they never replace the bound workspace root.
-Persisted in Postgres for the conversation lifetime (not the API process).
+Separate from workspace binding — grants add a working root (session cwd) or
+extra folders for file tools within one conversation; they never replace the
+bound workspace ``folder_id``. Persisted in Postgres for the conversation
+lifetime (not the API process).
 """
 
 from fastapi import APIRouter, Depends, Query
@@ -20,7 +21,7 @@ from agentcore.core.errors import NotFoundError, ValidationError
 from agentcore.db.repositories import ConversationRepository
 from agentcore.fulfill.declare import declare_receipt_root
 from agentcore.workspace import grant_store
-from agentcore.workspace.external_mounts import external_ns
+from agentcore.workspace.working_root import model_facing_namespace
 
 from ._helpers import _get_owned_conversation
 
@@ -32,8 +33,9 @@ def _item(m) -> ExternalGrantItem:
         alias=m.alias,
         root_id=m.root_id,
         label=m.label,
-        namespace=external_ns(m.alias),
+        namespace=model_facing_namespace(m),
         mode=m.mode,
+        working_root=bool(m.working_root),
     )
 
 
@@ -71,15 +73,17 @@ async def grant_external_folder(
 
     The response doubles as the device's declaration for this root: the caller's
     ``X-Client-Device`` is bound onto its live fulfill session *and* stored on the
-    grant (``fulfill/declare.py``), so the very first ``external/<alias>/`` op of
-    the resuming turn has a machine to route to.
+    grant (``fulfill/declare.py``), so the first file op of the resuming turn has
+    a machine to route to. Scratch conversations promote the first grant to the
+    working root (session cwd); ``folder_id`` does not change.
     """
     conv = await _get_owned_conversation(conversation_id, user.user_id, conv_repo)
-    if body.mode == "attach_rw":
+    device_id = declare_receipt_root(user.user_id, body.root_id)
+    if body.mode == "attach_rw" and not device_id:
         binding = await resolve_local_binding(conv_repo._session, conv)
         if binding is None:
-            raise ValidationError("附加可写根仅本机传统对话可用")
-    device_id = declare_receipt_root(user.user_id, body.root_id)
+            raise ValidationError("附加可写根需要桌面客户端")
+    scratch = conv.folder_id is None
     mount = await grant_store.add_grant(
         conversation_id,
         root_id=body.root_id,
@@ -87,6 +91,7 @@ async def grant_external_folder(
         alias_hint=body.alias_hint,
         mode=body.mode,
         device_id=device_id,
+        working_root=scratch,
     )
     return ExternalGrantResponse(grant=_item(mount))
 

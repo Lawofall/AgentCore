@@ -65,6 +65,18 @@ describe("resolveHostShellCwd", () => {
     expect(got).toEqual({ ok: true, cwd: workspace.absPath });
   });
 
+  it("defaults to the conversation working root over the permanent workspace", async () => {
+    const working: StoredRoot = { ...attach, workingRoot: true };
+    __test.reset(
+      new Map([
+        [workspace.id, workspace],
+        [working.id, working],
+      ]),
+    );
+    const got = await resolveHostShellCwd({ conversationId: "c1" });
+    expect(got).toEqual({ ok: true, cwd: working.absPath });
+  });
+
   it("accepts an attach_rw session root for this conversation", async () => {
     __test.reset(
       new Map([

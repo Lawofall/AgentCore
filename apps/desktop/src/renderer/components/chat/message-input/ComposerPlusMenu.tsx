@@ -4,7 +4,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { ChevronLeft, MoreVertical, Plus } from "lucide-react";
+import { ChevronLeft, FolderPlus, MoreVertical, Plus } from "lucide-react";
 import {
   type ReactNode,
   createContext,
@@ -197,6 +197,34 @@ export function ComposerPlusMenu({
         </PlusHostContext.Provider>
       </PopoverContent>
     </Popover>
+  );
+}
+
+/** 「更多」第二行：添加本机文件夹为这场对话的干活根（不改 folder_id）。 */
+export function ComposerAddFolderRow({
+  onAddFolder,
+  disabled,
+}: {
+  onAddFolder: () => void;
+  disabled?: boolean;
+}) {
+  const host = useComposerPlusHost();
+  const close = useComposerPlusClose();
+  if (host && host.panel !== "list") return null;
+  return (
+    <button
+      type="button"
+      data-testid="composer-add-folder"
+      disabled={disabled}
+      className="inline-flex h-8 w-full items-center gap-2 rounded-lg px-2 text-left text-sm text-foreground hover:bg-accent/60 disabled:opacity-50"
+      onClick={() => {
+        close?.();
+        onAddFolder();
+      }}
+    >
+      <FolderPlus size={14} className="shrink-0" aria-hidden />
+      添加文件夹
+    </button>
   );
 }
 

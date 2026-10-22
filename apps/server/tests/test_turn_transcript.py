@@ -2,8 +2,15 @@
 
 from types import SimpleNamespace
 
+from agentcore.config import settings
+from agentcore.conversation.compact_prompt import estimate_message_tokens
 from agentcore.conversation.history import _fold_history_messages, _history_tail
-from agentcore.conversation.transcript import UNCLOSED_TOOL_RESULT, transcript_rows
+from agentcore.conversation.transcript import (
+    CLEARED_TOOL_RESULT,
+    UNCLOSED_TOOL_RESULT,
+    transcript_rows,
+)
+from agentcore.runtime.engine.window_compact import BRIDGE_USER, SUMMARY_LEAD
 from agentcore.runtime.resolve.prompt.envelope import opening_ceo_messages
 
 
@@ -132,3 +139,105 @@ def test_opening_window_keeps_tool_rounds():
     assert messages[2].content == "正文"
     assert messages[3].content == "结论"
     assert messages[3].reasoning_content is None
+
+
+def _compact(run_id: str, summary: str, folded: int) -> dict:
+    return {
+        "kind": "window_compact",
+        "payload": {
+            "run_id": run_id,
+            "summary": summary,
+            "folded_rounds": folded,
+        },
+    }
+
+
+def test_transcript_applies_stored_window_compact_instead_of_fat_journal():
+    entries = [_boundary("cap", "captain")]
+    for index in range(6):
+        entries.append(_llm("cap", f"看{index}", [_call(f"c{index}", "read")]))
+        entries.append(_tool("cap", f"c{index}", f"全文{index}"))
+    entries.append(_compact("cap", "已读前几份", 4))
+    rows = transcript_rows(entries, "结论")
+    text = "\n".join(str(row.get("content") or "") for row in rows)
+    assert SUMMARY_LEAD + "已读前几份" in text
+    assert BRIDGE_USER in text
+    assert "全文0" not in text
+    assert "全文3" not in text
+    assert "全文4" in text
+    assert "全文5" in text
+    assert rows[-1] == {"role": "assistant", "content": "结论"}
+    names = [
+        row["tool_calls"][0]["function"]["name"]
+        for row in rows
+        if row.get("tool_calls")
+    ]
+    assert names == ["read", "read"]
+
+
+def test_transcript_clears_old_tool_results_over_recency(monkeypatch):
+    monkeypatch.setattr(settings, "compaction_recency_token_budget", 20, raising=True)
+    entries = [_boundary("cap", "captain")]
+    for index in range(3):
+        entries.append(_llm("cap", f"看{index}", [_call(f"c{index}", "read")]))
+        entries.append(_tool("cap", f"c{index}", "字" * 80))
+    rows = transcript_rows(entries, "结论")
+    tool_rows = [row for row in rows if row["role"] == "tool"]
+    assert len(tool_rows) == 3
+    assert tool_rows[0]["content"] == CLEARED_TOOL_RESULT
+    assert tool_rows[1]["content"] == CLEARED_TOOL_RESULT
+    assert tool_rows[2]["content"] == "字" * 80
+    assert tool_rows[0]["tool_call_id"] == "c0"
+    assert rows[-1]["content"] == "结论"
+    call_names = [
+        row["tool_calls"][0]["function"]["name"]
+        for row in rows
+        if row.get("tool_calls")
+    ]
+    assert call_names == ["read", "read", "read"]
+
+
+def test_transcript_does_not_clear_when_compact_already_fits_recency():
+    entries = [_boundary("cap", "captain")]
+    for index in range(6):
+        entries.append(_llm("cap", f"看{index}", [_call(f"c{index}", "read")]))
+        entries.append(_tool("cap", f"c{index}", "字" * 80))
+    entries.append(_compact("cap", "已读前几份", 4))
+    rows = transcript_rows(entries, "结论")
+    tool_contents = [row["content"] for row in rows if row["role"] == "tool"]
+    assert CLEARED_TOOL_RESULT not in tool_contents
+    assert any(content.startswith("字") for content in tool_contents)
+
+
+def test_fold_uses_projected_replay_not_fat_journal(monkeypatch):
+    monkeypatch.setattr(settings, "compaction_recency_token_budget", 20, raising=True)
+    assistant = SimpleNamespace(
+        id="a1",
+        role="assistant",
+        content="查完了",
+        usage=None,
+        evidence_ledger=None,
+    )
+    journals = {
+        "a1": [
+            _boundary("cap", "captain"),
+            _llm("cap", "先看", [_call("c0", "file_list")]),
+            _tool("cap", "c0", "字" * 80),
+            _llm("cap", "再看", [_call("c1", "file_list")]),
+            _tool("cap", "c1", "字" * 80),
+        ]
+    }
+    out = _fold_history_messages(
+        [
+            SimpleNamespace(role="user", content="整理", id="u1", usage=None),
+            assistant,
+        ],
+        journals,
+    )
+    tool_contents = [row["content"] for row in out if row.get("role") == "tool"]
+    assert tool_contents[0] == CLEARED_TOOL_RESULT
+    assert tool_contents[-1] == "字" * 80
+    assert out[-1]["content"] == "查完了"
+    fat = estimate_message_tokens(assistant, journals={"a1": journals["a1"]})
+    raw_receipt = 160
+    assert fat < raw_receipt

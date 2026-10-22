@@ -443,6 +443,8 @@ export interface GrantSessionReadonlyRootParams {
   rootId?: string;
   /** Conversation boundary. ``computer`` / ``full`` skip the folder dialog. */
   boundary?: FolderGrantBoundary;
+  /** Open the OS folder picker (input-area「添加文件夹」). No path hint. */
+  pick?: boolean;
 }
 
 /** Failure reasons from grant resolve / write confirm (picker never opens). */
@@ -565,6 +567,7 @@ export interface FsApi {
     conversationId: string,
     rootId: string,
     alias: string,
+    workingRoot?: boolean,
   ): Promise<boolean>;
   listDir(rootId: string, relPath: string): Promise<FsResult<FsEntry[]>>;
   /**

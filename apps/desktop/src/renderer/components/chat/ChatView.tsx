@@ -76,7 +76,7 @@ export function ChatView({
         columnClass={columnClass}
       />
 
-      {/* Composer dock: empty draft → input at viewport center, greeting/chips
+      {/* Composer dock: empty draft → input at viewport center, greeting
           above it; in-session → bottom bar. First send FLIPs input center→bottom. */}
       <div
         className={

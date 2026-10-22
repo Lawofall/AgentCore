@@ -532,13 +532,14 @@ class MemoryUpdateRow(Base):
 
 
 class ConversationExternalGrant(Base):
-    """One conversation-scoped external directory grant under ``external/<alias>/``.
+    """One conversation-scoped directory grant (working root or extra folder).
 
     **Lifecycle**: created/updated via ``POST …/external-grants``; the row goes
     with the conversation (``fk_conversation_external_grants_conversation_id``).
     Revoke and soft-delete still delete it while the conversation row remains.
     Desktop reconciles root_id ↔ local path on open; orphans without a desktop
-    path are revoked server-side.
+    path are revoked server-side. ``working_root`` is the session cwd on scratch
+    conversations; it never rewrites ``conversations.folder_id``.
     """
 
     __tablename__ = "conversation_external_grants"
@@ -554,6 +555,12 @@ class ConversationExternalGrant(Base):
             name="uq_conversation_external_grants_conv_root",
         ),
         Index("ix_conversation_external_grants_conversation", "conversation_id"),
+        Index(
+            "uq_conversation_external_grants_one_working_root",
+            "conversation_id",
+            unique=True,
+            postgresql_where=text("working_root IS TRUE"),
+        ),
     )
 
     id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False), primary_key=True, default=_new_uuid)
@@ -578,6 +585,12 @@ class ConversationExternalGrant(Base):
     # "readonly" | "organize" | "attach_rw"
     mode: Mapped[str] = mapped_column(
         String(16), nullable=False, server_default=text("'readonly'")
+    )
+    # First directory grant on a scratch conversation (no project folder_id)
+    # is the session cwd. Does not change conversation.folder_id. At most one
+    # per conversation (partial unique index).
+    working_root: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=text("now()")

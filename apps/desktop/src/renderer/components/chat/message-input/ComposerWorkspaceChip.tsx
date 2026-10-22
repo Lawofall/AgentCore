@@ -10,6 +10,7 @@ import {
   WorkspaceModeTrigger,
   useWorkspaceModeState,
 } from "@/components/workspace/WorkspaceModeControl";
+import { useExternalGrants } from "@/hooks/useExternalGrants";
 import { useGroupedConversations } from "@/hooks/useConversations";
 import { useSharedWithMeFolders } from "@/hooks/useFolderSharing";
 import {
@@ -67,6 +68,8 @@ function BoundChip({ conversationId }: { conversationId: string }) {
   const state = useWorkspaceModeState(conversationId);
   const [pop, setPop] = useState(false);
   const grouped = useGroupedConversations().data;
+  const grants = useExternalGrants(conversationId);
+  const working = (grants.data ?? []).find((g) => g.working_root);
   const folderId =
     grouped?.conversations
       ?.find((c) => c.id === conversationId)
@@ -83,7 +86,9 @@ function BoundChip({ conversationId }: { conversationId: string }) {
     );
   }
 
-  const boundTitle = formatWorkspaceChipTitle(state.effective);
+  const boundTitle = working
+    ? `正在用 ${working.label}`
+    : formatWorkspaceChipTitle(state.effective);
   const title = borrowActive ? `${boundTitle} · 原件尚未改动` : boundTitle;
 
   const trigger = (
@@ -99,7 +104,11 @@ function BoundChip({ conversationId }: { conversationId: string }) {
       }
       data-testid="composer-workspace-chip"
     >
-      <WorkspaceModeTrigger effective={state.effective} className="text-sm" />
+      {working ? (
+        <span className="min-w-0 truncate">{working.label}</span>
+      ) : (
+        <WorkspaceModeTrigger effective={state.effective} className="text-sm" />
+      )}
       {borrowActive ? (
         <span className="shrink-0 rounded-lg bg-muted px-1.5 py-0.5 text-xs font-medium text-muted-foreground">
           原件尚未改动

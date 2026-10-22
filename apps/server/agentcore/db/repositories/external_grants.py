@@ -62,13 +62,15 @@ class ExternalGrantRepository:
         label: str,
         mode: str,
         device_id: str | None = None,
+        working_root: bool = False,
     ) -> ConversationExternalGrant:
         """Insert or refresh by ``root_id`` (alias stable on same root).
 
         A re-registration from another install moves the binding: the folder is
         on whichever machine just proved it can resolve the path. A call without
         a device (non-desktop caller) leaves the existing binding alone rather
-        than erasing the only record of where the folder lives.
+        than erasing the only record of where the folder lives. ``working_root``
+        on a refresh only turns on (never off) so a re-POST cannot drop cwd.
         """
         result = await self._session.execute(
             select(ConversationExternalGrant).where(
@@ -83,6 +85,8 @@ class ExternalGrantRepository:
             row.mode = mode
             if device_id:
                 row.device_id = device_id
+            if working_root:
+                row.working_root = True
             row.updated_at = now
             await self._session.commit()
             await self._session.refresh(row)
@@ -96,6 +100,7 @@ class ExternalGrantRepository:
             label=label or alias,
             mode=mode,
             device_id=device_id,
+            working_root=working_root,
             created_at=now,
             updated_at=now,
         )
