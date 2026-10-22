@@ -68,6 +68,9 @@ describe("prepare script", () => {
   it("builds guest-base by content id then api with registry cache", () => {
     const script = remoteScript("prepare", "abc1234");
     assert.match(script, /docker buildx create --name agentcore-cache --driver docker-container/);
+    assert.match(script, /--config "\$CFG"/);
+    assert.match(script, /DOCKERHUB_MIRROR/);
+    assert.match(script, /\[registry\."docker\.io"\]/);
     assert.match(script, /sha256sum Dockerfile\.guest build-pins\.env/);
     assert.match(script, /guest-base:\$\{GUEST_ID\}/);
     assert.match(script, /type=registry,ref=\$CACHE_GUEST/);

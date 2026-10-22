@@ -10,6 +10,7 @@ jobs:
   backend:
     name: Backend (lint + test)
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     defaults:
       run:
         working-directory: apps/server
@@ -73,6 +74,7 @@ jobs:
   contracts:
     name: Contracts + conformance (gen + drift gate)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
       - uses: actions/checkout@v4
@@ -125,6 +127,7 @@ jobs:
   frontend:
     name: Frontend (lint + test)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v4
@@ -176,6 +179,7 @@ jobs:
   frontend-shoot:
     name: Frontend (preview shoot + web smoke)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v4
@@ -252,6 +256,7 @@ jobs:
   mobile:
     name: Mobile (fold-kit test)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
       - uses: actions/checkout@v4
@@ -280,6 +285,7 @@ jobs:
   admin:
     name: Admin (typecheck + test)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
       - uses: actions/checkout@v4

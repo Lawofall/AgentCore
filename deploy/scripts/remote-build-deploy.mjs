@@ -92,9 +92,23 @@ function ensureBuildxBlock() {
   sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq docker-buildx-plugin
 fi
 export DOCKER_BUILDKIT=1
-if ! docker buildx inspect agentcore-cache >/dev/null 2>&1; then
-  echo "==> creating docker-container builder agentcore-cache (registry cache)"
-  docker buildx create --name agentcore-cache --driver docker-container --driver-opt network=host
+# docker-container driver does not inherit dockerd registry-mirrors; syntax
+# frontend (docker/dockerfile) and unprefixed FROM resolve docker.io here.
+MIRROR="\$(grep -E '^DOCKERHUB_MIRROR=' "\$ENVF" | head -1 | cut -d= -f2-)"
+MIRROR="\${MIRROR:-https://docker.m.daocloud.io}"
+CFG="\$HOME_DIR/buildkitd.toml"
+umask 077
+cat > "\$CFG" <<EOF
+[registry."docker.io"]
+  mirrors = ["\$MIRROR"]
+EOF
+CFG_HASH="\$(sha256sum "\$CFG" | cut -c1-16)"
+MARKER="\$HOME_DIR/.agentcore-cache-config"
+if ! docker buildx inspect agentcore-cache >/dev/null 2>&1 || [ "\$(cat "\$MARKER" 2>/dev/null || true)" != "\$CFG_HASH" ]; then
+  echo "==> creating docker-container builder agentcore-cache (registry cache; docker.io mirror)"
+  docker buildx rm -f agentcore-cache >/dev/null 2>&1 || true
+  docker buildx create --name agentcore-cache --driver docker-container --driver-opt network=host --config "\$CFG"
+  printf '%s\\n' "\$CFG_HASH" > "\$MARKER"
 fi
 docker buildx inspect agentcore-cache --bootstrap >/dev/null
 `;
