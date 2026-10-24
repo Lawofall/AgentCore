@@ -100,7 +100,7 @@
     "autoprefixer": "^10.4.0",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
-    "electron": "^42.5.1",
+    "electron": "^42.11.16",
     "electron-builder": "^26.15.3",
     "electron-updater": "^6.8.9",
     "electron-vite": "^5.0.0",
