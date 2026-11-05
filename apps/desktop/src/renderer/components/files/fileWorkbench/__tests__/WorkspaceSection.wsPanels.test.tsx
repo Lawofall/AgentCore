@@ -162,7 +162,7 @@ describe("云端文件夹的版本 / 软删区入口", () => {
     expect(screen.queryByText("导出 ZIP")).toBeNull();
     expect(screen.queryByText("导出到本机文件夹")).toBeNull();
     expect(screen.queryByText("新建文件夹", { exact: true })).toBeNull();
-    expect(screen.getByText("在此新建文件夹")).toBeTruthy();
+    expect(screen.queryByText("在此新建文件夹")).toBeNull();
     expect(screen.getByText("新建子文件夹")).toBeTruthy();
   });
 

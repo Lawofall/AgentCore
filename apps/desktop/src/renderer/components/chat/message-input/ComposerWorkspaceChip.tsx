@@ -21,7 +21,6 @@ import { isBorrowActive } from "@/lib/borrowOriginalPreference";
 import { hasLocalFiles } from "@/lib/capabilities";
 import { setComposerChannelPreference } from "@/lib/composerChannelPreference";
 import { visibleDraftFolders } from "@/lib/draftWorkspaceFolders";
-import { folderAncestorNames } from "@/lib/folderTree";
 import { openLocalFolderFromRoot } from "@/lib/openLocalFolder";
 import { formatWorkspaceChipTitle } from "@/lib/workspaceEffectiveMode";
 import {
@@ -173,13 +172,10 @@ function draftLabel(
   };
 }
 
-/** Channel lives on the row icon; hint is ancestor path only, or nothing. */
+/** Channel lives on the row icon; hint is the local path above the folder, or nothing. */
 function folderLocationHint(f: FolderMeta): string | undefined {
-  if (f.mode === "cloud") {
-    const ancestors = folderAncestorNames(f);
-    return ancestors.length > 0 ? ancestors.join(" / ") : undefined;
-  }
-  // Same rule as the cloud branch: the hint says what sits *above* the folder.
+  if (f.mode === "cloud") return undefined;
+  // The hint says what sits *above* the folder.
   // Keeping the trailing segment when it repeats the folder's own name
   // （白板 bound at …/白板）just renders「白板」under「白板」.
   const above = (f.localSubpath ?? "").split("/").filter(Boolean);

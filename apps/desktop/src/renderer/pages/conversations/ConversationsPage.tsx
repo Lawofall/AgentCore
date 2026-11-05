@@ -18,7 +18,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { SimpleTooltip } from "@/components/ui/tooltip";
-import { folderAncestorNames } from "@/lib/folderTree";
 import { useNarrowLayoutState } from "@/lib/narrowLayout";
 import { cn } from "@/lib/utils";
 import type { DeletedConversationMeta } from "@/services/conversations";
@@ -597,8 +596,6 @@ function FolderFilterRow({
   const navigate = useNavigate();
   const [hovered, setHovered] = useState(false);
   const accent = folderAccentVar(folder.id);
-  /** 「设计 / 图标」— the filter list is flat, so nested folders need their path. */
-  const ancestorLabel = folderAncestorNames(folder).join(" / ");
 
   return (
     <div
@@ -623,11 +620,6 @@ function FolderFilterRow({
         <span className="min-w-0 flex-1 truncate text-left text-sm">
           {folder.name}
         </span>
-        {ancestorLabel && (
-          <span className="shrink-0 truncate text-xs text-muted-foreground/60">
-            {ancestorLabel}
-          </span>
-        )}
       </SurfaceRowButton>
       {hovered ? (
         <SimpleTooltip label="浏览文件">

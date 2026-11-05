@@ -42,7 +42,6 @@ import { notifyActionError, notifyError, notifyInfo } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import {
   canShareFolder,
-  canWriteFolder,
   folderHasCollaborators,
   folderMyRole,
   folderRoleLabel,
@@ -87,8 +86,8 @@ import {
 /**
  * One workspace root = a **collapsible section**: a header (chevron + name +
  * create buttons) with its file tree shown beneath **only when expanded**.
- * Folders (`folder:<id>`) may also render nested folder rows (`nested`) and
- * folder-scope entries inside the tree's ``.agentcore`` row (`renderWorkroomLead`).
+ * Folders (`folder:<id>`) may also render folder-scope entries inside the
+ * tree's ``.agentcore`` row (`renderWorkroomLead`).
  *
  * - `folder:<id>` 文件夹：右键可重命名，所有者另有「删除文件夹…」（与侧栏
  *   {@link WorkspaceGroupHeader} 同一确认；树内「删除」仍是工作区软删，不是删整夹）。
@@ -106,9 +105,6 @@ export function WorkspaceSection({
   forceExpandWorkroom = false,
   onWorkroomRevealApplied,
   onCreateWorkroomEntry,
-  nested,
-  depth = 0,
-  hideRootDirs,
   showLocationBadge = true,
   offlineCloud = false,
   filterQuery = "",
@@ -130,12 +126,6 @@ export function WorkspaceSection({
   onCreateWorkroomEntry?: () => boolean | Promise<boolean>;
   forceExpandWorkroom?: boolean;
   onWorkroomRevealApplied?: () => void;
-  /** Nested folder rows (我的文件 tree), rendered directly under the header. */
-  nested?: ReactNode;
-  /** Nesting level inside 我的文件 — indents the header and its tree. */
-  depth?: number;
-  /** Forwarded to {@link FileTree}: child-folder dirs already shown as rail rows. */
-  hideRootDirs?: readonly string[];
   /** Off inside 我的文件 / 本机文件夹 — the section header already says which. */
   showLocationBadge?: boolean;
   /** N4-A: cloud workspace while read-only offline — grey + hint, keep visible. */
@@ -205,13 +195,6 @@ export function WorkspaceSection({
   const folderRole = folder ? folderMyRole(folder) : "owner";
   /** 删的是文件夹这个容器，不是树里的一个文件。仅所有者；与侧栏同一道门。 */
   const canDeleteFolder = Boolean(folder && folderOwner);
-  /** Nested cloud desk under this row — not mkdir inside the workspace tree. */
-  const canNestCloudFolder = Boolean(
-    folder &&
-      folder.mode === "cloud" &&
-      canWriteFolder(folder) &&
-      !offlineCloud,
-  );
   const memberConversations = () =>
     folder ? getConversations().filter((c) => c.folderId === folder.id) : [];
 
@@ -421,7 +404,6 @@ export function WorkspaceSection({
           }
           commitEdit();
         }}
-        style={{ marginLeft: depth * 12 }}
         className="h-7 min-w-0 flex-1 bg-transparent px-1 text-sm focus:outline-none"
         aria-label={folderId ? "重命名文件夹" : "重命名对话"}
       />
@@ -438,8 +420,7 @@ export function WorkspaceSection({
         variant="ghost"
         onClick={onToggle}
         aria-expanded={expanded}
-        style={{ paddingLeft: 8 + depth * 12 }}
-        className="h-auto min-h-9 min-w-0 flex-1 justify-start gap-1.5 overflow-hidden rounded-none py-1.5 pr-0 text-left text-sm font-medium"
+        className="h-auto min-h-9 min-w-0 flex-1 justify-start gap-1.5 overflow-hidden rounded-none py-1.5 pl-2 pr-0 text-left text-sm font-medium"
       >
         {expanded ? (
           <ChevronDown size={14} className="shrink-0 text-muted-foreground" />
@@ -499,7 +480,7 @@ export function WorkspaceSection({
     </div>
   );
 
-  const hintStyle = { paddingLeft: 28 + depth * 12 };
+  const hintStyle = { paddingLeft: 28 };
   const tree = offlineCloud ? (
     <div className="py-1 text-xs text-muted-foreground" style={hintStyle}>
       离线时云端文件不可用；本机文件夹可浏览（只读），恢复连接后再改文件。
@@ -513,11 +494,10 @@ export function WorkspaceSection({
       ref={treeRef}
       source={source}
       chrome={false}
-      indent={14 + depth * 12}
+      indent={14}
       activePath={activePath}
       filterQuery={filterQuery}
       sortBy={sortBy}
-      hideRootDirs={hideRootDirs}
       renderWorkroomLead={renderWorkroomLead}
       onCreateWorkroomEntry={onCreateWorkroomEntry}
       forceExpandPaths={forceExpandWorkroom ? ["AgentCore"] : undefined}
@@ -549,18 +529,6 @@ export function WorkspaceSection({
                   <FolderPlus size={14} className="shrink-0" />
                   <span className="flex-1 truncate">新建子文件夹</span>
                 </ContextMenuItem>
-                {canNestCloudFolder && folder ? (
-                  <ContextMenuItem
-                    onSelect={() =>
-                      useFoldersStore
-                        .getState()
-                        .requestUntitledCloudFolder(folder.id)
-                    }
-                  >
-                    <FolderPlus size={14} className="shrink-0" />
-                    <span className="flex-1 truncate">在此新建文件夹</span>
-                  </ContextMenuItem>
-                ) : null}
                 {source.caps.transfer && (
                   <>
                     <ContextMenuItem
@@ -664,12 +632,7 @@ export function WorkspaceSection({
           </ContextMenuContent>
         </ContextMenu>
       )}
-      {expanded && (
-        <>
-          {nested}
-          {tree}
-        </>
-      )}
+      {expanded && tree}
       {shareable && folder && (
         <FolderMembersDialog
           open={membersOpen}

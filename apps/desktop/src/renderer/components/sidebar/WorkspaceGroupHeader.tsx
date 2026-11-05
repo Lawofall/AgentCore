@@ -30,7 +30,6 @@ import {
 } from "@/hooks/useFolders";
 import { useConversationLocationId } from "@/lib/conversationLocation";
 import { deriveGroupWorkspaceIsLocal } from "@/lib/conversationWorkspaceMode";
-import { folderAncestorNames } from "@/lib/folderTree";
 import { startNewConversation } from "@/lib/newConversation";
 import { notifyError, notifyInfo } from "@/lib/toast";
 import { cn } from "@/lib/utils";
@@ -76,8 +75,6 @@ interface Props {
  * Right-click and hover「⋯」share the same menu;「归档全部对话」maps to
  * batch conversation archive (no `Folder.archived`).
  *
- * A nested folder shows its ancestor breadcrumb under the name — the zone is
- * flat, so「设计 / 图标」is the only thing telling two 图标 folders apart.
  */
 export function WorkspaceGroupHeader({
   folder,
@@ -110,11 +107,6 @@ export function WorkspaceGroupHeader({
   const owner = isFolderOwner(folder);
   const myRole = folderMyRole(folder);
   const isViewer = myRole === "viewer";
-  /** 「设计 / 图标」— only for a nested folder; the zone itself stays flat. */
-  const ancestorLabel = useMemo(
-    () => folderAncestorNames(folder).join(" / "),
-    [folder],
-  );
 
   const viewAllConversations = () => {
     navigate("/conversations", { state: { focusFolderId: folder.id } });
@@ -342,11 +334,6 @@ export function WorkspaceGroupHeader({
                     </span>
                   )}
                 </span>
-                {ancestorLabel && (
-                  <span className="truncate text-xs leading-tight text-sidebar-muted">
-                    {ancestorLabel}
-                  </span>
-                )}
               </span>
             </div>
             {folderHasCollaborators(folder) && (

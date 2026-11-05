@@ -26,9 +26,6 @@ export function defaultDraftWorkspaceIntent(): DraftWorkspaceIntent {
     : { kind: "quick_local" };
 }
 
-/** Nest the new untitled cloud folder here; omit / null = 我的文件 top level. */
-export type UntitledFolderParentId = string | null;
-
 /** Prefill for {@link useFoldersStore}'s `openBorrowToCloud`. */
 export type ImportToCloudPrefill = {
   /** Existing desktop `FsRoot.id` (e.g. Folder.localRootId). */
@@ -60,7 +57,7 @@ interface FoldersUiState {
    * Files rail / command palette asked to POST「未命名文件夹」.
    * FileWorkbench is the only consumer (needs the list + rename row).
    */
-  pendingUntitledCreate: { parentId: UntitledFolderParentId } | null;
+  pendingUntitledCreate: true | null;
   untitledCreateBusy: boolean;
   /** Where the current draft will land on first send. */
   draftWorkspaceIntent: DraftWorkspaceIntent;
@@ -81,7 +78,7 @@ interface FoldersUiState {
   revealCreatedFolder: (id: string, opts?: { rename?: boolean }) => void;
   clearPendingReveal: () => void;
   clearPendingRename: () => void;
-  requestUntitledCloudFolder: (parentId?: UntitledFolderParentId) => void;
+  requestUntitledCloudFolder: () => void;
   clearUntitledCreateRequest: () => void;
   finishUntitledCreate: () => void;
   setDraftWorkspaceIntent: (intent: DraftWorkspaceIntent) => void;
@@ -113,14 +110,11 @@ export const useFoldersStore = create<FoldersUiState>()(
         }),
       clearPendingReveal: () => set({ pendingRevealFolderId: null }),
       clearPendingRename: () => set({ pendingRenameFolderId: null }),
-      requestUntitledCloudFolder: (parentId) =>
+      requestUntitledCloudFolder: () =>
         set((s) =>
           s.pendingUntitledCreate || s.untitledCreateBusy
             ? s
-            : {
-                pendingUntitledCreate: { parentId: parentId ?? null },
-                untitledCreateBusy: true,
-              },
+            : { pendingUntitledCreate: true, untitledCreateBusy: true },
         ),
       clearUntitledCreateRequest: () => set({ pendingUntitledCreate: null }),
       finishUntitledCreate: () => set({ untitledCreateBusy: false }),

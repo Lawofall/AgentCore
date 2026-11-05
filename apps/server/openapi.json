@@ -5365,17 +5365,6 @@
           "name": {
             "title": "Name",
             "type": "string"
-          },
-          "parent_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Parent Id"
           }
         },
         "required": [
@@ -6517,6 +6506,70 @@
           "user_prompt"
         ],
         "title": "DemoTapeSummary",
+        "type": "object"
+      },
+      "DeskMapNodeView": {
+        "description": "One path in a desk map / outline (workspace-relative POSIX).",
+        "properties": {
+          "depth": {
+            "default": 1,
+            "title": "Depth",
+            "type": "integer"
+          },
+          "is_dir": {
+            "title": "Is Dir",
+            "type": "boolean"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "is_dir"
+        ],
+        "title": "DeskMapNodeView",
+        "type": "object"
+      },
+      "DeskMapView": {
+        "description": "Bounded orientation of one cloud desk. Omitted unless ``desk_map`` is requested.",
+        "properties": {
+          "density": {
+            "enum": [
+              "outline",
+              "map"
+            ],
+            "title": "Density",
+            "type": "string"
+          },
+          "empty": {
+            "default": true,
+            "title": "Empty",
+            "type": "boolean"
+          },
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/DeskMapNodeView"
+            },
+            "title": "Entries",
+            "type": "array"
+          },
+          "truncated": {
+            "default": false,
+            "title": "Truncated",
+            "type": "boolean"
+          },
+          "unavailable": {
+            "default": false,
+            "title": "Unavailable",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "density"
+        ],
+        "title": "DeskMapView",
         "type": "object"
       },
       "DeviceListResponse": {
@@ -7749,6 +7802,16 @@
             "format": "date-time",
             "title": "Created At",
             "type": "string"
+          },
+          "desk_map": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DeskMapView"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "id": {
             "title": "Id",
@@ -15757,7 +15820,8 @@
         "type": "object"
       },
       "UpdateFolderRequest": {
-        "description": "Rename and/or re-parent — the local-mode binding stays immutable.\n\n``parent_id`` is a *request* field, not storage: the server turns it into a\n``rel_path`` prefix, which is the single source of truth for nesting\n(双模式工作区 §5.4). Omit it to leave the folder where it is; send ``null`` to\nmove it to the top level.",
+        "additionalProperties": false,
+        "description": "Rename a folder — the local-mode binding stays immutable.",
         "properties": {
           "name": {
             "anyOf": [
@@ -15769,17 +15833,6 @@
               }
             ],
             "title": "Name"
-          },
-          "parent_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Parent Id"
           }
         },
         "title": "UpdateFolderRequest",
@@ -32890,6 +32943,26 @@
         "operationId": "list_folders_v1_folders_get",
         "parameters": [
           {
+            "in": "query",
+            "name": "desk_map",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "outline",
+                    "map"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Desk Map"
+            }
+          },
+          {
             "in": "header",
             "name": "authorization",
             "required": false,
@@ -32954,7 +33027,7 @@
         ]
       },
       "post": {
-        "description": "Create a project, or reuse an existing live local binding (HTTP 200).\n\nLocal mode is unique per ``(user_id, local_root_id, local_subpath)`` — same\npath re-open returns the existing row (VS Code / Cursor workspace reuse).\nCloud projects become a real directory under ``parent_id``; a name already\ntaken among live siblings gets a numeric suffix rather than a 409 — the name\nis now a path segment, and two of them cannot share one directory.\n\nRegistering a local binding also declares that root on the caller's fulfill\nsession (``fulfill/declare.py``) — including the reuse branch, where the row\nis old but *this* install may be new to the folder.",
+        "description": "Create a project, or reuse an existing live local binding (HTTP 200).\n\nLocal mode is unique per ``(user_id, local_root_id, local_subpath)`` — same\npath re-open returns the existing row (VS Code / Cursor workspace reuse).\nCloud folders land at the tree root; a name already taken among live\nfolders gets a numeric suffix rather than a 409 — the name is a path\nsegment, and two of them cannot share one directory.\n\nRegistering a local binding also declares that root on the caller's fulfill\nsession (``fulfill/declare.py``) — including the reuse branch, where the row\nis old but *this* install may be new to the folder.",
         "operationId": "create_folder_v1_folders_post",
         "parameters": [
           {
@@ -33515,7 +33588,7 @@
     },
     "/v1/folders/{folder_id}": {
       "delete": {
-        "description": "软删项目（对话就地归档；工作区走保留期自动清理）。\n\nNested folders go with it, and the directory is parked in the tombstone area so\nthe name is free again immediately (双模式工作区 §5.4).\n\nReachable with a folders narrow ticket so sidecar and the sidebar share\nthe same soft-delete path. The irreversible twin below stays\naccess-session only.",
+        "description": "软删项目（对话就地归档；工作区走保留期自动清理）。\n\nThe directory is parked in the tombstone area so the name is free again\nimmediately (双模式工作区 §5.4).\n\nReachable with a folders narrow ticket so sidecar and the sidebar share\nthe same soft-delete path. The irreversible twin below stays\naccess-session only.",
         "operationId": "delete_folder_v1_folders__folder_id__delete",
         "parameters": [
           {
@@ -33601,6 +33674,26 @@
             }
           },
           {
+            "in": "query",
+            "name": "desk_map",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "outline",
+                    "map"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Desk Map"
+            }
+          },
+          {
             "in": "header",
             "name": "authorization",
             "required": false,
@@ -33661,7 +33754,7 @@
         ]
       },
       "patch": {
-        "description": "Rename and/or re-parent a folder — DB rows and the directory move together.\n\nRefuses with 409 while a turn holds the workspace lock: moving the directory\nout from under a running turn is not something to do silently, and neither is\nqueueing the user's rename behind it (不得静默改名).",
+        "description": "Rename a folder — DB row and the directory move together.\n\nRefuses with 409 while a turn holds the workspace lock: moving the directory\nout from under a running turn is not something to do silently, and neither is\nqueueing the user's rename behind it (不得静默改名).",
         "operationId": "update_folder_v1_folders__folder_id__patch",
         "parameters": [
           {

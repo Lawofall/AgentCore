@@ -1,9 +1,9 @@
 """Folder CRUD routes (项目 = 工作区).
 
 ``GET /{id}`` is accepted-member (owner / editor / viewer); outsiders 404
-(IDOR-safe). Tree mutate (rename / move / delete) remains owner-only (members
-403). Soft-deleting a folder archives its conversations in place (keeps
-``folder_id``); workspace binding is set at create and is immutable thereafter.
+(IDOR-safe). Rename / delete remain owner-only (members 403). Soft-deleting a
+folder archives its conversations in place (keeps ``folder_id``); workspace
+binding is set at create and is immutable thereafter.
 
 List / create / get-by-id / soft-delete accept either an access session or a
 folders narrow ticket (sidecar cloud roster) — the sidecar asks the same
@@ -14,6 +14,7 @@ Permanent delete / rename / 最近删除 remain access-session only: 彻底删
 
 from collections.abc import Sequence
 from datetime import datetime, timedelta
+from typing import Literal
 
 from fastapi import APIRouter, Depends, Response
 from pydantic import BaseModel
@@ -56,7 +57,6 @@ from agentcore.folders.permanent_delete import (
 from agentcore.folders.service import FolderDeskService, FolderDeskView, FolderMemberView
 from agentcore.folders.tree_ops import (
     FolderTreeError,
-    move_folder,
     rename_folder,
     restore_folder_tree,
     soft_delete_folder_tree,
@@ -117,6 +117,26 @@ async def _summary_from_owned(desk: FolderDeskService, folder) -> FolderSummary:
     return FolderSummary.from_folder(folder, collaborator_count=n)
 
 
+async def _attach_desk_maps(
+    summaries: list[FolderSummary],
+    *,
+    density: Literal["outline", "map"] | None,
+) -> list[FolderSummary]:
+    """Best-effort orientation. Missing density leaves ``desk_map`` unset (UI lists)."""
+    if not density or not summaries:
+        return summaries
+    from agentcore.api.schemas.conversations import DeskMapView
+    from agentcore.workspace.desk_map import desk_map_to_wire, peek_folder_desk_maps
+
+    maps = await peek_folder_desk_maps(summaries, density=density)
+    for summary in summaries:
+        peeked = maps.get(summary.id)
+        if peeked is None:
+            continue
+        summary.desk_map = DeskMapView.model_validate(desk_map_to_wire(peeked))
+    return summaries
+
+
 def _member_summary(view: FolderMemberView) -> FolderMemberSummary:
     return FolderMemberSummary(
         user_id=view.user_id,
@@ -166,9 +186,9 @@ async def create_folder(
 
     Local mode is unique per ``(user_id, local_root_id, local_subpath)`` — same
     path re-open returns the existing row (VS Code / Cursor workspace reuse).
-    Cloud projects become a real directory under ``parent_id``; a name already
-    taken among live siblings gets a numeric suffix rather than a 409 — the name
-    is now a path segment, and two of them cannot share one directory.
+    Cloud folders land at the tree root; a name already taken among live
+    folders gets a numeric suffix rather than a 409 — the name is a path
+    segment, and two of them cannot share one directory.
 
     Registering a local binding also declares that root on the caller's fulfill
     session (``fulfill/declare.py``) — including the reuse branch, where the row
@@ -186,19 +206,11 @@ async def create_folder(
             response.status_code = 200
             return FolderSummary.from_folder(existing)
 
-    parent_rel_path: str | None = None
-    if body.parent_id:
-        parent = await repo.get_by_id(body.parent_id, user_id=user.user_id)
-        if parent is None:
-            raise NotFoundError("上级文件夹不存在")
-        parent_rel_path = parent.rel_path
-
     folder = await repo.create(
         user_id=user.user_id,
         name=body.name,
         local_root_id=body.local_root_id if body.mode == "local" else None,
         local_subpath=body.local_subpath if body.mode == "local" else None,
-        parent_rel_path=parent_rel_path,
     )
     return FolderSummary.from_folder(folder)
 
@@ -208,13 +220,17 @@ async def list_folders(
     user: FoldersApiUser,
     repo: FolderRepository = Depends(get_folder_repo),
     desk: FolderDeskService = Depends(get_folder_desk_service),
+    desk_map: Literal["outline", "map"] | None = None,
 ):
     folders = await repo.list_by_user(user.user_id)
     counts = await desk.collaborator_counts([f.id for f in folders])
-    return [
+    summaries = [
         FolderSummary.from_folder(f, collaborator_count=counts.get(f.id, 0))
         for f in folders
     ]
+    # Collection is the roster: always outline density even if the caller asked map.
+    density = "outline" if desk_map else None
+    return await _attach_desk_maps(summaries, density=density)
 
 
 # --- 最近删除 (project recycle bin) ---
@@ -381,11 +397,12 @@ async def get_folder(
     folder_id: str,
     user: FoldersApiUser,
     desk: FolderDeskService = Depends(get_folder_desk_service),
+    desk_map: Literal["outline", "map"] | None = None,
 ):
     """Accepted desk member fetch (owner or editor/viewer). Outsiders 404."""
     view = await desk.get_desk(folder_id=folder_id, user_id=user.user_id)
     summaries = await _summaries_from_desk(desk, [view])
-    return summaries[0]
+    return (await _attach_desk_maps(summaries, density=desk_map))[0]
 
 
 @router.post("/{folder_id}/invites", response_model=FolderMemberSummary, status_code=201)
@@ -479,7 +496,7 @@ async def update_folder(
     session: AsyncSession = Depends(get_db),
     desk: FolderDeskService = Depends(get_folder_desk_service),
 ):
-    """Rename and/or re-parent a folder — DB rows and the directory move together.
+    """Rename a folder — DB row and the directory move together.
 
     Refuses with 409 while a turn holds the workspace lock: moving the directory
     out from under a running turn is not something to do silently, and neither is
@@ -495,17 +512,10 @@ async def update_folder(
             )
             if folder is None:
                 raise NotFoundError("文件夹不存在")
-        if "parent_id" in fields:
-            folder = await move_folder(
-                session,
-                user_id=user.user_id,
-                folder_id=folder_id,
-                new_parent_id=body.parent_id,
-            )
     except FolderTreeError as e:
         raise ValidationError(str(e)) from e
     except WorkspaceBusyError as e:
-        raise ConflictError("工作区正忙（有回合在跑），请稍后再改名或移动") from e
+        raise ConflictError("工作区正忙（有回合在跑），请稍后再改名") from e
 
     if folder is None:
         folder = await repo.get_by_id(folder_id, user_id=user.user_id)
@@ -522,8 +532,8 @@ async def delete_folder(
 ):
     """软删项目（对话就地归档；工作区走保留期自动清理）。
 
-    Nested folders go with it, and the directory is parked in the tombstone area so
-    the name is free again immediately (双模式工作区 §5.4).
+    The directory is parked in the tombstone area so the name is free again
+    immediately (双模式工作区 §5.4).
 
     Reachable with a folders narrow ticket so sidecar and the sidebar share
     the same soft-delete path. The irreversible twin below stays

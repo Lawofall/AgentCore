@@ -53,7 +53,7 @@ PROJECTIONS: tuple[EnvelopeProjection, ...] = (
     EnvelopeProjection(
         DESK,
         "桌",
-        "信封报坐在哪个文件夹或本会话草稿。",
+        "信封报坐在哪个文件夹或本会话草稿，并附有界地图。",
     ),
     EnvelopeProjection(
         SYSTEM,

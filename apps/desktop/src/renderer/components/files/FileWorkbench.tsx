@@ -46,11 +46,6 @@ import { useCreateFolder, useFolders } from "@/hooks/useFolders";
 import { hasLocalFiles } from "@/lib/capabilities";
 import { sortFoldersByRecentActivity } from "@/lib/draftWorkspaceFolders";
 import type { FileSource } from "@/lib/fileSource";
-import {
-  ancestorFolderIds,
-  buildFolderTree,
-  pruneFolderTree,
-} from "@/lib/folderTree";
 import { useNarrowLayoutState } from "@/lib/narrowLayout";
 import { useReadOnlyOffline } from "@/lib/offlineMode";
 import { notifyError } from "@/lib/toast";
@@ -82,7 +77,7 @@ const RULES_WS = "__rules__";
  * The 文件 hub's **split** file UI (VSCode 式左树右详情). The left rail is
  * zones (双模式工作区 §5.4 / §八 — 界面上没有「项目」，容器只有文件夹):
  *
- * - **我的文件** — the cloud folder tree the user owns, nested by `rel_path`.
+ * - **我的文件** — the cloud folders the user owns (flat list).
  * - **本机文件夹** — disk folders plus local `conv:` desks that have user-visible
  *   files, most recently active first (VS Code 语义).
  * - **与我共享** — cloud desks this user joined (flat roots; same `folder:` tree).
@@ -91,7 +86,7 @@ const RULES_WS = "__rules__";
  *
  * 段**默认折叠**（只露根标题），点标题展开/收起、展开态持久化（`expandedWs`）；折叠时不
  * 挂载 {@link FileTree}，故云端 eager 源的「整树递归拉取」推迟到展开时才发——文件夹一多时
- * 既清爽又省掉打开页面即 N 次全量请求。账号共用提示词在工具箱；本页左栏只挂文件夹树，
+ * 既清爽又省掉打开页面即 N 次全量请求。账号共用提示词在工具箱；本页左栏只挂文件夹列表，
  * 条目进各文件夹 ``.agentcore``，不再三分「记忆 / 规则 / 文档」夹。The right pane is a **tab strip** — opening files
  * stacks tabs, each {@link FileDetail} stays mounted (hidden when inactive) so
  * switching never drops editor / draft state. The tree always stays visible (unlike
@@ -340,28 +335,20 @@ export function FileWorkbench({
     if (!known) return;
     appliedFocusRef.current = focusKey;
     setFilter(""); // 清掉过滤，避免目标工作区被筛掉而看不到
-    // 嵌套文件夹要连同各层祖先一起展开，否则目标行仍藏在折叠的父级里。
-    const folderId = folderIdOf(focusWsId);
-    const ancestors = folderId
-      ? ancestorFolderIds(folders, folderId).map((id) => `folder:${id}`)
-      : [];
-    expandWs(...ancestors, focusWsId);
+    expandWs(focusWsId);
     setFlashWsId(focusWsId);
     const t = setTimeout(() => setFlashWsId(null), 1500);
     return () => clearTimeout(t);
-  }, [focusWsId, focusKey, railWorkspaces, folders, expandWs]);
+  }, [focusWsId, focusKey, railWorkspaces, expandWs]);
 
-  // 文件页 / 命令面板 / Composer 建成后：展开祖先（子行只在父展开时才挂载），闪一下新行。
+  // 文件页 / 命令面板 / Composer 建成后：展开并闪一下新行。
   // 标志在闪完再清——同一次 effect 里立刻 clear 会让 cleanup 掐掉闪光定时器。
   useEffect(() => {
     if (!pendingRevealFolderId) return;
     if (!folders.some((f) => f.id === pendingRevealFolderId)) return;
     const wsId = `folder:${pendingRevealFolderId}`;
-    const ancestors = ancestorFolderIds(folders, pendingRevealFolderId).map(
-      (id) => `folder:${id}`,
-    );
     setFilter("");
-    expandWs(...ancestors, wsId);
+    expandWs(wsId);
     setFlashWsId(wsId);
     const t = window.setTimeout(() => {
       setFlashWsId(null);
@@ -370,17 +357,15 @@ export function FileWorkbench({
     return () => window.clearTimeout(t);
   }, [pendingRevealFolderId, folders, expandWs, clearPendingReveal]);
 
-  // 区头 / 空态 / 行上 / 命令面板 requestUntitledCloudFolder：立刻落地「未命名文件夹」，行上改名。
+  // 区头 / 空态 / 命令面板 requestUntitledCloudFolder：立刻落地「未命名文件夹」，行上改名。
   useEffect(() => {
     if (!pendingUntitledCreate) return;
-    const parentId = pendingUntitledCreate.parentId;
     clearUntitledCreateRequest();
     void (async () => {
       try {
         const { folder } = await createFolder.mutateAsync({
           name: UNTITLED_FOLDER_NAME,
           mode: "cloud",
-          parentId,
         });
         useFoldersStore.getState().revealCreatedFolder(folder.id, {
           rename: true,
@@ -441,16 +426,13 @@ export function FileWorkbench({
     [filter, expandedWs],
   );
 
-  /** 我的文件 = 云端文件夹的真嵌套树；命中项的祖先一并保留，否则深处的匹配会没了路径。 */
-  const cloudFolderNodes = useMemo(() => {
-    const tree = buildFolderTree(
-      folders.filter((f) => f.mode === "cloud" && !isSharedWithMeFolder(f)),
-    );
-    if (!filter.trim()) return tree;
-    return pruneFolderTree(tree, (f) =>
-      matchesFilter(f.name, `folder:${f.id}`),
-    );
-  }, [folders, filter, matchesFilter]);
+  /** 我的文件 = 云端文件夹平铺列表。 */
+  const cloudFolders = useMemo(() => {
+    return folders
+      .filter((f) => f.mode === "cloud" && !isSharedWithMeFolder(f))
+      .filter((f) => matchesFilter(f.name, `folder:${f.id}`))
+      .sort((a, b) => a.name.localeCompare(b.name, "zh"));
+  }, [folders, matchesFilter]);
 
   /** 本机文件夹 = 最近打开列表 + local `conv:` desks with user-visible files. */
   const localFolders = useMemo(() => {
@@ -590,7 +572,7 @@ export function FileWorkbench({
         )}
       >
         {/* Rail header: 筛选 + 排序。新建云桌走「我的文件」区头「+」与空态主按钮；
-            嵌套桌走行上「在此新建文件夹」；桌内 mkdir 是「新建子文件夹」。 */}
+            桌内 mkdir 是「新建子文件夹」。 */}
         <div
           className={cn(
             "flex h-12 shrink-0 items-center gap-1 border-b border-border px-2",
@@ -635,7 +617,7 @@ export function FileWorkbench({
         ) : (
           <div className="min-h-0 flex-1 space-y-0.5 overflow-y-auto px-2 py-1">
             {filter.trim() &&
-            cloudFolderNodes.length === 0 &&
+            cloudFolders.length === 0 &&
             localRailItems.length === 0 &&
             sharedWithMeFolders.length === 0 ? (
               <p className="px-2 py-6 text-center text-xs text-muted-foreground">
@@ -643,10 +625,10 @@ export function FileWorkbench({
               </p>
             ) : (
               <>
-                {(cloudFolderNodes.length > 0 || !filter.trim()) && (
+                {(cloudFolders.length > 0 || !filter.trim()) && (
                   <MyFilesRailHeader offline={offline} />
                 )}
-                {cloudFolderNodes.length === 0 && !filter.trim() ? (
+                {cloudFolders.length === 0 && !filter.trim() ? (
                   <EmptyHint
                     className="flex-none py-8"
                     icon={
@@ -673,7 +655,7 @@ export function FileWorkbench({
                     }
                   />
                 ) : (
-                  <FolderRailNodes nodes={cloudFolderNodes} host={railHost} />
+                  <FolderRailNodes folders={cloudFolders} host={railHost} />
                 )}
 
                 {localFsAvailable &&

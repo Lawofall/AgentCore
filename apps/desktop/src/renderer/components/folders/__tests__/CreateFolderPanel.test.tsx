@@ -61,7 +61,6 @@ describe("CreateFolderCascadePanel", () => {
       expect(mutateAsync).toHaveBeenCalledWith({
         name: "设计",
         mode: "cloud",
-        parentId: null,
       });
       expect(useFoldersStore.getState().pendingRevealFolderId).toBe("f-new");
       expect(useFoldersStore.getState().pendingRenameFolderId).toBeNull();

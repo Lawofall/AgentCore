@@ -490,7 +490,7 @@ describe("folderLocationHint · 通道图标与祖先路径", () => {
     expect(menu.queryByText("本机文件夹")).toBeNull();
   });
 
-  it("嵌套云行只写祖先路径，不加「我的文件 ·」", () => {
+  it("云行不写祖先路径", () => {
     grouped.value = {
       folders: [cloudFolder("f-icon", "图标", "设计")],
       conversations: [],
@@ -498,13 +498,8 @@ describe("folderLocationHint · 通道图标与祖先路径", () => {
     const menu = within(openPicker());
 
     expect(menu.getByText("图标")).toBeTruthy();
-    expect(menu.getByText("设计")).toBeTruthy();
+    expect(menu.queryByText("设计")).toBeNull();
     expect(menu.queryByText("我的文件 · 设计")).toBeNull();
-    expect(
-      within(menu.getByRole("button", { name: /图标/ })).queryByText(
-        "我的文件",
-      ),
-    ).toBeNull();
   });
 
   it("没有 subpath 的本机行不写通道副标题", () => {

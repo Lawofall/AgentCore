@@ -1,12 +1,12 @@
-"""This-conversation file mutations for the CEO ``<工作区>`` pin.
+"""This-conversation file mutations as marks on the sitting desk map.
 
-Folder chats name the paths *this conversation* wrote / changed / exported /
-deleted so the CEO can see recent deliverables after compaction. No workspace
-path dump, no attachment census, no 「另有 N」. Bare chats omit this pin
-(scratch *is* the tree; glob / ``file_list``).
+Folder chats label paths *this conversation* wrote / changed / exported /
+deleted. Hits that the sitting map already named become tree marks; the rest
+keep a leftover pin 「本对话未在树上：」. No second census, no attachment dump,
+no 「另有 N」. Bare chats omit marks (scratch *is* the tree; glob / ``file_list``).
 
 Reads are out. Compaction's read+write ledger stays in ``working_set`` and is
-still not injected as ``<工作集>``. Workers do not receive this list.
+still not injected as ``<工作集>``. Workers do not receive marks.
 """
 
 from __future__ import annotations
@@ -18,12 +18,12 @@ from typing import Any
 from agentcore.core.logging import get_logger
 from agentcore.runtime.facts import FactKind
 from agentcore.tools.file_products import file_products_from_text
+from agentcore.workspace.desk_map import OVERFLOW_HEADER as CONVERSATION_EDITS_HEADER
 
 logger = get_logger(__name__)
 
 MAX_CONVERSATION_EDIT_PATHS = 8
 MAX_CONVERSATION_EDIT_HITS = 64
-CONVERSATION_EDITS_HEADER = "本对话："
 
 _WRITE = "write"
 _REPLACE = "edit"
@@ -326,7 +326,7 @@ async def load_conversation_edits(
 def render_conversation_edits_block(
     edits: Sequence[ConversationEdit],
 ) -> str:
-    """Untagged CEO pin spliced into ``<工作区>``. Empty → ``""`` (omit the 节)."""
+    """Leftover pin when no sitting map is available. Empty → ``""``."""
     merged = merge_conversation_edits(edits)
     if not merged:
         return ""
@@ -342,7 +342,7 @@ async def build_conversation_edits_block(
     exclude_turn_id: str | None = None,
     conversation_edits: Sequence[ConversationEdit] | None = None,
 ) -> str:
-    """Load (or accept) this-conversation mutations and render the CEO pin."""
+    """Load (or accept) mutations and render leftover-only (no sitting map)."""
     if conversation_edits is not None:
         merged = merge_conversation_edits(conversation_edits)
     else:

@@ -113,8 +113,11 @@ async def rebuild_worker_prompt_for_target(
         shared_base,
         on_demand_entries=entries,
     )
+    from agentcore.workspace.desk_map import build_desk_map, render_desk_map
+
     envelope = render_worker_turn_envelope(
         workspace_context=workspace_facts,
+        desk_map=render_desk_map(await build_desk_map(backend, density="map")),
         attachment_context=attachment_context,
     )
     return system, envelope

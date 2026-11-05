@@ -90,61 +90,88 @@ async def test_create_cloud_and_local_folders(client):
     r = await client.get("/v1/folders")
     assert r.status_code == 200, r.text
     assert {f["id"] for f in r.json()} == {cloud["id"], local["id"]}
+    assert all(row.get("desk_map") is None for row in r.json())
 
 
-async def test_cloud_tree_nest_rename_move_and_restore(client, _fs_data_dir):
-    """真目录树端到端：嵌套建、改名带子树、移动、软删释放名字、恢复重新占位。"""
+async def test_folder_desk_map_is_opt_in_and_collection_stays_outline(
+    client, _fs_data_dir
+):
+    user_id = await register_and_login(client, "deskmapuser")
+    r = await client.post("/v1/folders", json={"name": "MapDesk", "mode": "cloud"})
+    assert r.status_code == 201, r.text
+    fid = r.json()["id"]
+    root = workspace_root_path(
+        user_id=user_id, folder_rel_path="MapDesk", conversation_id=""
+    )
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "readme.md").write_text("hi", encoding="utf-8")
+    (root / "src").mkdir()
+    (root / "src" / "a.py").write_text("a", encoding="utf-8")
+
+    listed = (await client.get("/v1/folders")).json()
+    assert all(row.get("desk_map") is None for row in listed)
+
+    outlined = (await client.get("/v1/folders", params={"desk_map": "outline"})).json()
+    row = next(item for item in outlined if item["id"] == fid)
+    assert row["desk_map"]["density"] == "outline"
+    assert {e["path"] for e in row["desk_map"]["entries"]} >= {"readme.md", "src"}
+    assert all(e["depth"] == 1 for e in row["desk_map"]["entries"])
+
+    clamped = (await client.get("/v1/folders", params={"desk_map": "map"})).json()
+    assert next(item for item in clamped if item["id"] == fid)["desk_map"]["density"] == "outline"
+
+    detail = (await client.get(f"/v1/folders/{fid}", params={"desk_map": "map"})).json()
+    assert detail["desk_map"]["density"] == "map"
+    paths = {e["path"] for e in detail["desk_map"]["entries"]}
+    assert "src/a.py" in paths
+
+
+async def test_cloud_folder_rename_soft_delete_and_restore(client, _fs_data_dir):
+    """平铺云文件夹：斜杠从名字里清掉、改名搬家、软删释放名字、恢复避开重名。"""
     user_id = await register_and_login(client, "foldertree")
 
     def tree(rel: str) -> Path:
         return workspace_root_path(user_id=user_id, folder_rel_path=rel, conversation_id="")
 
-    parent = await _create_cloud_folder(client, "研究")
-    r = await client.post(
-        "/v1/folders", json={"name": "2026/Q1", "mode": "cloud", "parent_id": parent}
-    )
+    r = await client.post("/v1/folders", json={"name": "2026/Q1", "mode": "cloud"})
     assert r.status_code == 201, r.text
-    child = r.json()
-    # The slash is a path separator, not part of a name — it gets sanitized away.
-    assert child["rel_path"] == "研究/2026_Q1"
-    assert child["parent_rel_path"] == "研究"
+    folder = r.json()
+    assert folder["rel_path"] == "2026_Q1"
+    assert folder["parent_rel_path"] is None
+    folder_id = folder["id"]
 
-    ws = f"folder:{child['id']}"
+    ws = f"folder:{folder_id}"
     assert (
         await client.put(f"/v1/workspaces/{ws}/files/note.md", content=b"body")
     ).status_code == 200
-    assert (tree("研究/2026_Q1") / "note.md").exists()
+    assert (tree("2026_Q1") / "note.md").exists()
 
-    # Rename the parent: the child's directory (and its files) follow by prefix.
-    r = await client.patch(f"/v1/folders/{parent}", json={"name": "调研"})
+    r = await client.patch(f"/v1/folders/{folder_id}", json={"name": "调研"})
     assert r.status_code == 200, r.text
     assert r.json()["rel_path"] == "调研"
-    assert (tree("调研/2026_Q1") / "note.md").read_text(encoding="utf-8") == "body"
-    assert not tree("研究").exists()
+    assert (tree("调研") / "note.md").read_text(encoding="utf-8") == "body"
+    assert not tree("2026_Q1").exists()
     r = await client.get(f"/v1/workspaces/{ws}/files/note.md")
     assert r.status_code == 200 and r.content == b"body"
 
-    # Move the child back to the tree root.
-    r = await client.patch(f"/v1/folders/{child['id']}", json={"parent_id": None})
-    assert r.status_code == 200, r.text
-    assert r.json()["rel_path"] == "2026_Q1"
-    assert (tree("2026_Q1") / "note.md").exists()
+    assert (await client.delete(f"/v1/folders/{folder_id}")).status_code == 200
+    assert not tree("调研").exists()
+    again = await client.post("/v1/folders", json={"name": "调研", "mode": "cloud"})
+    assert again.json()["rel_path"] == "调研"
 
-    # A folder cannot be moved into its own subtree.
-    r = await client.patch(f"/v1/folders/{parent}", json={"parent_id": parent})
+    r = await client.post(f"/v1/folders/trash/{folder_id}/restore")
+    assert r.status_code == 200, r.text
+    assert r.json()["rel_path"] == "调研 (2)"
+    assert (tree("调研 (2)") / "note.md").read_text(encoding="utf-8") == "body"
+
+
+async def test_create_folder_rejects_parent_id(client):
+    await register_and_login(client, "foldernest")
+    parent = await _create_cloud_folder(client, "研究")
+    r = await client.post(
+        "/v1/folders", json={"name": "子", "mode": "cloud", "parent_id": parent}
+    )
     assert r.status_code == 422, r.text
-
-    # Soft-delete frees the visible name at once (directory → tombstone area).
-    assert (await client.delete(f"/v1/folders/{child['id']}")).status_code == 200
-    assert not tree("2026_Q1").exists()
-    again = await client.post("/v1/folders", json={"name": "2026_Q1", "mode": "cloud"})
-    assert again.json()["rel_path"] == "2026_Q1"
-
-    # Restore lands beside the squatter rather than on top of it, files intact.
-    r = await client.post(f"/v1/folders/trash/{child['id']}/restore")
-    assert r.status_code == 200, r.text
-    assert r.json()["rel_path"] == "2026_Q1 (2)"
-    assert (tree("2026_Q1 (2)") / "note.md").read_text(encoding="utf-8") == "body"
 
 
 async def test_create_folder_requires_mode(client):
@@ -637,40 +664,6 @@ async def test_permanent_delete_folder_wipes_that_desk_documents(
         ).scalar_one()
     assert folder_n == 0
     assert global_n == 1
-
-
-async def test_permanent_delete_folder_wipes_nested_subtree(
-    client, session_factory, monkeypatch, _fs_data_dir
-):
-    """嵌套子文件夹跟着父一起走：父目录被整个 rmtree，留下子行就是指向空气的幽灵项目。"""
-    monkeypatch.setattr(permanent_delete_mod, "async_session_factory", session_factory)
-    user_id = await register_and_login(client, "folderuser7n")
-    parent = await _create_cloud_folder(client, "Root")
-    r = await client.post(
-        "/v1/folders", json={"name": "Nested", "mode": "cloud", "parent_id": parent}
-    )
-    assert r.status_code == 201, r.text
-    child = r.json()["id"]
-
-    r = await client.post("/v1/conversations", json={"title": "in parent", "folder_id": parent})
-    parent_conv = r.json()["id"]
-    r = await client.post("/v1/conversations", json={"title": "in child", "folder_id": child})
-    child_conv = r.json()["id"]
-    await _seed_message(session_factory, child_conv)
-    assert (
-        await client.put(f"/v1/workspaces/folder:{child}/files/n.txt", content=b"x")
-    ).status_code == 200
-
-    r = await client.delete(f"/v1/folders/{parent}/permanent")
-    assert r.status_code == 200, r.text
-
-    assert (await client.get("/v1/folders")).json() == []
-    for conv in (parent_conv, child_conv):
-        assert (await client.get(f"/v1/conversations/{conv}")).status_code == 404
-    assert (await client.get(f"/v1/workspaces/folder:{child}/files")).status_code == 404
-    assert not workspace_root_path(
-        user_id=user_id, folder_rel_path="Root", conversation_id=""
-    ).exists()
 
 
 async def test_permanent_delete_local_folder_keeps_os_sentinel(

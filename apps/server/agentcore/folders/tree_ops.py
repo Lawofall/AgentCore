@@ -38,7 +38,6 @@ logger = get_logger(__name__)
 
 __all__ = [
     "FolderTreeError",
-    "move_folder",
     "rename_folder",
     "restore_folder_tree",
     "soft_delete_folder_tree",
@@ -127,29 +126,6 @@ async def rename_folder(
         new_name=new_name,
         new_parent_rel_path=None,
         move=False,
-    )
-
-
-async def move_folder(
-    session: AsyncSession, *, user_id: str, folder_id: str, new_parent_id: str | None
-) -> Folder | None:
-    """Move a folder under ``new_parent_id`` (``None`` = the tree root)."""
-    repo = FolderRepository(session)
-    parent_rel: str | None = None
-    if new_parent_id:
-        parent = await repo.get_by_id(new_parent_id, user_id=user_id)
-        if parent is None:
-            raise FolderTreeError("目标文件夹不存在")
-        if not parent.rel_path:
-            raise FolderTreeError("目标文件夹还没有云端目录，无法作为上级")
-        parent_rel = parent.rel_path
-    return await _apply_rewrite(
-        session,
-        user_id=user_id,
-        folder_id=folder_id,
-        new_name=None,
-        new_parent_rel_path=parent_rel,
-        move=True,
     )
 
 

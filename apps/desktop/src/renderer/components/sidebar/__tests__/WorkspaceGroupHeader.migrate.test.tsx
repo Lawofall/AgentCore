@@ -98,12 +98,6 @@ describe("WorkspaceGroupHeader · local traditional (no migrate debt badge)", ()
     expect(await screen.findByText("新建对话")).toBeTruthy();
   });
 
-  it("a nested folder shows its ancestor path so same-named siblings differ", () => {
-    renderHeader("cloud", { relPath: "设计/图标", parentRelPath: "设计" });
-    expect(screen.getByText("DemoProj")).toBeTruthy();
-    expect(screen.getByText("设计")).toBeTruthy();
-  });
-
   it("cloud group menu has 成员; local does not", async () => {
     renderHeader("cloud");
     fireEvent.pointerDown(screen.getByLabelText("文件夹操作"));

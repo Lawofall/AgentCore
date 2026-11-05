@@ -150,10 +150,10 @@ async def test_assemble_cancels_conversation_edits_when_toolset_raises(
         except asyncio.CancelledError:
             cancelled.set()
             raise
-        return ""
+        return []
 
     monkeypatch.setattr(
-        "agentcore.runtime.pipeline.assemble.build_conversation_edits_block", _hang
+        "agentcore.runtime.pipeline.assemble.load_conversation_edits", _hang
     )
 
     def _fake_assemble(**kwargs):

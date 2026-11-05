@@ -18,8 +18,8 @@ export interface FolderMeta {
   localRootId: string | null;
   localSubpath: string | null;
   /**
-   * Where the folder sits in the user-visible cloud tree (POSIX, relative to the
-   * tree root — `设计/图标`). Changes on rename / move; `id` stays the handle.
+   * Where the folder sits in the cloud tree (POSIX, relative to the tree root).
+   * Changes on rename; `id` stays the handle.
    *
    * Absent on rows an older client cached and on local folders (which live on
    * disk, not in the cloud tree) — such a folder reads as top-level, never
@@ -247,8 +247,6 @@ export interface CreateFolderInput {
   mode: "local" | "cloud";
   localRootId?: string | null;
   localSubpath?: string | null;
-  /** Nest the new folder inside this one; omit / null = top level of 我的文件. */
-  parentId?: string | null;
 }
 
 export interface CreateFolderResult {
@@ -266,7 +264,6 @@ export async function createFolder(
     mode: input.mode,
     local_root_id: input.mode === "local" ? (input.localRootId ?? null) : null,
     local_subpath: input.mode === "local" ? (input.localSubpath ?? null) : null,
-    parent_id: input.parentId ?? null,
   };
   const { data, status } = await api.postWithStatus<BackendFolder>(
     "/v1/folders",
@@ -276,18 +273,14 @@ export async function createFolder(
 }
 
 /**
- * Rename and/or move a folder. Mode / local bind are immutable after create.
- *
- * `parentId` is only sent when the caller explicitly asks for a move (`null`
- * means "to the top level"), so a plain rename never re-parents by omission.
+ * Rename a folder. Mode / local bind are immutable after create.
  */
 export async function updateFolder(
   id: string,
-  patch: { name?: string; parentId?: string | null },
+  patch: { name?: string },
 ): Promise<FolderMeta> {
   const body: Record<string, unknown> = {};
   if (patch.name !== undefined) body.name = patch.name;
-  if ("parentId" in patch) body.parent_id = patch.parentId ?? null;
   const res = await api.patch<BackendFolder>(`/v1/folders/${id}`, body);
   return toFolder(res);
 }

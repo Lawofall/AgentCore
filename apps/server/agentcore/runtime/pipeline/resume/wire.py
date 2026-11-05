@@ -351,9 +351,11 @@ async def _wire_continuation_toolset(
         workspace_facts,
     )
     from agentcore.runtime.resolve.prompt.envelope import render_worker_turn_envelope
+    from agentcore.workspace.desk_map import build_desk_map, render_desk_map
 
     worker_envelope = render_worker_turn_envelope(
         workspace_context=workspace_facts,
+        desk_map=render_desk_map(await build_desk_map(backend, density="map")),
         attachment_context="",
     )
     spawn_base = base_system_prompt

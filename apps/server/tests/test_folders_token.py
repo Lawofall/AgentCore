@@ -137,7 +137,8 @@ def folders_creds() -> FoldersCredentials:
 async def test_cloud_list_folders_ok(monkeypatch: pytest.MonkeyPatch, folders_creds):
     async def _handler(request: httpx.Request) -> httpx.Response:
         assert request.method == "GET"
-        assert str(request.url) == "https://cloud.example/v1/folders"
+        assert request.url.path.rstrip("/") == "/v1/folders"
+        assert request.url.params.get("desk_map") == "outline"
         assert request.headers["Authorization"] == "Bearer folders-jwt"
         return httpx.Response(200, json=[_summary(id="a", name="A")])
 
@@ -156,7 +157,8 @@ async def test_cloud_create_and_get(monkeypatch: pytest.MonkeyPatch, folders_cre
         if request.method == "POST":
             body = httpx.Response(201, json=_summary(id="new", name="N"))
             return body
-        if request.method == "GET" and str(request.url).endswith("/local-1"):
+        if request.method == "GET" and request.url.path.endswith("/local-1"):
+            assert request.url.params.get("desk_map") == "map"
             return httpx.Response(
                 200,
                 json=_summary(
@@ -167,7 +169,7 @@ async def test_cloud_create_and_get(monkeypatch: pytest.MonkeyPatch, folders_cre
                     local_subpath="apps",
                 ),
             )
-        if request.method == "GET" and str(request.url).endswith("/missing"):
+        if request.method == "GET" and request.url.path.endswith("/missing"):
             return httpx.Response(404, json={"detail": "not found"})
         return httpx.Response(500, json={"detail": "boom"})
 
@@ -303,11 +305,8 @@ async def test_create_folder_cloud_http_path(
     monkeypatch.setattr(folders_mod, "async_session_factory", lambda: _CM())
     monkeypatch.setattr(folders_mod, "FolderRepository", _Repo)
 
-    async def _fake_create(
-        creds: FoldersCredentials, *, name: str, parent_id: str | None = None
-    ) -> dict[str, Any]:
+    async def _fake_create(creds: FoldersCredentials, *, name: str) -> dict[str, Any]:
         assert name == "NewCloud"
-        assert parent_id is None
         return _summary(id="created-1", name=name)
 
     monkeypatch.setattr(
@@ -318,28 +317,6 @@ async def test_create_folder_cloud_http_path(
     with folders_credentials_scope(folders_creds):
         folder = await create_cloud_folder(user_id="u1", name="NewCloud")
     assert folder["id"] == "created-1"
-
-
-async def test_create_folder_nested_cloud_http_path(
-    monkeypatch: pytest.MonkeyPatch, folders_creds
-):
-    """Auto-desk / REST nest by already-resolved parent_id over the same HTTP path."""
-
-    async def _fake_create(
-        creds: FoldersCredentials, *, name: str, parent_id: str | None = None
-    ) -> dict[str, Any]:
-        assert parent_id == "parent-1"
-        return _summary(id="created-2", name=name, rel_path=f"工作/设计/{name}")
-
-    monkeypatch.setattr(
-        "agentcore.folders.credentials.cloud_create_cloud_folder", _fake_create
-    )
-
-    with folders_credentials_scope(folders_creds):
-        folder = await create_cloud_folder(
-            user_id="u1", name="图标", parent_id="parent-1", parent_rel_path="工作/设计"
-        )
-    assert folder["rel_path"] == "工作/设计/图标"
 
 
 async def test_resolve_folder_cloud_http_path(

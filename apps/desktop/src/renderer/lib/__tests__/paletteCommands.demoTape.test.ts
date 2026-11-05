@@ -137,9 +137,7 @@ describe("paletteCommands · 新建文件夹", () => {
     expect(cmd?.title).toBe("新建文件夹");
     cmd?.run();
     expect(baseCtx.navigate).toHaveBeenCalledWith("/files");
-    expect(useFoldersStore.getState().pendingUntitledCreate).toEqual({
-      parentId: null,
-    });
+    expect(useFoldersStore.getState().pendingUntitledCreate).toBe(true);
   });
 });
 

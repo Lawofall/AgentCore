@@ -1,13 +1,9 @@
 """CEO-only folder roster tool: list / resolve (cloud).
 
 用户面只有一种容器——**文件夹**（工作区.md §5.4）。``Folder`` 实体仍在，但降级为
-内部稳定引用：它记住「这个文件夹当前在树里的哪个位置」，所以改名 / 移动不断工作流触发、
-记忆。对 AI 暴露的一律是文件夹口径，名册与 ``GET /folders`` 同形
-（``FolderSummary`` 字段，含 ``rel_path``；无 OS 绝对路径）。
-
-**嵌套是真的**：云文件夹落在 ``workspaces/<user>/tree/<rel_path>/``，父子关系由
-``rel_path`` 前缀单一表达。因此 ``folders(action=resolve)`` 按**路径**解析而不只按名字——
-``设计/图标`` 与 ``归档/图标`` 是两个文件夹，只按末段名匹配必然在嵌套账号上误命中。
+内部稳定引用。对 AI 暴露的是文件夹口径：``rel_path``、id、桌地图轮廓（list = 一层，
+resolve = 有界树）。不灌 ``FolderSummary`` 全量 JSON。文件夹平铺，不在 Folder 里再套
+一张 Folder；桌内目录走 mkdir。
 
 新建 / 软删云文件夹是人侧（「我的文件」+ REST）。裸聊写盘缺桌由运行时自动建云桌。
 彻底删（``/permanent`` 与回收站清盘）只能用户自己确认。
@@ -15,7 +11,6 @@
 
 from __future__ import annotations
 
-import json
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, Literal
@@ -47,14 +42,12 @@ _ACTION_RESOLVE = "resolve"
 
 _AMBIGUOUS_HINT = (
     "多个命中：禁止静默猜「最近」。"
-    "或改用更长的路径重新 resolve（如 `设计/图标` 而不是 `图标`）。"
+    "或改用更精确的名字重新 resolve。"
 )
-_NOT_FOUND_HINT = (
-    "零命中。禁止静默猜「最近」。"
-    "嵌套同名注意层级（`设计/图标` ≠ 顶层 `图标`）。"
-)
+_NOT_FOUND_HINT = "零命中。禁止静默猜「最近」。"
 _EMPTY_LIST_HINT = "当前账号下还没有文件夹。"
-_RESOLVED_TIP = "队员坐该文件夹时读写范围 = 该层及其子文件夹。"
+_RESOLVED_TIP = "队员坐该文件夹时读写范围 = 这张桌（工作区根及桌内目录）。"
+LOCAL_RESOLVE_HINT = "本机桌，名册不探盘；坐上后看当前桌地图。"
 
 
 def folder_summary_dict(folder: Any) -> dict[str, Any]:
@@ -163,19 +156,13 @@ async def create_cloud_folder(
     *,
     user_id: str,
     name: str,
-    parent_id: str | None = None,
-    parent_rel_path: str | None = None,
 ) -> dict[str, Any]:
     """Account-level cloud Folder create — same semantics as ``POST /folders`` mode=cloud.
 
     Does **not** touch any Conversation row (no ``folder_id`` rebind, no new session).
     With folders narrow-ticket creds (sidecar), calls the cloud HTTP API instead of
     the local FolderRepository. Shared by the file-hub REST path and bare-chat auto desk.
-
-    The two backends address the parent differently (HTTP takes ``parent_id`` and
-    derives the prefix server-side; the repository takes the prefix directly), so
-    callers pass **both** off one already-resolved parent rather than letting each
-    path look the parent up again and possibly disagree. Omit both for top level.
+    Folders are a flat list; nesting a Folder under another Folder is not a product.
     """
     from agentcore.folders.credentials import (
         FoldersCloudError,
@@ -186,9 +173,7 @@ async def create_cloud_folder(
     creds = get_folders_credentials()
     if creds is not None:
         try:
-            return await cloud_create_cloud_folder(
-                creds, name=name, parent_id=parent_id
-            )
+            return await cloud_create_cloud_folder(creds, name=name)
         except FoldersCloudError:
             raise
         except Exception as e:  # noqa: BLE001
@@ -200,7 +185,6 @@ async def create_cloud_folder(
             name=name,
             local_root_id=None,
             local_subpath=None,
-            parent_rel_path=parent_rel_path,
         )
     return folder_summary_dict(folder)
 
@@ -308,8 +292,72 @@ def _is_folders_cloud_failure(exc: BaseException) -> bool:
     return isinstance(exc, FoldersCloudError)
 
 
-def _json_output(payload: dict[str, Any]) -> str:
-    return json.dumps(payload, ensure_ascii=False, indent=2)
+def _is_local_folder(summary: dict[str, Any]) -> bool:
+    return str(summary.get("mode") or "") == "local" or bool(summary.get("local_root_id"))
+
+
+def render_folder_roster_line(summary: dict[str, Any]) -> str:
+    """One roster row: path, id, optional outline. No timestamps / owner JSON."""
+    from agentcore.workspace.desk_map import desk_map_from_wire, render_outline_line
+
+    rel = folder_display_path(summary) or str(summary.get("name") or "")
+    fid = str(summary.get("id") or "")
+    head = f"- {rel}  `{fid}`"
+    if _is_local_folder(summary):
+        head += "  本机"
+    outline = render_outline_line(
+        desk_map_from_wire(summary.get("desk_map")),
+        local=_is_local_folder(summary),
+    )
+    if outline:
+        return f"{head}\n  {outline}"
+    return head
+
+
+def render_folder_roster(folders: Sequence[dict[str, Any]]) -> str:
+    return "\n".join(render_folder_roster_line(row) for row in folders)
+
+
+async def _attach_roster_maps(
+    folders: list[dict[str, Any]],
+    *,
+    density: str,
+) -> None:
+    from agentcore.workspace.desk_map import apply_desk_maps, peek_folder_desk_maps
+
+    missing = [row for row in folders if not isinstance(row.get("desk_map"), dict)]
+    if not missing:
+        return
+    maps = await peek_folder_desk_maps(missing, density=density)  # type: ignore[arg-type]
+    apply_desk_maps(folders, maps)
+
+
+async def _enrich_resolve_map(folder: dict[str, Any]) -> None:
+    """Upgrade a unique resolve hit to map density (sidecar GET already may have it)."""
+    from agentcore.folders.credentials import cloud_get_folder, get_folders_credentials
+    from agentcore.workspace.desk_map import (
+        apply_desk_maps,
+        desk_map_from_wire,
+        peek_folder_desk_maps,
+    )
+
+    existing = desk_map_from_wire(folder.get("desk_map"))
+    if existing is not None and existing.density == "map" and not existing.unavailable:
+        return
+    creds = get_folders_credentials()
+    if creds is not None:
+        fid = str(folder.get("id") or "").strip()
+        if not fid:
+            return
+        try:
+            fetched = await cloud_get_folder(creds, folder_id=fid)
+        except Exception:  # noqa: BLE001 — resolve already succeeded
+            return
+        if isinstance(fetched, dict) and fetched.get("desk_map"):
+            folder["desk_map"] = fetched["desk_map"]
+        return
+    maps = await peek_folder_desk_maps([folder], density="map")
+    apply_desk_maps([folder], maps)
 
 
 class FoldersTool:
@@ -328,7 +376,7 @@ class FoldersTool:
         return ToolSchema(
             name=FOLDERS_TOOL_NAME,
             description=(
-                "文件夹名册（rel_path）。名册不常驻，跨桌先列。"
+                "文件夹名册（rel_path 与轮廓）。名册不常驻，跨桌先列。"
             ),
             parameters={
                 "type": "object",
@@ -337,7 +385,8 @@ class FoldersTool:
                         "type": "string",
                         "enum": [_ACTION_LIST, _ACTION_RESOLVE],
                         "description": (
-                            "list 列出名册；resolve 按路径解析为 id（嵌套同名须完整路径）。"
+                            "list 列出名册与轮廓；"
+                            "resolve 按名字或路径解析为 id 并附地图。"
                         ),
                     },
                     "path": {
@@ -411,11 +460,11 @@ class FoldersTool:
             count=len(folders),
             run_id=context.run_id,
         )
-        payload = {"folders": folders, "count": len(folders)}
+        await _attach_roster_maps(folders, density="outline")
         if not folders:
-            text = _EMPTY_LIST_HINT + "\n" + _json_output(payload)
+            text = _EMPTY_LIST_HINT
         else:
-            text = f"共 {len(folders)} 个文件夹：\n" + _json_output(payload)
+            text = f"共 {len(folders)} 个文件夹：\n" + render_folder_roster(folders)
         return ToolResult(
             tool_call_id="",
             success=True,
@@ -476,57 +525,54 @@ class FoldersTool:
         )
 
         if outcome.status == "resolved":
-            folder = outcome.matches[0]
+            folder = dict(outcome.matches[0])
             context.turn_target_desk.note_folder(
                 folder.get("id") if isinstance(folder.get("id"), str) else None
             )
-            payload: dict[str, Any] = {
-                "status": "resolved",
-                "query": path,
-                "folder": folder,
-            }
+            await _enrich_resolve_map(folder)
+            from agentcore.workspace.desk_map import desk_map_from_wire, render_desk_map
+
+            rel = folder_display_path(folder)
+            fid = str(folder.get("id") or "")
+            mode = str(folder.get("mode") or "")
+            lines = [
+                f"唯一命中，可直接用于后续派工（{_RESOLVED_TIP}）：",
+                f"{rel}  id=`{fid}`  {mode}",
+            ]
+            tree = render_desk_map(desk_map_from_wire(folder.get("desk_map")))
+            if tree:
+                lines.append(tree)
+            elif _is_local_folder(folder):
+                lines.append(LOCAL_RESOLVE_HINT)
             return ToolResult(
                 tool_call_id="",
                 success=True,
-                output=(
-                    "唯一命中，可直接用于后续派工"
-                    f"（{_RESOLVED_TIP}）：\n" + _json_output(payload)
-                ),
+                output="\n".join(lines),
                 display={
                     "status": "resolved",
                     "folder_id": folder.get("id"),
                     "name": folder.get("name"),
-                    "rel_path": folder_display_path(folder),
+                    "rel_path": rel,
                     "mode": folder.get("mode"),
                 },
             )
 
         if outcome.status == "ambiguous":
-            payload = {
-                "status": "ambiguous",
-                "query": path,
-                "matches": list(outcome.matches),
-                "hint": _AMBIGUOUS_HINT,
-            }
+            matches = [dict(row) for row in outcome.matches]
+            await _attach_roster_maps(matches, density="outline")
             return ToolResult(
                 tool_call_id="",
                 success=True,
-                output=_AMBIGUOUS_HINT + "\n" + _json_output(payload),
+                output=_AMBIGUOUS_HINT + "\n" + render_folder_roster(matches),
                 display={
                     "status": "ambiguous",
-                    "match_count": len(outcome.matches),
+                    "match_count": len(matches),
                 },
             )
 
-        payload = {
-            "status": "not_found",
-            "query": path,
-            "matches": [],
-            "hint": _NOT_FOUND_HINT,
-        }
         return ToolResult(
             tool_call_id="",
             success=True,
-            output=_NOT_FOUND_HINT + "\n" + _json_output(payload),
+            output=_NOT_FOUND_HINT,
             display={"status": "not_found", "match_count": 0},
         )

@@ -12,7 +12,10 @@ from agentcore.core.types import DEFAULT_PERMISSION_AXES, WorkspaceBoundary
 from agentcore.llm.profiles import TurnProfiles
 from agentcore.runtime.approvals import ApprovalGate
 from agentcore.runtime.context import resolve_channel_profile
-from agentcore.runtime.context.conversation_edits import build_conversation_edits_block
+from agentcore.runtime.context.conversation_edits import (
+    ConversationEdit,
+    load_conversation_edits,
+)
 from agentcore.runtime.events import EventSink
 from agentcore.runtime.interaction import default_interaction_registry
 from agentcore.runtime.resolve.prompt import (
@@ -83,7 +86,7 @@ async def assemble_ceo_turn(
         edits_task = asyncio.create_task(
             _timed_phase(
                 "conversation_edits",
-                build_conversation_edits_block(
+                load_conversation_edits(
                     conversation_id=conversation_id,
                     exclude_turn_id=message_id,
                 ),
@@ -91,8 +94,8 @@ async def assemble_ceo_turn(
         )
     else:
 
-        async def _no_conversation_edits() -> str:
-            return ""
+        async def _no_conversation_edits() -> list[ConversationEdit]:
+            return []
 
         edits_task = asyncio.create_task(_no_conversation_edits())
     await asyncio.sleep(0)
@@ -146,7 +149,7 @@ async def _assemble_ceo_wired(
     suspension_saver: SuspensionSaver | None,
     suspension_deleter: SuspensionDeleter | None,
     x_client_platform: str | None,
-    edits_task: asyncio.Task[str],
+    edits_task: asyncio.Task[list[ConversationEdit]],
 ) -> AssembledTurn:
     # The CEO owns the conversation and replies directly, but it is a
     # COORDINATOR: it carries only the read / retrieval built-ins
@@ -298,10 +301,16 @@ async def _assemble_ceo_wired(
         exclude_turn_id=message_id,
         promotion_ledger=prepared.base_tool_context.promotion_ledger,
     )
+    from agentcore.workspace.desk_map import render_desk_map_with_marks
+
+    map_text, leftover = render_desk_map_with_marks(
+        prepared.desk_map, conversation_edits
+    )
     chat_envelope = resolve_emitted_envelope(
         render_ceo_turn_envelope(
             workspace_context=prepared.workspace_facts,
-            conversation_edits=conversation_edits,
+            conversation_edits=leftover,
+            desk_map=map_text,
             attachment_material=attachment_material_scene(
                 has_file_parts=prepared.has_file_parts,
                 has_resident_missing=prepared.has_resident_missing,

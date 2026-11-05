@@ -373,9 +373,6 @@ class CreateFolderRequest(BaseModel):
     # Required when ``mode=local``; forbidden when ``mode=cloud``.
     local_root_id: str | None = Field(None, max_length=200)
     local_subpath: str | None = Field(None, max_length=400)
-    # Nest the new folder inside this one (omit / null = top level). Resolved to a
-    # ``rel_path`` prefix server-side; there is no ``parent_id`` column.
-    parent_id: str | None = None
 
     @model_validator(mode="after")
     def _validate_mode_binding(self) -> "CreateFolderRequest":
@@ -391,16 +388,29 @@ class CreateFolderRequest(BaseModel):
 
 
 class UpdateFolderRequest(BaseModel):
-    """Rename and/or re-parent — the local-mode binding stays immutable.
+    """Rename a folder — the local-mode binding stays immutable."""
 
-    ``parent_id`` is a *request* field, not storage: the server turns it into a
-    ``rel_path`` prefix, which is the single source of truth for nesting
-    (双模式工作区 §5.4). Omit it to leave the folder where it is; send ``null`` to
-    move it to the top level.
-    """
+    model_config = {"extra": "forbid"}
 
     name: str | None = None
-    parent_id: str | None = None
+
+
+class DeskMapNodeView(BaseModel):
+    """One path in a desk map / outline (workspace-relative POSIX)."""
+
+    path: str
+    is_dir: bool
+    depth: int = 1
+
+
+class DeskMapView(BaseModel):
+    """Bounded orientation of one cloud desk. Omitted unless ``desk_map`` is requested."""
+
+    density: Literal["outline", "map"]
+    empty: bool = True
+    truncated: bool = False
+    unavailable: bool = False
+    entries: list[DeskMapNodeView] = Field(default_factory=list)
 
 
 class FolderSummary(BaseModel):
@@ -427,6 +437,8 @@ class FolderSummary(BaseModel):
     collaborator_count: int = 0
     created_at: datetime
     updated_at: datetime
+    # Cheap orientation when ``GET /folders?desk_map=`` is set. UI lists omit it.
+    desk_map: DeskMapView | None = None
 
     model_config = {"from_attributes": True}
 

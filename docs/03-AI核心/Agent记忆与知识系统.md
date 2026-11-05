@@ -85,7 +85,7 @@ paths: **/*.py
 2. 每回合都带上的正文进 `<设定>`。碰到某类文件的全文跟路径走。需要时翻开的进 `<按需目录>`。
 3. 桌面 sidecar **有 account 票**时：prepare/resume 对账号/文件夹**文档**按需目录**只读进程快照**（miss → 空文档注入、不 await 云 HTTP）；`consult` 取文档正文与目录同一份快照。快照 **300s TTL**；人保存后立刻强制重暖。**detached execution 存活期**按同一 TTL 周期续暖——只 warm 一次则 TTL 到期后文档目录会**静默**全失。空注入仍打 `account.rules_memory_cache_miss`。本桌 `AgentCore/rules` 仍从当前工作区现读，不经这份快照。**无票**仍走本地 DB。账号篇进不进这场、以哪种带法，走 `session` 快照里的成员名单（官方配方为未过滤），不经这份文档 TTL。→ 见代码：`memory/rules_injection.py` · `memory/account_prepare_cache.py` · sidecar `warmAccountRulesMemory` · `runtime/turn/snapshot.py`
 4. 需要时翻开的交代与系统 Skill、低频工具合并为单一 `<按需目录>` → `consult`。`<按需目录>` 非空才渲染。
-5. **跨文件夹名册**（派生）：**不进** CEO 常驻提示。当前桌只在 `<工作区>`；其它桌用 `folders`。
+5. **跨文件夹名册**（派生）：**不进** CEO 常驻提示。当前桌地图在 `<工作区>`；其它桌用 `folders`（list = 轮廓，resolve = 地图）。
 6. 装配顺序权威 → [执行引擎 §七](/docs/03-AI核心/执行引擎架构设计.md) / `runtime/context/`（`SectionOrder`）。
 
 **删文件夹不带走账号里的篇（✅）**：那些篇不挂在桌子上。彻底删除清掉 `folder_id` 指着这张桌的篇。→ 见代码: `folders/permanent_delete.py`

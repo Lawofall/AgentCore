@@ -4,8 +4,8 @@ Frozen constitution / identity / on-demand catalog stay in ``messages[0]``.
 If this turn's composed system differs from that node 0, DeepSeek in-history
 appends the changed ``<设定>`` / ``<按需目录>`` (or the full new string when the
 rest drifted) as ``role: system`` after history and before the envelope
-(``usage.in_history_system`` replay). Date, workspace (+ folder-chat
-this-conversation writes), scene gates, and pinned entries ride a
+(``usage.in_history_system`` replay). Date, workspace (+ sitting desk map; folder-chat leftover writes
+not already on the tree), scene gates, and pinned entries ride a
 synthetic user message fenced with ``[系统提示]``. File parts are sibling
 ``materials`` blocks on the utterance, not this envelope. A new envelope that
 matches the last one already in the window is omitted. The envelope is
@@ -15,7 +15,7 @@ is append-only: prior envelopes stay; this turn appends a new envelope only
 when it differs, plus the new user utterance. UI bubbles still show the original user text.
 Workers use the same fence for date / workspace / pinned entries (opening user
 tail, not ``role: system``) so sibling runs share a frozen system prefix.
-Do not copy the CEO conversation-edits pin onto workers. Resume restamp of
+Do not copy CEO mutation marks onto workers. Resume restamp of
 worker facts appends ``[系统提示]`` after history and never rewrites the
 emitted ``role: system``; debate stays out. Tool-failure facts stay in
 receipts / synthesis, not ``role: system``.
@@ -34,7 +34,11 @@ from agentcore.llm.provider.protocol import (
     llm_content_text,
 )
 from agentcore.runtime.context import ContextAssembler, SectionOrder
-from agentcore.runtime.context.envelope_switches import include_runtime_date
+from agentcore.runtime.context.envelope_switches import (
+    DESK,
+    include_projection,
+    include_runtime_date,
+)
 from agentcore.runtime.resolve.prompt.base import render_runtime_date_block
 from agentcore.runtime.resolve.prompt.ceo_core import _attachment_material_block
 
@@ -62,22 +66,29 @@ def _attach_before_workspace_close(prompt: str, extra: str) -> str:
     return f"{before}\n{body}\n{after}"
 
 
+def _workspace_tail(*parts: str | None) -> str:
+    return "\n".join(part.strip() for part in parts if part and part.strip())
+
+
 def _ceo_workspace_block(
     workspace_context: str | None,
     conversation_edits: str | None,
+    desk_map: str | None = None,
 ) -> str | None:
-    """Facts, plus the CEO conversation-edits pin inside the same ``<工作区>``.
+    """Facts, plus sitting desk map and leftover mutation pin in ``<工作区>``.
 
-    Fact lines are already filtered. When every fact line is off and the pin
-    remains, this opens the tag for that pin alone.
+    The map follows the 桌 projection. Leftover 「本对话未在树上」 writes are not
+    a projection — they still open the tag when every fact line is off.
     """
     facts = (workspace_context or "").strip()
+    map_text = (desk_map or "").strip() if include_projection(DESK) else ""
     pin = (conversation_edits or "").strip()
+    extra = _workspace_tail(map_text, pin)
     if facts:
-        return _attach_before_workspace_close(facts, pin) or None
-    if not pin:
+        return _attach_before_workspace_close(facts, extra) or None
+    if not extra:
         return None
-    return f"<工作区>\n{pin}\n</工作区>"
+    return f"<工作区>\n{extra}\n</工作区>"
 
 
 # Stamped on the prompting user row (``messages.usage``). REST UsageBreakdown
@@ -270,6 +281,7 @@ def render_ceo_turn_envelope(
     *,
     workspace_context: str | None = None,
     conversation_edits: str | None = None,
+    desk_map: str | None = None,
     attachment_material: bool = False,
     attachment_context: str = "",
     include_runtime: bool = True,
@@ -285,7 +297,9 @@ def render_ceo_turn_envelope(
         )
         .add(
             "workspace_facts",
-            _ceo_workspace_block(workspace_context, conversation_edits),
+            _ceo_workspace_block(
+                workspace_context, conversation_edits, desk_map=desk_map
+            ),
             SectionOrder.WORKSPACE_FACTS,
         )
         .add("attachment_material", material_block, SectionOrder.WORKING_SET)
@@ -302,10 +316,14 @@ def render_ceo_turn_envelope(
 def render_worker_turn_envelope(
     *,
     workspace_context: str | None = None,
+    desk_map: str | None = None,
     attachment_context: str | None = None,
     include_runtime: bool = True,
 ) -> str:
-    """Worker opening ``[系统提示]`` (no CEO conversation-edits pin / table)."""
+    """Worker opening ``[系统提示]`` (sitting map; no CEO mutation pin)."""
+    facts = _ceo_workspace_block(
+        workspace_context, conversation_edits=None, desk_map=desk_map
+    )
     body = (
         ContextAssembler()
         .add(
@@ -315,7 +333,7 @@ def render_worker_turn_envelope(
         )
         .add(
             "workspace_facts",
-            (workspace_context or "").strip() or None,
+            facts,
             SectionOrder.WORKSPACE_FACTS,
         )
         .add(

@@ -3891,9 +3891,9 @@ export interface paths {
          *
          *     Local mode is unique per ``(user_id, local_root_id, local_subpath)`` — same
          *     path re-open returns the existing row (VS Code / Cursor workspace reuse).
-         *     Cloud projects become a real directory under ``parent_id``; a name already
-         *     taken among live siblings gets a numeric suffix rather than a 409 — the name
-         *     is now a path segment, and two of them cannot share one directory.
+         *     Cloud folders land at the tree root; a name already taken among live
+         *     folders gets a numeric suffix rather than a 409 — the name is a path
+         *     segment, and two of them cannot share one directory.
          *
          *     Registering a local binding also declares that root on the caller's fulfill
          *     session (``fulfill/declare.py``) — including the reuse branch, where the row
@@ -4066,8 +4066,8 @@ export interface paths {
          * Delete Folder
          * @description 软删项目（对话就地归档；工作区走保留期自动清理）。
          *
-         *     Nested folders go with it, and the directory is parked in the tombstone area so
-         *     the name is free again immediately (双模式工作区 §5.4).
+         *     The directory is parked in the tombstone area so the name is free again
+         *     immediately (双模式工作区 §5.4).
          *
          *     Reachable with a folders narrow ticket so sidecar and the sidebar share
          *     the same soft-delete path. The irreversible twin below stays
@@ -4078,7 +4078,7 @@ export interface paths {
         head?: never;
         /**
          * Update Folder
-         * @description Rename and/or re-parent a folder — DB rows and the directory move together.
+         * @description Rename a folder — DB row and the directory move together.
          *
          *     Refuses with 409 while a turn holds the workspace lock: moving the directory
          *     out from under a running turn is not something to do silently, and neither is
@@ -8508,8 +8508,6 @@ export interface components {
             mode: "local" | "cloud";
             /** Name */
             name: string;
-            /** Parent Id */
-            parent_id?: string | null;
         };
         /** CreateFriendRequestBody */
         CreateFriendRequestBody: {
@@ -9022,6 +9020,49 @@ export interface components {
             turn_count: number;
             /** User Prompt */
             user_prompt: string;
+        };
+        /**
+         * DeskMapNodeView
+         * @description One path in a desk map / outline (workspace-relative POSIX).
+         */
+        DeskMapNodeView: {
+            /**
+             * Depth
+             * @default 1
+             */
+            depth: number;
+            /** Is Dir */
+            is_dir: boolean;
+            /** Path */
+            path: string;
+        };
+        /**
+         * DeskMapView
+         * @description Bounded orientation of one cloud desk. Omitted unless ``desk_map`` is requested.
+         */
+        DeskMapView: {
+            /**
+             * Density
+             * @enum {string}
+             */
+            density: "outline" | "map";
+            /**
+             * Empty
+             * @default true
+             */
+            empty: boolean;
+            /** Entries */
+            entries?: components["schemas"]["DeskMapNodeView"][];
+            /**
+             * Truncated
+             * @default false
+             */
+            truncated: boolean;
+            /**
+             * Unavailable
+             * @default false
+             */
+            unavailable: boolean;
         };
         /** DeviceListResponse */
         DeviceListResponse: {
@@ -9594,6 +9635,7 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            desk_map?: components["schemas"]["DeskMapView"] | null;
             /** Id */
             id: string;
             /** Local Root Id */
@@ -13185,18 +13227,11 @@ export interface components {
         };
         /**
          * UpdateFolderRequest
-         * @description Rename and/or re-parent — the local-mode binding stays immutable.
-         *
-         *     ``parent_id`` is a *request* field, not storage: the server turns it into a
-         *     ``rel_path`` prefix, which is the single source of truth for nesting
-         *     (双模式工作区 §5.4). Omit it to leave the folder where it is; send ``null`` to
-         *     move it to the top level.
+         * @description Rename a folder — the local-mode binding stays immutable.
          */
         UpdateFolderRequest: {
             /** Name */
             name?: string | null;
-            /** Parent Id */
-            parent_id?: string | null;
         };
         /**
          * UpdateLlmModelProfileRequest
@@ -20877,7 +20912,9 @@ export interface operations {
     };
     list_folders_v1_folders_get: {
         parameters: {
-            query?: never;
+            query?: {
+                desk_map?: ("outline" | "map") | null;
+            };
             header?: {
                 authorization?: string | null;
             };
@@ -21182,7 +21219,9 @@ export interface operations {
     };
     get_folder_v1_folders__folder_id__get: {
         parameters: {
-            query?: never;
+            query?: {
+                desk_map?: ("outline" | "map") | null;
+            };
             header?: {
                 authorization?: string | null;
             };

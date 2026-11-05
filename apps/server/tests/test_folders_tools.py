@@ -5,7 +5,6 @@ P0 桶 A：列名册与按路径解析（嵌套后同名末段合法，故 resol
 
 from __future__ import annotations
 
-import json
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -227,7 +226,7 @@ def test_folders_schema_and_registration():
     action_desc = props["action"]["description"]
     assert "list" in action_desc
     assert "resolve" in action_desc
-    assert "完整路径" in action_desc
+    assert "名字或路径" in action_desc
     assert "路径后缀" not in desc
     assert "子串" not in desc
     reg = tool_registration(FoldersTool)
@@ -290,7 +289,7 @@ def _patch_list(monkeypatch: pytest.MonkeyPatch, folders: list[_FakeFolder]) -> 
     monkeypatch.setattr(folders_mod, "FolderRepository", _Repo)
 
 
-async def test_list_folders_returns_folder_summary_shape(monkeypatch: pytest.MonkeyPatch):
+async def test_list_folders_returns_roster_text(monkeypatch: pytest.MonkeyPatch):
     _patch_list(
         monkeypatch,
         [
@@ -307,25 +306,15 @@ async def test_list_folders_returns_folder_summary_shape(monkeypatch: pytest.Mon
     result = await FoldersTool().execute({"action": "list"}, _ctx())
     assert result.success
     assert result.display == {"count": 3}
-    # Payload after the human lead-in
-    payload = json.loads(result.output.split("\n", 1)[1])
-    assert payload["count"] == 3
-    assert {f["id"] for f in payload["folders"]} == {"c1", "c2", "l1"}
-    cloud = next(f for f in payload["folders"] if f["id"] == "c1")
-    nested = next(f for f in payload["folders"] if f["id"] == "c2")
-    local = next(f for f in payload["folders"] if f["id"] == "l1")
-    assert cloud["mode"] == "cloud"
-    assert cloud["local_root_id"] is None
-    # Nesting is visible in the roster, both as full path and as parent prefix.
-    assert nested["rel_path"] == "设计/图标"
-    assert nested["parent_rel_path"] == "设计"
-    assert local["mode"] == "local"
-    assert local["local_root_id"] == "root-x"
-    assert local["local_subpath"] == "repos/app"
-    # No OS absolute path field
-    for f in payload["folders"]:
-        assert "path" not in f
-        assert "local_dir" not in f
+    assert "共 3 个文件夹" in result.output
+    assert "Cloud App" in result.output and "`c1`" in result.output
+    assert "设计/图标" in result.output and "`c2`" in result.output
+    assert "Local App" in result.output and "`l1`" in result.output
+    assert "本机" in result.output
+    assert '"folders"' not in result.output
+    assert "created_at" not in result.output
+    assert "owner_user_id" not in result.output
+    assert "local_dir" not in result.output
 
 
 async def test_list_folders_empty(monkeypatch: pytest.MonkeyPatch):
@@ -386,8 +375,6 @@ async def test_resolve_zero(monkeypatch: pytest.MonkeyPatch):
     assert "create_folder" not in result.output
     assert "ask_user" not in result.output
     assert "禁止静默猜" in result.output
-    # Nested rosters: tell the model to check the level before giving up.
-    assert "层级" in result.output
     # Must not default-urge a model open-folder action as the create path.
     assert "open_local_project" not in result.output
 
@@ -411,9 +398,10 @@ async def test_resolve_ambiguous(monkeypatch: pytest.MonkeyPatch):
     assert result.display["match_count"] == 2
     assert "ask_user" not in result.output
     assert "禁止静默猜" in result.output
-    payload = json.loads(result.output.split("\n", 1)[1])
-    modes = {m["id"]: m["mode"] for m in payload["matches"]}
-    assert modes == {"c": "cloud", "l": "local"}
+    assert "`c`" in result.output and "`l`" in result.output
+    assert "本机" in result.output
+    assert '"matches"' not in result.output
+    assert "created_at" not in result.output
 
 
 async def test_resolve_missing_path_arg():

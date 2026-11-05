@@ -12,13 +12,9 @@ import { useEffect, useRef, useState } from "react";
  */
 export function CreateFolderCascadePanel({
   onClose,
-  parentId = null,
-  parentName = null,
   hideTitle = false,
 }: {
   onClose: () => void;
-  parentId?: string | null;
-  parentName?: string | null;
   hideTitle?: boolean;
 }) {
   const createFolder = useCreateFolder();
@@ -39,7 +35,6 @@ export function CreateFolderCascadePanel({
       const { folder } = await createFolder.mutateAsync({
         name: trimmed,
         mode: "cloud",
-        parentId,
       });
       const draft =
         useConversationStore.getState().currentConversationId === null;
@@ -62,7 +57,7 @@ export function CreateFolderCascadePanel({
     <div className="w-full p-3">
       {hideTitle ? null : (
         <div className="mb-2 text-xs font-medium text-foreground">
-          {parentName ? `在「${parentName}」里新建文件夹` : "新建文件夹"}
+          新建文件夹
         </div>
       )}
       <div className="space-y-2">
@@ -83,7 +78,7 @@ export function CreateFolderCascadePanel({
           disabled={pending}
         />
         <p className="truncate text-xs text-muted-foreground">
-          {parentName ? `我的文件 · ${parentName}` : "我的文件 · 云端"}
+          我的文件 · 云端
         </p>
         <div className="flex justify-end">
           <Button

@@ -51,11 +51,11 @@ describe("pending markers", () => {
   });
 
   it("requestUntitledCloudFolder queues one create and ignores a second click", () => {
-    store().requestUntitledCloudFolder("p1");
-    expect(store().pendingUntitledCreate).toEqual({ parentId: "p1" });
+    store().requestUntitledCloudFolder();
+    expect(store().pendingUntitledCreate).toBe(true);
     expect(store().untitledCreateBusy).toBe(true);
-    store().requestUntitledCloudFolder(null);
-    expect(store().pendingUntitledCreate).toEqual({ parentId: "p1" });
+    store().requestUntitledCloudFolder();
+    expect(store().pendingUntitledCreate).toBe(true);
     store().clearUntitledCreateRequest();
     expect(store().pendingUntitledCreate).toBeNull();
     store().finishUntitledCreate();

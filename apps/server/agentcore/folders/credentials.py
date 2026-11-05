@@ -116,7 +116,11 @@ async def cloud_list_folders(creds: FoldersCredentials) -> list[dict[str, Any]]:
     url = _collection_url(creds.base_url)
     try:
         async with outbound_async_client(timeout=_FOLDERS_HTTP_TIMEOUT) as client:
-            resp = await client.get(url, headers=_auth_headers(creds))
+            resp = await client.get(
+                url,
+                headers=_auth_headers(creds),
+                params={"desk_map": "outline"},
+            )
     except httpx.HTTPError as exc:
         logger.warning("folders.cloud_list_failed", error=str(exc))
         raise FoldersCloudError(
@@ -131,17 +135,11 @@ async def cloud_list_folders(creds: FoldersCredentials) -> list[dict[str, Any]]:
 
 
 async def cloud_create_cloud_folder(
-    creds: FoldersCredentials, *, name: str, parent_id: str | None = None
+    creds: FoldersCredentials, *, name: str
 ) -> dict[str, Any]:
-    """POST folders collection with ``mode=cloud`` → FolderSummary dict.
-
-    ``parent_id`` nests the new folder; the server turns it into the ``rel_path``
-    prefix. Omit it for the top level.
-    """
+    """POST folders collection with ``mode=cloud`` → FolderSummary dict."""
     url = _collection_url(creds.base_url)
     payload: dict[str, Any] = {"name": name, "mode": "cloud"}
-    if parent_id:
-        payload["parent_id"] = parent_id
     try:
         async with outbound_async_client(timeout=_FOLDERS_HTTP_TIMEOUT) as client:
             resp = await client.post(url, json=payload, headers=_auth_headers(creds))
@@ -197,7 +195,11 @@ async def cloud_get_folder(
     url = f"{_collection_url(creds.base_url)}/{fid}"
     try:
         async with outbound_async_client(timeout=_FOLDERS_HTTP_TIMEOUT) as client:
-            resp = await client.get(url, headers=_auth_headers(creds))
+            resp = await client.get(
+                url,
+                headers=_auth_headers(creds),
+                params={"desk_map": "map"},
+            )
     except httpx.HTTPError as exc:
         logger.warning(
             "folders.cloud_get_failed",

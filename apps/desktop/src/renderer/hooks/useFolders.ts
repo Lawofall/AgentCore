@@ -89,11 +89,7 @@ export function useCreateFolder() {
 }
 
 /**
- * Rename or re-parent a folder, optimistic with rollback on failure.
- *
- * A move changes `relPath` for the folder *and its whole subtree*, which only
- * the server can compute — the optimistic patch covers the name (what the row
- * shows) and lets the refetched list settle the paths.
+ * Rename a folder, optimistic with rollback on failure.
  */
 export function useUpdateFolder() {
   return useMutation({
@@ -102,7 +98,7 @@ export function useUpdateFolder() {
       patch,
     }: {
       id: string;
-      patch: { name?: string; parentId?: string | null };
+      patch: { name?: string };
     }) => updateFolder(id, patch),
     onMutate: ({ id, patch }) => {
       const prev = getFolders().find((f) => f.id === id) ?? null;
@@ -115,12 +111,6 @@ export function useUpdateFolder() {
       if (ctx?.prev) {
         patchFolderCache(ctx.prev.id, { name: ctx.prev.name });
       }
-    },
-    onSuccess: (_data, { patch }) => {
-      if (patch.parentId === undefined) return;
-      void queryClient.invalidateQueries({
-        queryKey: conversationKeys.grouped,
-      });
     },
   });
 }

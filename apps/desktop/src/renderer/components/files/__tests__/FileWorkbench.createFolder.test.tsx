@@ -128,7 +128,6 @@ describe("FileWorkbench · 我的文件空态", () => {
       expect(createFolderMutate).toHaveBeenCalledWith({
         name: "未命名文件夹",
         mode: "cloud",
-        parentId: null,
       });
     });
   });
@@ -148,7 +147,6 @@ describe("FileWorkbench · 我的文件空态", () => {
       expect(createFolderMutate).toHaveBeenCalledWith({
         name: "未命名文件夹",
         mode: "cloud",
-        parentId: null,
       });
     });
     await waitFor(() => {
@@ -158,67 +156,20 @@ describe("FileWorkbench · 我的文件空态", () => {
     expect(screen.queryByText("还没有文件夹")).toBeNull();
   });
 
-  it("nested untitled request POSTs parentId", async () => {
-    createFolderMutate.mockImplementation(async () => {
-      const folder = untitledFolder({
-        id: "n2",
-        name: "未命名文件夹",
-        relPath: "设计/未命名文件夹",
-        parentRelPath: "设计",
-      });
-      state.folders = [
-        untitledFolder({
-          id: "p",
-          name: "设计",
-          relPath: "设计",
-          parentRelPath: "",
-        }),
-        folder,
-      ];
-      return { folder, created: true };
-    });
+  it("reveals a created folder, expands and flashes the row", async () => {
+    state.folders = [untitledFolder({ id: "c", name: "图标" })];
     renderHub();
-    act(() => {
-      useFoldersStore.getState().requestUntitledCloudFolder("p");
-    });
-    await waitFor(() => {
-      expect(createFolderMutate).toHaveBeenCalledWith({
-        name: "未命名文件夹",
-        mode: "cloud",
-        parentId: "p",
-      });
-    });
-  });
-
-  it("reveals a nested folder by expanding ancestors so the new row is visible", async () => {
-    state.folders = [
-      untitledFolder({
-        id: "p",
-        name: "设计",
-        relPath: "设计",
-        parentRelPath: "",
-      }),
-      untitledFolder({
-        id: "c",
-        name: "图标",
-        relPath: "设计/图标",
-        parentRelPath: "设计",
-      }),
-    ];
-    renderHub();
-    expect(screen.getByTestId("folder:p")).toBeTruthy();
-    expect(screen.queryByTestId("folder:c")).toBeNull();
+    expect(screen.getByTestId("folder:c")).toBeTruthy();
 
     act(() => {
       useFoldersStore.getState().revealCreatedFolder("c", { rename: true });
     });
 
     await waitFor(() => {
-      expect(screen.getByTestId("folder:c")).toBeTruthy();
+      expect(screen.getByTestId("folder:c").getAttribute("data-expanded")).toBe(
+        "1",
+      );
     });
-    expect(screen.getByTestId("folder:p").getAttribute("data-expanded")).toBe(
-      "1",
-    );
     expect(screen.getByTestId("folder:c").getAttribute("data-flashing")).toBe(
       "1",
     );

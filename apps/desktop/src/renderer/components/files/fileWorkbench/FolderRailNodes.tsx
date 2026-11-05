@@ -2,7 +2,6 @@ import type { FileSortBy } from "@/components/files/fileTreeTypes";
 import { WorkspaceSection } from "@/components/files/fileWorkbench/WorkspaceSection";
 import type { Tab } from "@/components/files/fileWorkbench/storage";
 import type { FileSource } from "@/lib/fileSource";
-import { type FolderTreeNode, childFolderNames } from "@/lib/folderTree";
 import type { FolderMeta } from "@/services/folders";
 import type { WorkspaceInfo } from "@/services/workspaces";
 import type { ReactNode } from "react";
@@ -32,32 +31,27 @@ export interface FolderRailHost {
 }
 
 /**
- * One folder row: header + its child folders + its files (``.agentcore`` is a
- * tree row, not a separate rail).
+ * One folder row: header + its files (``.agentcore`` is a tree row, not a
+ * separate rail). Cloud folders are a flat list — nesting a Folder under
+ * another Folder is not a product (桌内目录走「新建子文件夹」).
  *
  * A folder with no `/v1/workspaces` row yet (just created, list still stale) is
  * rendered from its {@link FolderMeta} so it never blinks out.
  */
 export function FolderRailRow({
-  node,
   folder,
   host,
 }: {
-  /** Tree node when the row nests; omit for a flat row (本机文件夹). */
-  node?: FolderTreeNode;
   folder: FolderMeta;
   host: FolderRailHost;
 }) {
   const wsId = `folder:${folder.id}`;
   const ws = host.workspaceByWsId.get(wsId) ?? folderWorkspaceFallback(folder);
-  const children = node?.children ?? [];
   const createWorkroomEntry = host.onCreateWorkroomEntry;
   return (
     <WorkspaceSection
       ws={ws}
-      depth={node?.depth ?? 0}
       showLocationBadge={false}
-      hideRootDirs={node ? childFolderNames(node) : undefined}
       source={host.sourceByWs.get(wsId) ?? null}
       offlineCloud={host.offline && ws.location === "cloud"}
       activePath={host.activeTab?.wsId === wsId ? host.activeTab.path : null}
@@ -77,37 +71,22 @@ export function FolderRailRow({
       }
       forceExpandWorkroom={host.revealWorkroomFolderId === folder.id}
       onWorkroomRevealApplied={host.onWorkroomRevealApplied}
-      nested={
-        children.length > 0 ? (
-          <FolderRailNodes nodes={children} host={host} />
-        ) : undefined
-      }
     />
   );
 }
 
-/**
- * 我的文件 rendered as the real nested tree it now is (双模式工作区 §5.4):
- * each folder is a collapsible row whose child folders hang under it, and a
- * folder's own file tree sits below them — the same order an editor shows a
- * directory in.
- */
+/** 我的文件 / 与我共享：flat list of folder rows. */
 export function FolderRailNodes({
-  nodes,
+  folders,
   host,
 }: {
-  nodes: FolderTreeNode[];
+  folders: FolderMeta[];
   host: FolderRailHost;
 }) {
   return (
     <>
-      {nodes.map((node) => (
-        <FolderRailRow
-          key={node.folder.id}
-          node={node}
-          folder={node.folder}
-          host={host}
-        />
+      {folders.map((folder) => (
+        <FolderRailRow key={folder.id} folder={folder} host={host} />
       ))}
     </>
   );

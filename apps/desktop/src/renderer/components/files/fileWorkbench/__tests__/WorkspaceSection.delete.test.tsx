@@ -215,7 +215,7 @@ describe("工作区轨删除", () => {
 
     fireEvent.contextMenu(screen.getByText("季度报告"));
     await screen.findByText("新建文件");
-    expect(screen.getByText("在此新建文件夹")).toBeTruthy();
+    expect(screen.queryByText("在此新建文件夹")).toBeNull();
     expect(screen.queryByText("删除文件夹…")).toBeNull();
     expect(mocks.deleteFolder).not.toHaveBeenCalled();
   });

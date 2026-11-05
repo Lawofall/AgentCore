@@ -43,6 +43,7 @@ from agentcore.tools.mcp.wire import McpDiscoverResult
 from agentcore.tools.protocol import ToolContext
 from agentcore.tools.registry import ToolRegistry
 from agentcore.workspace.cloud_tree import normalize_rel_path
+from agentcore.workspace.desk_map import DeskMap, build_desk_map, render_desk_map
 from agentcore.workspace.locate import (
     workspace_channel_for_tools,
 )
@@ -225,6 +226,7 @@ class PreparedTurn:
     materials_body: str = ""
     has_file_parts: bool = False
     has_resident_missing: bool = False
+    desk_map: DeskMap | None = None
 
 
 async def prepare_fresh_turn(
@@ -409,7 +411,7 @@ async def prepare_fresh_turn(
 
     from agentcore.runtime.deep_research_auto import load_deep_research_auto_state
 
-    attachment_prompt, on_demand_entries, deep_research_state = (
+    attachment_prompt, on_demand_entries, deep_research_state, sitting_map = (
         await _gather_cancel_on_fail(
             _timed_phase(
                 "attachments",
@@ -425,6 +427,7 @@ async def prepare_fresh_turn(
             ),
             _worker_on_demand(),
             load_deep_research_auto_state(conversation_id),
+            _timed_phase("desk_map", build_desk_map(backend, density="map")),
         )
     )
     deep_research_auto, deep_research_auto_debate_count = deep_research_state
@@ -461,6 +464,7 @@ async def prepare_fresh_turn(
     )
     worker_envelope = render_worker_turn_envelope(
         workspace_context=workspace_facts,
+        desk_map=render_desk_map(sitting_map),
         attachment_context=attachment_context,
     )
     # desktop_channel created earlier (MCP discovery); reuse the same instance.
@@ -562,4 +566,5 @@ async def prepare_fresh_turn(
         execution_id_token=execution_id_token,
         mcp_discover=mcp_discover,
         member_turn=member_turn,
+        desk_map=sitting_map,
     )

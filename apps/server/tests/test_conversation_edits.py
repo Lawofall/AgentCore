@@ -158,6 +158,7 @@ def test_render_conversation_edits_block_is_a_pin_not_an_index():
         ]
     )
     assert out.startswith(CONVERSATION_EDITS_HEADER)
+    assert CONVERSATION_EDITS_HEADER == "本对话未在树上："
     assert "- src/f0.py（写过）" in out
     assert "- 稿.md（已转 Word）" in out
     assert "文件：" not in out
